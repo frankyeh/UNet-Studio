@@ -17,7 +17,7 @@ jobs:
     - uses: actions/checkout@v2.5.0
     - name: Install Zlib
       run: |
-        powershell -Command "(Invoke-WebRequest -Uri https://git.io/JnHTY -OutFile install_zlib.bat)"; 
+        powershell -Command "(Invoke-WebRequest -Uri https://raw.githubusercontent.com/horta/zlib.install/master/install.bat -OutFile install_zlib.bat)"; 
         powershell -Command "(gc install_zlib.bat) -replace '1.2.12', '1.2.13' | Out-File -encoding ASCII install_zlib.bat"
         ./install_zlib.bat
         del install_zlib.bat
