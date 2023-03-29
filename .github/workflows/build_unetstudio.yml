@@ -26,7 +26,7 @@ jobs:
       run: |
         curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
         mkdir libtorch
-        tar -xf libtorch-win-shared-with-deps-2.0.0+cu117.zip -C libtorch --strip-components 1
+        tar -xf "libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip" -C libtorch --strip-components 1
     - name: Cache libtorch
       uses: actions/cache@v2
       with:
