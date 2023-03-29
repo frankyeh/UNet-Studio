@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2.5.0
     - name: Download Libtorch Windows
-      run: 
+      run: |
         curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
         mkdir libtorch
         tar -xf libtorch-win-shared-with-deps-2.0.0+cu117.zip -C libtorch --strip-components 1
