@@ -1,0 +1,82 @@
+name: Build UNet Studio
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag'
+        required: true
+        default: '2023.04.01'
+      release_name:
+        description: 'Release Name'
+        required: true
+        default: '2022.04.01 "Sun" Release'
+jobs:
+  windows_build:
+    runs-on: windows-2019
+    steps:
+    - uses: actions/checkout@v2.5.0
+    - name: Download and extract libtorch
+      uses: dawidd6/action-download-artifact@v2.10.0
+      with:
+        repo: pytorch/pytorch
+        token: ${{ secrets.GITHUB_TOKEN }}
+        artifact-name: libtorch-win-shared-with-deps-latest.zip
+      run: |
+        mkdir libtorch
+        tar -xf libtorch-win-shared-with-deps-latest.zip -C libtorch --strip-components 1
+        echo "::set-env name=LIBTORCH_PATH::$(pwd)/libtorch"
+    - name: Set up environment variables
+      run: |
+        echo "LIBTORCH_PATH=${{ env.LIBTORCH_PATH }}" >> $GITHUB_ENV
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v2
+      with:
+        version: 6.2.0   
+    - name: Install Zlib
+      run: |
+        powershell -Command "(Invoke-WebRequest -Uri https://git.io/JnHTY -OutFile install_zlib.bat)"; 
+        powershell -Command "(gc install_zlib.bat) -replace '1.2.12', '1.2.13' | Out-File -encoding ASCII install_zlib.bat"
+        ./install_zlib.bat
+        del install_zlib.bat
+        del "C:/Program Files/zlib/lib/zlib.lib"
+        del "C:/Program Files/zlib/bin/zlib.dll"
+    - name: Install Ninja and CMake
+      run: |    
+        choco install ninja cmake
+    - name: Install Cuda
+      uses: Jimver/cuda-toolkit@v0.2.5
+
+    - name: get TIPL
+      run: |
+        git clone https://github.com/frankyeh/TIPL.git
+    - name: Build DSI Studio
+      run: |
+        for /f "usebackq delims=#" %%a in (`"%programfiles(x86)%\Microsoft Visual Studio\Installer\vswhere" -latest -property installationPath`) do call "%%a\Common7\Tools\VsDevCmd.bat" -arch=x64
+        mkdir -p build
+        cmake -S . -B build -GNinja "-DZLIB_LIBRARY=C:/Program Files/zlib/lib/zlibstatic.lib" "-DCMAKE_BUILD_TYPE:STRING=Release" "-DCMAKE_C_COMPILER:STRING=cl" "-DCMAKE_CXX_COMPILER:STRING=cl" -DTIPL_DIR=.
+        cmake --build ./build --parallel --config Release
+      shell: cmd      
+    - name: Packaging
+      run: |
+        mkdir unet_studio_win
+        move build\unet_studio.exe unet_studio_win
+        move build\*.dll unet_studio_win
+        windeployqt --no-translations --no-system-d3d-compiler --compiler-runtime --no-opengl-sw unet_studio_win\unet_studio.exe
+        del *.zip
+    - name: Zip Release
+      uses: TheDoctor0/zip-release@0.6.0
+      with:
+        filename: unet_studio_win.zip
+        exclusions: .git
+        path: unet_studio_win
+            
+    - name: Create Release
+      uses: ncipollo/release-action@v1.8.9
+      with:
+        allowUpdates: true
+        artifacts: "*.zip"
+        tag: ${{ github.event.inputs.tag }}
+        name: ${{ github.event.inputs.release_name }}
+        prerelease: false  
+
+ 
