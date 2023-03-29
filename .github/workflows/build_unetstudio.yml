@@ -15,19 +15,12 @@ jobs:
     runs-on: windows-2019
     steps:
     - uses: actions/checkout@v2.5.0
-    - name: Download and extract libtorch
-      uses: dawidd6/action-download-artifact@v2.10.0
-      with:
-        repo: pytorch/pytorch
-        token: ${{ secrets.GITHUB_TOKEN }}
-        artifact-name: libtorch-win-shared-with-deps-latest.zip
-    - name: Extract libtorch
+    - name: Download Libtorch Windows
+      run: wget -O libtorch.zip https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip
+    - name: Unzip it
       run: |
-        mkdir libtorch
-        tar -xf libtorch-win-shared-with-deps-latest.zip -C libtorch --strip-components 1
+        unzip libtorch.zip
         echo "::set-env name=LIBTORCH_PATH::$(pwd)/libtorch"
-    - name: Set up environment variables
-      run: |
         echo "LIBTORCH_PATH=${{ env.LIBTORCH_PATH }}" >> $GITHUB_ENV
     - name: Install Qt
       uses: jurplel/install-qt-action@v2
