@@ -21,6 +21,7 @@ jobs:
         repo: pytorch/pytorch
         token: ${{ secrets.GITHUB_TOKEN }}
         artifact-name: libtorch-win-shared-with-deps-latest.zip
+    - name: Extract libtorch
       run: |
         mkdir libtorch
         tar -xf libtorch-win-shared-with-deps-latest.zip -C libtorch --strip-components 1
