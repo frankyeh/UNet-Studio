@@ -15,13 +15,23 @@ jobs:
     runs-on: windows-2019
     steps:
     - uses: actions/checkout@v2.5.0
-    - name: Download Libtorch Windows
+    - name: Restore libtorch from cache
+      uses: actions/cache@v2
+      id: cache-libtorch
+      with:
+        path: libtorch
+        key: libtorch-windows-${{ runner.os }}-cu117
+    - name: Download libtorch
+      if: steps.cache-libtorch.outputs.cache-hit != 'true'
       run: |
         curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
         mkdir libtorch
         tar -xf libtorch-win-shared-with-deps-2.0.0+cu117.zip -C libtorch --strip-components 1
-        echo "::set-env name=LIBTORCH_PATH::$(pwd)/libtorch"
-        echo "LIBTORCH_PATH=${{ env.LIBTORCH_PATH }}" >> $GITHUB_ENV
+    - name: Cache libtorch
+      uses: actions/cache@v2
+      with:
+        path: libtorch
+        key: libtorch-windows-${{ runner.os }}-cu117
     - name: Install Qt
       uses: jurplel/install-qt-action@v2
       with:
