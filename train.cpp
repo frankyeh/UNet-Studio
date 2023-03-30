@@ -37,11 +37,8 @@ bool read_image_and_label(const std::string& image_name,
         if(nii.dim(4) != out_count)
             return false;
         label.resize(label_shape.multiply(tipl::shape<3>::z,out_count));
-        for(int i = 0;i < out_count;++i)
-        {
-            auto I = label.sub_image(label_shape.size()*i,label_shape);
-            nii.get_untouched_image(I);
-        }
+        auto label_alias = label.alias(0,tipl::shape<4>(label_shape[0],label_shape[1],label_shape[2],out_count));
+        nii >> label_alias;
     }
     else
     {
@@ -49,7 +46,6 @@ bool read_image_and_label(const std::string& image_name,
         if(out_count != 1)
             tipl::expand_label_to_dimension(label,out_count);
     }
-
     tipl::matrix<4,4,float> label_t((tipl::identity_matrix()));
     nii.get_image_transformation(label_t);
     if(image.shape() != label_shape || label_t != image_t)
@@ -57,8 +53,8 @@ bool read_image_and_label(const std::string& image_name,
         tipl::image<3> new_label(image.shape().multiply(tipl::shape<3>::z,out_count));
         for(size_t i = 0;i < out_count;++i)
         {
-            auto I = label.sub_image(label_shape.size()*i,label_shape);
-            auto J = new_label.sub_image(image.shape().size()*i,image.shape());
+            auto I = label.alias(label_shape.size()*i,label_shape);
+            auto J = new_label.alias(image.shape().size()*i,image.shape());
             tipl::resample_mt(I,J,tipl::from_space(image_t).to(label_t));
         }
         label.swap(new_label);
@@ -83,6 +79,17 @@ void load_image_and_label(tipl::image<3>& image,
             f04(0.0f,4.0f,time(0)),
             downsample(0.5f,1.0f,time(0)),
             ring(0.2f,0.5f,time(0));
+    tipl::vector<3> template_vs(1.0f,1.0f,1.0f);
+    if(image_vs[0] < 1.0f)
+        template_vs[2] = template_vs[1] = template_vs[0] = image.width()*image_vs[0]/template_shape[0];
+
+    tipl::affine_transform<float> transform = {trans()*template_vs[0],trans()*template_vs[0],trans()*template_vs[0],
+                                        rot(),rot()/4.0f,rot()/4.0f,
+                                        scale(),scale(),scale(),
+                                        shear(),shear(),shear()};
+
+
+
 
     {
         int count = f04()*2;
@@ -104,6 +111,19 @@ void load_image_and_label(tipl::image<3>& image,
         });
     }
 
+    if(!label.empty())
+    {
+        auto out_count = label.depth()/image.depth();
+        tipl::image<3> label_out(template_shape.multiply(tipl::shape<3>::z,out_count));
+        for(size_t i = 0;i < out_count;++i)
+        {
+            auto J = label_out.alias(template_shape.size()*i,template_shape);
+            tipl::resample_mt(label.alias(image.size()*i,image.shape()),J,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs));
+        }
+        label_out.swap(label);
+    }
+
+
     /*
     tipl::image<3,tipl::vector<3> > displaced(image.shape());
     {
@@ -121,18 +141,13 @@ void load_image_and_label(tipl::image<3>& image,
     }
     */
 
-    tipl::vector<3> template_vs(1.0f,1.0f,1.0f);
-    if(image_vs[0] < 1.0f)
-        template_vs[2] = template_vs[1] = template_vs[0] = image.width()*image_vs[0]/template_shape[0];
+
 
 
 
 
     tipl::image<3> image_out(template_shape);
-    tipl::affine_transform<float> transform= {trans(),trans(),trans(),
-                                        rot(),rot()/4.0f,rot()/4.0f,
-                                        scale(),scale(),scale(),
-                                        shear(),shear(),shear()};
+
     {
         tipl::image<3> reduced_image(image.shape());
         tipl::vector<3> dd(downsample(),downsample(),downsample());
@@ -219,24 +234,7 @@ void load_image_and_label(tipl::image<3>& image,
         for(size_t i = 0;i < image_out.size();++i)
             image_out[i] += background[i]/(0.1f+image_out[i]);
     }
-
-
     image_out.swap(image);
-
-
-    if(!label.empty())
-    {
-        int out_count = label.depth()/image.depth();
-        tipl::image<3> label_out(template_shape.multiply(tipl::shape<3>::z,out_count));
-        for(int i = 0;i < out_count;++i)
-        {
-            auto J = label_out.sub_image(template_shape.size()*i,template_shape);
-            tipl::resample_mt(label.sub_image(image.size()*i,image.shape()),
-                              J,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs));
-        }
-        label_out.swap(label);
-    }
-
 }
 
 void train_unet::read_file(const TrainParam& param)
