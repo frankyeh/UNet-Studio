@@ -15,45 +15,48 @@ jobs:
     runs-on: windows-2019
     steps:
     - uses: actions/checkout@v2.5.0
-    - name: Download and extract libtorch
-      uses: dawidd6/action-download-artifact@v2.10.0
-      with:
-        repo: pytorch/pytorch
-        token: ${{ secrets.GITHUB_TOKEN }}
-        artifact-name: libtorch-win-shared-with-deps-latest.zip
-      run: |
-        mkdir libtorch
-        tar -xf libtorch-win-shared-with-deps-latest.zip -C libtorch --strip-components 1
-        echo "::set-env name=LIBTORCH_PATH::$(pwd)/libtorch"
-    - name: Set up environment variables
-      run: |
-        echo "LIBTORCH_PATH=${{ env.LIBTORCH_PATH }}" >> $GITHUB_ENV
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v2
-      with:
-        version: 6.2.0   
     - name: Install Zlib
       run: |
-        powershell -Command "(Invoke-WebRequest -Uri https://git.io/JnHTY -OutFile install_zlib.bat)"; 
+        powershell -Command "(Invoke-WebRequest -Uri https://raw.githubusercontent.com/horta/zlib.install/master/install.bat -OutFile install_zlib.bat)"; 
         powershell -Command "(gc install_zlib.bat) -replace '1.2.12', '1.2.13' | Out-File -encoding ASCII install_zlib.bat"
         ./install_zlib.bat
         del install_zlib.bat
         del "C:/Program Files/zlib/lib/zlib.lib"
         del "C:/Program Files/zlib/bin/zlib.dll"
+    - name: Restore libtorch from cache
+      uses: actions/cache@v2
+      id: cache-libtorch
+      with:
+        path: libtorch
+        key: libtorch-windows-${{ runner.os }}-cu117
+    - name: Download libtorch
+      if: steps.cache-libtorch.outputs.cache-hit != 'true'
+      run: |
+        curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
+        mkdir libtorch
+        tar -xf "libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip" -C libtorch --strip-components 1
+    - name: Cache libtorch
+      uses: actions/cache@v2
+      with:
+        path: libtorch
+        key: libtorch-windows-${{ runner.os }}-cu117
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v2
+      with:
+        version: 6.2.0   
     - name: Install Ninja and CMake
       run: |    
         choco install ninja cmake
     - name: Install Cuda
       uses: Jimver/cuda-toolkit@v0.2.5
-
     - name: get TIPL
       run: |
         git clone https://github.com/frankyeh/TIPL.git
-    - name: Build DSI Studio
+    - name: Build UNet Studio
       run: |
         for /f "usebackq delims=#" %%a in (`"%programfiles(x86)%\Microsoft Visual Studio\Installer\vswhere" -latest -property installationPath`) do call "%%a\Common7\Tools\VsDevCmd.bat" -arch=x64
         mkdir -p build
-        cmake -S . -B build -GNinja "-DZLIB_LIBRARY=C:/Program Files/zlib/lib/zlibstatic.lib" "-DCMAKE_BUILD_TYPE:STRING=Release" "-DCMAKE_C_COMPILER:STRING=cl" "-DCMAKE_CXX_COMPILER:STRING=cl" -DTIPL_DIR=.
+        cmake -S . -B build -GNinja "-DZLIB_LIBRARY=C:/Program Files/zlib/lib/zlibstatic.lib" "-DCMAKE_BUILD_TYPE:STRING=Release" "-DCMAKE_C_COMPILER:STRING=cl" "-DCMAKE_CXX_COMPILER:STRING=cl" -DTIPL_DIR=. -DCMAKE_PREFIX_PATH="%{Qt:QT_INSTALL_PREFIX};./libtorch;./cudnn"
         cmake --build ./build --parallel --config Release
       shell: cmd      
     - name: Packaging
