@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 
-project(UNetStudio VERSION 0.1 LANGUAGES CUDA CXX;C)
+project(UNet_Studio VERSION 0.1 LANGUAGES CUDA CXX;C)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_CXX_STANDARD 17)
@@ -28,15 +28,24 @@ set(PROJECT_SOURCES
         mainwindow.ui
 )
 
-set(UNetStudio_CUDA
+set(UNet_STUDIO_CUDA
         cuda.cu)
 
-qt_add_executable(UNetStudio MANUAL_FINALIZATION ${PROJECT_SOURCES} ${UNetStudio_CUDA})
+if(WIN32)
+    set(UNET_STUDIO_EXEC
+        WIN32)
+endif()
+if(APPLE)
+    set(UNET_STUDIO_EXEC
+        MACOSX_BUNDLE)
+endif()
 
-target_link_libraries(UNetStudio PUBLIC Qt6::Widgets ZLIB::ZLIB ${CUDA_LIBRARIES} ${TORCH_LIBRARIES})
-target_include_directories(UNetStudio PUBLIC ${TIPL_DIR})
-set_target_properties(UNetStudio PROPERTIES
-    MACOSX_BUNDLE_GUI_IDENTIFIER UNetStudio.labsolver.org
+qt_add_executable(unet_studio MANUAL_FINALIZATION ${PROJECT_SOURCES} ${UNet_STUDIO_CUDA})
+
+target_link_libraries(unet_studio PUBLIC Qt6::Widgets ZLIB::ZLIB ${CUDA_LIBRARIES} ${TORCH_LIBRARIES})
+target_include_directories(unet_studio PUBLIC ${TIPL_DIR})
+set_target_properties(unet_studio PROPERTIES
+    MACOSX_BUNDLE_GUI_IDENTIFIER unet_studio.labsolver.org
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     MACOSX_BUNDLE TRUE
@@ -47,16 +56,16 @@ string(REPLACE "--Werror" "" CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS})
 string(REPLACE "cross-execution-space-call" "" CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS})
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -allow-unsupported-compiler --extended-lambda")
 set(CMAKE_CUDA_RUNTIME_LIBRARY "Static")
-target_compile_definitions(UNetStudio PUBLIC TIPL_USE_QT)
+target_compile_definitions(unet_studio PUBLIC TIPL_USE_QT)
 if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.23.0")
-    set_property(TARGET UNetStudio PROPERTY CUDA_ARCHITECTURES all)
+    set_property(TARGET unet_studio PROPERTY CUDA_ARCHITECTURES all)
 else()
-    set_property(TARGET UNetStudio PROPERTY CUDA_ARCHITECTURES "50;52;53;60;61;62;70;72;75;80;86")
+    set_property(TARGET unet_studio PROPERTY CUDA_ARCHITECTURES "50;52;53;60;61;62;70;72;75;80;86")
 endif()
 
 
-qt_finalize_executable(UNetStudio)
+qt_finalize_executable(unet_studio)
 
 file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
-add_custom_command(TARGET UNetStudio POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${TORCH_DLLS} $<TARGET_FILE_DIR:UNetStudio>)
+add_custom_command(TARGET unet_studio POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${TORCH_DLLS} $<TARGET_FILE_DIR:unet_studio>)
 
