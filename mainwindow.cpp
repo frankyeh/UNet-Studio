@@ -264,10 +264,15 @@ void MainWindow::on_open_labels_clicked()
     );
     if (fileNames.isEmpty())
         return;
+    if(!(out_count = get_label_out_count(fileNames[0].toStdString())))
+    {
+        out_count = 1;
+        QMessageBox::critical(this,"Error","Not a valid label image");
+        return;
+    }
     auto index = ui->list1->currentRow();
     for(int i = 0;i < fileNames.size() && index < label_list.size();++i,++index)
         label_list[index] = fileNames[i];
-
 
     if(fileNames.size() == 1 && image_list.size() > 1)
     {
@@ -283,13 +288,6 @@ void MainWindow::on_open_labels_clicked()
         }
     }
     update_list();
-
-    if(!(out_count = get_label_out_count(label_list[0].toStdString())))
-    {
-        out_count = 1;
-        QMessageBox::critical(this,"Error","Not a valid label image");
-        return;
-    }
     ui->label_slider->setMaximum(out_count-1);
 }
 
@@ -357,7 +355,7 @@ void MainWindow::on_pos_valueChanged(int value)
     train_scene1 << (QImage() << v2c1[tipl::volume2slice_scaled(I1,ui->view_dim->currentIndex(),value,2.0f)]);
     if(I2.size() == I1.size()*out_count)
         train_scene2 << (QImage() << v2c2[tipl::volume2slice_scaled(
-                            I2.sub_image(I1.size()*ui->label_slider->value(),I1.shape()),
+                            I2.alias(I1.size()*ui->label_slider->value(),I1.shape()),
                             ui->view_dim->currentIndex(),value,2.0f)]);
     else
         train_scene2 << QImage();
@@ -374,7 +372,7 @@ void MainWindow::on_eval_pos_valueChanged(int value)
 
     if(eval_I2.size() == eval_I1.size()*evaluate.model->out_count)
         eval_scene2 << (QImage() << eval_v2c2[tipl::volume2slice_scaled(
-                           eval_I2.sub_image(eval_I1.size()*ui->eval_label_slider->value(),eval_I1.shape()),
+                           eval_I2.alias(eval_I1.size()*ui->eval_label_slider->value(),eval_I1.shape()),
                            ui->eval_view_dim->currentIndex(),value,2.0f)]);
     else
         eval_scene2 << QImage();
