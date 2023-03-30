@@ -63,9 +63,5 @@ else()
     set_property(TARGET unet_studio PROPERTY CUDA_ARCHITECTURES "50;52;53;60;61;62;70;72;75;80;86")
 endif()
 
-
 qt_finalize_executable(unet_studio)
-
-file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
-add_custom_command(TARGET unet_studio POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${TORCH_DLLS} $<TARGET_FILE_DIR:unet_studio>)
 
