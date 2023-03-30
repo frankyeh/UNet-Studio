@@ -102,8 +102,8 @@ void evaluate_unet::output(void)
                 tipl::shape<3> dim_out(evaluate_image_shape[cur_output]);
                 tipl::par_for(model->out_count,[&](int i)
                 {
-                    auto from = evaluate_result[cur_output].sub_image(dim_in.size()*i,dim_in);
-                    auto to = evaluate_output[cur_output].sub_image(dim_out.size()*i,dim_out);
+                    auto from = evaluate_result[cur_output].alias(dim_in.size()*i,dim_in);
+                    auto to = evaluate_output[cur_output].alias(dim_out.size()*i,dim_out);
                     tipl::resample_mt(from,to,evaluate_image_trans[cur_output]);
                 });
                 evaluate_image[cur_output] = tipl::image<3>();
