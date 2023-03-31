@@ -336,6 +336,7 @@ void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
             eval_I2 = 0;
         }
         eval_v2c1.set_range(0,tipl::max_value_mt(eval_I1));
+        eval_v2c2.set_range(0,tipl::max_value_mt(eval_I2));
         ui->eval_pos->setMaximum(eval_I1.shape()[ui->eval_view_dim->currentIndex()]-1);
     }
     else
