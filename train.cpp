@@ -91,25 +91,33 @@ void load_image_and_label(tipl::image<3>& image,
 
 
 
+    tipl::image<3,tipl::vector<3> > displaced(image.shape());
+
     {
         int count = f04()*2;
         tipl::par_for(count,[&](int)
         {
-            int x = std::max<int>(std::min<int>((f0505()+0.5f)*(image.width()-1),image.width()-1),0);
-            int y = std::max<int>(std::min<int>((f0505()+0.5f)*(image.height()-1),image.height()-1),0);
-            int z = std::max<int>(std::min<int>((f0505()+0.5f)*(image.depth()-1),image.depth()-1),0);
+            tipl::vector<3,int> center;
+            for(int i = 0;i < 3;++i)
+                center[i] = (image.shape()[i]-1)*(f0505()/4.0f + 0.5f);
+            auto radius = 10+(f0505()+0.5)*(image.width()-1)/4;
+            auto radius_5 = radius/5.0f;
+            auto pi_2_radius = std::acos(-1)/radius;
             std::vector<tipl::pixel_index<3> > neighbors;
-            tipl::get_neighbors(tipl::pixel_index<3>(x,y,z,image.shape()),image.shape(),10+(f0505()+0.5)*(image.width()-1)/4,neighbors);
+            tipl::get_neighbors(tipl::pixel_index<3>(center[0],center[1],center[2],image.shape()),image.shape(),radius,neighbors);
             for(auto& pos : neighbors)
             {
-                size_t index = pos.index();
-                if(index < image.size())
-                    image[index] = 0;
-                for(;index < label.size();index += image.size())
-                    label[index] = 0;
+                tipl::vector<3> dir(pos);
+                dir -= center;
+                auto length = dir.length();
+                if(length > radius)
+                    continue;
+                dir *= -radius_5*std::sin(length*pi_2_radius)/length;
+                displaced[pos.index()] += dir;
             }
         });
     }
+
 
     if(!label.empty())
     {
@@ -118,32 +126,11 @@ void load_image_and_label(tipl::image<3>& image,
         for(size_t i = 0;i < out_count;++i)
         {
             auto J = label_out.alias(template_shape.size()*i,template_shape);
-            tipl::resample_mt(label.alias(image.size()*i,image.shape()),J,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs));
+            tipl::compose_displacement_with_affine(label.alias(image.size()*i,image.shape()),J,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs),displaced);
+            //tipl::resample_mt(label.alias(image.size()*i,image.shape()),J,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs));
         }
         label_out.swap(label);
     }
-
-
-    /*
-    tipl::image<3,tipl::vector<3> > displaced(image.shape());
-    {
-        const double pi = std::acos(-1);
-        tipl::vector<3> dx(f100100()*pi,f100100()*pi,f100100()*pi),dy(f100100()*pi,f100100()*pi,f100100()*pi),dz(f100100()*pi,f100100()*pi,f100100()*pi);
-        tipl::vector<3> shift(f0505()*2.0f,f0505()*2.0f,f0505()*2.0f);
-        for(tipl::pixel_index<3> index(image.shape());index < image.size();++index)
-        {
-            tipl::vector<3> pos(index.begin());
-            tipl::divide(pos,image.shape());
-            pos += shift;
-            displaced[index.index()] = tipl::vector<3>(std::cos(pos*dx),std::cos(pos*dy),std::cos(pos*dz));
-        }
-        displaced *= f04();
-    }
-    */
-
-
-
-
 
 
     tipl::image<3> image_out(template_shape);
@@ -161,7 +148,7 @@ void load_image_and_label(tipl::image<3>& image,
         image_arg.scaling[0] *= dd[0];
         image_arg.scaling[1] *= dd[1];
         image_arg.scaling[2] *= dd[2];
-        tipl::resample_mt(reduced_image,image_out,tipl::transformation_matrix<float>(image_arg,template_shape,template_vs,reduced_image.shape(),new_vs));
+        tipl::compose_displacement_with_affine(reduced_image,image_out,tipl::transformation_matrix<float>(image_arg,template_shape,template_vs,reduced_image.shape(),new_vs),displaced);
     }
 
 
@@ -217,6 +204,7 @@ void load_image_and_label(tipl::image<3>& image,
         }
     }    
 
+
     tipl::normalize(image_out);
     tipl::lower_threshold(image_out,0.0f);
 
@@ -234,6 +222,8 @@ void load_image_and_label(tipl::image<3>& image,
         for(size_t i = 0;i < image_out.size();++i)
             image_out[i] += background[i]/(0.1f+image_out[i]);
     }
+
+
     image_out.swap(image);
 }
 
