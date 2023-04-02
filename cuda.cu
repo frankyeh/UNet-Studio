@@ -59,6 +59,7 @@ void check_cuda(std::string& error_msg)
         auto arch = prop.major*10+prop.minor;
         std::cout << "│ │ Arch: " << arch << std::endl;
         std::cout << "│ │ Device name: " << prop.name << std::endl;
+        std::cout << "│ │ Memory Size (GB): " << float(prop.totalGlobalMem >> 20)/1024.0f << std::endl;
         std::cout << "│ │ Memory Clock Rate (KHz): " << prop.memoryClockRate << std::endl;
         std::cout << "│ │ Memory Bus Width (bits): " << prop.memoryBusWidth << std::endl;
         std::cout << "│ │ Peak Memory Bandwidth (GB/s): " << 2.0*prop.memoryClockRate*(prop.memoryBusWidth/8)/1.0e6 << std::endl;
