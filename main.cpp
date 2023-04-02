@@ -3,7 +3,8 @@
 #include "TIPL/tipl.hpp"
 
 #include <QApplication>
-
+#include <QSettings>
+QSettings settings(QSettings::IniFormat, QSettings::UserScope,"LabSolver", "UNet Studio");
 void check_cuda(std::string& error_msg);
 int main(int argc, char *argv[])
 {
