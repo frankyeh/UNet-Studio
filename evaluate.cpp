@@ -5,8 +5,6 @@ void evaluate_unet::read_file(const EvaluateParam& param)
     evaluate_image = std::vector<tipl::image<3> >(param.image_file_name.size());
     evaluate_result  = std::vector<tipl::image<3> >(param.image_file_name.size());
     evaluate_image_shape = std::vector<tipl::shape<3> >(param.image_file_name.size());
-    evaluate_image_trans = std::vector<tipl::transformation_matrix<float> >(param.image_file_name.size());
-
     data_ready = std::vector<bool> (param.image_file_name.size());
     read_file_thread.reset(new std::thread([=]()
     {
@@ -24,23 +22,16 @@ void evaluate_unet::read_file(const EvaluateParam& param)
 
                 }
                 tipl::vector<3> vs;
-                auto& eval_I1 = evaluate_image[i];
-                if(tipl::io::gz_nifti::load_from_file(param.image_file_name[i].c_str(),eval_I1,vs))
+                if(tipl::io::gz_nifti::load_from_file(param.image_file_name[i].c_str(),evaluate_image[i],vs))
                 {
-                    tipl::affine_transform<float> arg;
-                    tipl::vector<3> param_vs(1.0f,1.0f,1.0f);
-                    if(vs[0] < 0.5f)
-                        param_vs[2] = param_vs[1] = param_vs[0] = eval_I1.shape()[0]*vs[0]/float(param.dim[0]);
-                    evaluate_image_trans[i] = tipl::transformation_matrix<float>(arg,param.dim,param_vs,eval_I1.shape(),vs);
-                    evaluate_image_shape[i] = eval_I1.shape();
-
-                    tipl::image<3> image_out(param.dim);
-                    tipl::resample_mt(eval_I1,image_out,evaluate_image_trans[i]);
-                    image_out.swap(eval_I1);
-                    eval_I1 *= 2.0f/tipl::max_value(eval_I1);
+                    evaluate_image_shape[i] = evaluate_image[i].shape();
+                    tipl::image<3> new_sized_image(tipl::shape<3>(
+                        int(std::ceil(float(evaluate_image[i].shape()[0])/32.0f))*32,
+                        int(std::ceil(float(evaluate_image[i].shape()[1])/32.0f))*32,
+                        int(std::ceil(float(evaluate_image[i].shape()[2])/32.0f))*32));
+                    tipl::draw(evaluate_image[i],new_sized_image,tipl::vector<3,int>(0,0,0));
+                    new_sized_image.swap(evaluate_image[i]);
                 }
-                else
-                    eval_I1.resize(param.dim);
                 data_ready[i] = true;
                 i += thread_count;
             }
@@ -63,9 +54,10 @@ void evaluate_unet::evaluate(const EvaluateParam& param)
 
                 }
                 auto& eval_I1 = evaluate_image[cur_prog];
+                if(eval_I1.empty())
+                    continue;
                 auto out = model->forward(torch::from_blob(&eval_I1[0],{1,model->in_count,int(eval_I1.depth()),int(eval_I1.height()),int(eval_I1.width())}).to(param.device));
                 evaluate_result[cur_prog].resize(eval_I1.shape().multiply(tipl::shape<3>::z,model->out_count));
-                evaluate_result[cur_prog] = 0;
                 std::memcpy(&evaluate_result[cur_prog][0],out.to(torch::kCPU).data_ptr<float>(),evaluate_result[cur_prog].size()*sizeof(float));
             }
         }
@@ -96,15 +88,16 @@ void evaluate_unet::output(void)
                     std::this_thread::sleep_for(200ms);
 
                 }
+                if(evaluate_result[cur_output].empty())
+                    continue;
                 evaluate_output[cur_output].resize(evaluate_image_shape[cur_output].multiply(tipl::shape<3>::z,model->out_count));
-                evaluate_image_trans[cur_output].inverse();
                 tipl::shape<3> dim_in(evaluate_image[cur_output].shape());
                 tipl::shape<3> dim_out(evaluate_image_shape[cur_output]);
                 tipl::par_for(model->out_count,[&](int i)
                 {
                     auto from = evaluate_result[cur_output].alias(dim_in.size()*i,dim_in);
                     auto to = evaluate_output[cur_output].alias(dim_out.size()*i,dim_out);
-                    tipl::resample_mt(from,to,evaluate_image_trans[cur_output]);
+                    tipl::draw(from,to,tipl::vector<3,int>(0,0,0));
                 });
                 evaluate_image[cur_output] = tipl::image<3>();
                 evaluate_result[cur_output] = tipl::image<3>();

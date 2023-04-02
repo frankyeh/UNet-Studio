@@ -1,8 +1,11 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 #include <QFileDialog>
+#include <QSettings>
+#include <QMovie>
 #include <QMessageBox>
 #include "TIPL/tipl.hpp"
+extern QSettings settings;
 extern std::vector<std::string> gpu_names;
 void gen_list(std::vector<std::string>& network_list);
 MainWindow::MainWindow(QWidget *parent)
@@ -11,6 +14,10 @@ MainWindow::MainWindow(QWidget *parent)
 {
 
     ui->setupUi(this);
+    ui->training->hide();
+    ui->training->setMovie(new QMovie(":/icons/icons/ajax-loader.gif"));
+    ui->evaluating->hide();
+    ui->evaluating->setMovie(new QMovie(":/icons/icons/ajax-loader.gif"));
     ui->view1->setScene(&train_scene1);
     ui->view2->setScene(&train_scene2);
     ui->eval_view1->setScene(&eval_scene1);
@@ -61,18 +68,24 @@ void MainWindow::on_train_from_scratch_clicked()
 }
 void MainWindow::on_load_network_clicked()
 {
-    QString file = QFileDialog::getOpenFileName(this,"Open network file","","Network files (*net.gz);;All files (*)");
+    QString file = QFileDialog::getOpenFileName(this,"Open network file",settings.value("on_load_network_clicked").toString(),"Network files (*net.gz);;All files (*)");
     if(file.isEmpty() || !load_from_file(train.model,file.toStdString().c_str()))
         return;
+
     ui->feature_string->setText(train.model->feature_string.c_str());
     ui->network->setText(QString("UNet %1->%2->%3").arg(train.model->in_count).arg(train.model->feature_string.c_str()).arg(train.model->out_count));
     QMessageBox::information(this,"","Loaded");
+    settings.setValue("on_load_network_clicked",file);
 }
 void MainWindow::on_save_network_clicked()
 {
-    QString file = QFileDialog::getSaveFileName(this,"Save network file","","Network files (*net.gz);;All files (*)");
+    QString file = QFileDialog::getSaveFileName(this,"Save network file",settings.value("on_save_network_clicked").toString(),"Network files (*net.gz);;All files (*)");
     if(!file.isEmpty() && save_to_file(train.model,file.toStdString().c_str()))
+    {
         QMessageBox::information(this,"","Network Saved");
+        settings.setValue("on_save_network_clicked",file);
+    }
+
 }
 void MainWindow::on_start_training_clicked()
 {
@@ -117,7 +130,6 @@ void MainWindow::on_start_training_clicked()
     ui->train_prog->setValue(1);
     timer->start();
     ui->start_training->setText(train.pause ? "Resume":"Pause");
-
 }
 void MainWindow::on_eval_from_train_clicked()
 {
@@ -137,12 +149,13 @@ void MainWindow::on_eval_from_train_clicked()
 
 void MainWindow::on_eval_from_file_clicked()
 {
-    QString file = QFileDialog::getOpenFileName(this,"Open Network File","","Network files (*net.gz);;All files (*)");
+    QString file = QFileDialog::getOpenFileName(this,"Open Network File",settings.value("on_eval_from_file_clicked").toString(),"Network files (*net.gz);;All files (*)");
     if(file.isEmpty() || !load_from_file(evaluate.model,file.toStdString().c_str()))
         return;
     ui->evaluate_network->setText(QString("UNet %1->%2->%3").arg(evaluate.model->in_count).arg(evaluate.model->feature_string.c_str()).arg(evaluate.model->out_count));
     ui->evaluate->setEnabled(true);
     QMessageBox::information(this,"","Loaded");
+    settings.setValue("on_eval_from_file_clicked",file);
 }
 
 void MainWindow::on_evaluate_clicked()
@@ -173,6 +186,27 @@ void MainWindow::on_evaluate_clicked()
 
 void MainWindow::training()
 {
+    ui->open_files->setEnabled(!train.running);
+    ui->clear->setEnabled(!train.running);
+    ui->open_labels->setEnabled(!train.running);
+    ui->autofill->setEnabled(!train.running);
+    ui->load_network->setEnabled(!train.running);
+    ui->train_from_scratch->setEnabled(!train.running);
+    ui->batch_size->setEnabled(!train.running);
+    ui->epoch->setEnabled(!train.running);
+    ui->learning_rate->setEnabled(!train.running);
+    ui->gpu->setEnabled(!train.running);
+
+    if(train.pause || !train.running)
+    {
+        ui->training->movie()->stop();
+        ui->training->hide();
+    }
+    else
+    {
+        ui->training->movie()->start();
+        ui->training->show();
+    }
     ui->train_prog->setValue(train.cur_epoch+1);
     ui->train_prog->setFormat(QString( "epoch: %1/%2 error: %3" ).arg(train.cur_epoch).arg(ui->train_prog->maximum()).arg(train.cur_epoch ? std::to_string(train.error[train.cur_epoch-1]).c_str():"pending"));
     if(!train.running)
@@ -186,6 +220,23 @@ void MainWindow::training()
 }
 void MainWindow::evaluating()
 {
+    ui->open_evale_image->setEnabled(!evaluate.running);
+    ui->evaluate_clear->setEnabled(!evaluate.running);
+    ui->eval_from_file->setEnabled(!evaluate.running);
+    ui->eval_from_train->setEnabled(!evaluate.running);
+    ui->evaluate_device->setEnabled(!evaluate.running);
+
+    if(!evaluate.running)
+    {
+        ui->evaluating->movie()->stop();
+        ui->evaluating->hide();
+
+    }
+    else
+    {
+        ui->evaluating->movie()->start();
+        ui->evaluating->show();
+    }
     ui->eval_prog->setValue(evaluate.cur_output);
     ui->train_prog->setFormat(QString("%1/%2").arg(evaluate.cur_output).arg(evaluate_list.size()));
     if(!evaluate.running)
@@ -204,32 +255,31 @@ void MainWindow::update_list(void)
 {
     auto index = ui->list1->currentRow();
     ui->list1->clear();
+    ui->list2->clear();
     ready_to_train = false;
     for(size_t i = 0;i < image_list.size();++i)
     {
         if(!QFileInfo(label_list[i]).exists())
             label_list[i].clear();
-        if(label_list[i].isEmpty())
-            ui->list1->addItem(QFileInfo(image_list[i]).fileName() + " (label to be assigned)");
-        else
-        {
-            ui->list1->addItem(QFileInfo(image_list[i]).fileName() + "->" + QFileInfo(label_list[i]).fileName());
-            ready_to_train = true;
-            ui->start_training->setEnabled(true);
-        }
+        ui->list1->addItem(QFileInfo(image_list[i]).fileName());
+        ui->list2->addItem(label_list[i].isEmpty() ? QString("(to be assigned)") : QFileInfo(label_list[i]).fileName());
+        ready_to_train = true;
+        ui->start_training->setEnabled(true);
     }
     if(index >=0 && index < ui->list1->count())
         ui->list1->setCurrentRow(index);
     else
         ui->list1->setCurrentRow(0);
 }
+
 void MainWindow::on_open_files_clicked()
 {
     QStringList fileNames = QFileDialog::getOpenFileNames(
-        this,"Select NIFTI images","","NIFTI files (*nii.gz);;All files (*)"
+        this,"Select NIFTI images",settings.value("on_open_files_clicked").toString(),"NIFTI files (*nii.gz);;All files (*)"
     );
     if (fileNames.isEmpty())
         return;
+    settings.setValue("on_open_files_clicked",fileNames[0]);
     for(auto s : fileNames)
     {
         image_list << s;
@@ -252,57 +302,77 @@ void MainWindow::on_clear_clicked()
 void MainWindow::on_evaluate_clear_clicked()
 {
     evaluate_list.clear();
+    evaluate.evaluate_output.clear();
     ui->evaluate_list->clear();
+    ui->evaluate_list2->clear();
 }
-
 
 
 void MainWindow::on_open_labels_clicked()
 {
     QStringList fileNames = QFileDialog::getOpenFileNames(
-        this,"Select NIFTI images","","NIFTI files (*nii.gz);;All files (*)"
+        this,"Select NIFTI images",settings.value("on_open_labels_clicked").toString(),"NIFTI files (*nii.gz);;All files (*)"
     );
     if (fileNames.isEmpty())
         return;
-    if(!(out_count = get_label_out_count(fileNames[0].toStdString())))
+    settings.setValue("on_open_labels_clicked",fileNames[0]);
+    if(ui->list2->currentRow() == 0)
     {
-        out_count = 1;
-        QMessageBox::critical(this,"Error","Not a valid label image");
-        return;
+        if(!(out_count = get_label_out_count(fileNames[0].toStdString())))
+        {
+            out_count = 1;
+            QMessageBox::critical(this,"Error","Not a valid label image");
+            return;
+        }
     }
-    auto index = ui->list1->currentRow();
+    auto index = ui->list2->currentRow();
     for(int i = 0;i < fileNames.size() && index < label_list.size();++i,++index)
         label_list[index] = fileNames[i];
 
-    if(fileNames.size() == 1 && image_list.size() > 1)
+    update_list();
+    ui->label_slider->setMaximum(out_count-1);
+}
+
+
+void MainWindow::on_autofill_clicked()
+{
+    if(ui->list2->currentRow() == -1)
+        return;
+    if(label_list[ui->list2->currentRow()].isEmpty())
     {
-        auto ans = QMessageBox::warning(this, "", "Apply to other labels?",QMessageBox::Yes | QMessageBox::No,QMessageBox::Yes);
-        if(ans == QMessageBox::Cancel)
-            return;
-        for(;index < label_list.size();++index)
+        QMessageBox::critical(this,"Error","At least assign the first label file");
+        return;
+    }
+    for(int index = 0;index < label_list.size();++index)
+    if(label_list[ui->list1->currentRow()].isEmpty())
         {
             std::string result;
             if(tipl::match_files(image_list[ui->list1->currentRow()].toStdString(),label_list[ui->list1->currentRow()].toStdString(),
                               image_list[index].toStdString(),result) && QFileInfo(result.c_str()).exists())
                 label_list[index] = result.c_str();
         }
-    }
     update_list();
-    ui->label_slider->setMaximum(out_count-1);
 }
 
 
+
+void MainWindow::on_show_transform_clicked()
+{
+    on_list1_currentRowChanged(ui->list1->currentRow());
+}
+
 void MainWindow::on_list1_currentRowChanged(int currentRow)
 {
+    if(ui->list2->currentRow() != currentRow)
+        ui->list2->setCurrentRow(currentRow);
     auto pos_index = ui->pos->value();
     if(currentRow >= 0 && currentRow < image_list.size())
     {
         tipl::vector<3> vs;
-        ui->image_name->setText(image_list[currentRow]);
-        ui->label_name->setText(label_list[currentRow]);
         if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),I1,I2,out_count,vs))
             I2.clear();
-        load_image_and_label(I1,I2,vs,tipl::shape<3>(ui->dim_x->value(),ui->dim_y->value(),ui->dim_z->value()));
+        if(ui->show_transform->isChecked())
+            load_image_and_label(I1,I2,vs,tipl::shape<3>(ui->dim_x->value(),ui->dim_y->value(),ui->dim_z->value()));
         v2c1.set_range(0,tipl::max_value_mt(I1));
         ui->pos->setMaximum(I1.shape()[ui->view_dim->currentIndex()]-1);
     }
@@ -310,15 +380,17 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
     {
         I1.clear();
         I2.clear();
-        ui->image_name->setText(QString());
-        ui->label_name->setText(QString());
         ui->pos->setMaximum(0);
     }
     ui->pos->setValue(pos_index);
     on_pos_valueChanged(ui->pos->value());
 }
 
-
+void MainWindow::on_list2_currentRowChanged(int currentRow)
+{
+    if(ui->list1->currentRow() != currentRow)
+        ui->list1->setCurrentRow(currentRow);
+}
 
 void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
 {
@@ -328,7 +400,9 @@ void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
         tipl::vector<3> vs;
         if(!tipl::io::gz_nifti::load_from_file(evaluate_list[currentRow].toStdString().c_str(),eval_I1,vs))
             return;
-        if(currentRow < evaluate.cur_output)
+        if(currentRow < evaluate.cur_output &&
+           currentRow < evaluate.evaluate_output.size() &&
+           !evaluate.evaluate_output[currentRow].empty())
             eval_I2 = evaluate.evaluate_output[currentRow];
         else
         {
@@ -393,18 +467,25 @@ void MainWindow::update_evaluate_list(void)
 }
 void MainWindow::on_open_evale_image_clicked()
 {
-    QStringList file = QFileDialog::getOpenFileNames(this,"Open Image","","NIFTI files (*nii.gz);;All files (*)");
+    QStringList file = QFileDialog::getOpenFileNames(this,"Open Image",settings.value("on_open_evale_image_clicked").toString(),"NIFTI files (*nii.gz);;All files (*)");
     if(file.isEmpty())
         return;
+    settings.setValue("on_open_evale_image_clicked",file[0]);
     evaluate_list << file;
     update_evaluate_list();
 }
 
 
-void MainWindow::on_eval_view_dim_currentIndexChanged(int index){    }
-void MainWindow::on_view_dim_currentIndexChanged(int index){   }
+void MainWindow::on_eval_view_dim_currentIndexChanged(int index){   on_eval_pos_valueChanged(ui->eval_pos->value()); }
+void MainWindow::on_view_dim_currentIndexChanged(int index){  on_pos_valueChanged(ui->pos->value()); }
 void MainWindow::on_label_slider_valueChanged(int value){    on_pos_valueChanged(ui->pos->value());}
 void MainWindow::on_eval_label_slider_valueChanged(int value){    on_eval_pos_valueChanged(ui->eval_pos->value());}
+
+
+
+
+
+
 
 
 

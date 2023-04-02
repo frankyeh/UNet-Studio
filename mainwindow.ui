@@ -6,19 +6,19 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1150</width>
-    <height>773</height>
+    <width>1145</width>
+    <height>878</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>UNet Studio</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <item>
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
@@ -39,7 +39,7 @@
              </sizepolicy>
             </property>
             <property name="title">
-             <string>Step 1: Specify Images</string>
+             <string>Step 1: Specify Input</string>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_3">
              <property name="topMargin">
@@ -58,15 +58,9 @@
                  <property name="text">
                   <string>Open...</string>
                  </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="open_labels">
-                 <property name="enabled">
-                  <bool>false</bool>
-                 </property>
-                 <property name="text">
-                  <string>Open Label...</string>
+                 <property name="icon">
+                  <iconset resource="icons.qrc">
+                   <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
                  </property>
                 </widget>
                </item>
@@ -88,6 +82,10 @@
                  <property name="text">
                   <string>Clear</string>
                  </property>
+                 <property name="icon">
+                  <iconset resource="icons.qrc">
+                   <normaloff>:/icons/icons/delete.png</normaloff>:/icons/icons/delete.png</iconset>
+                 </property>
                 </widget>
                </item>
               </layout>
@@ -99,9 +97,68 @@
            </widget>
           </item>
           <item>
+           <widget class="QGroupBox" name="groupBox_11">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>2</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="title">
+             <string>Step 2: Specify Output</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_2">
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_13">
+               <property name="spacing">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QPushButton" name="open_labels">
+                 <property name="enabled">
+                  <bool>false</bool>
+                 </property>
+                 <property name="text">
+                  <string>Open...</string>
+                 </property>
+                 <property name="icon">
+                  <iconset resource="icons.qrc">
+                   <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer_3">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QPushButton" name="autofill">
+                 <property name="text">
+                  <string>Autofill</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QListWidget" name="list2"/>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
            <widget class="QGroupBox" name="groupBox_9">
             <property name="title">
-             <string>Step 2: Setup Network</string>
+             <string>Step 3: Configure Network</string>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_14">
              <property name="topMargin">
@@ -127,12 +184,37 @@
                  <property name="text">
                   <string>New</string>
                  </property>
+                 <property name="icon">
+                  <iconset resource="icons.qrc">
+                   <normaloff>:/icons/icons/new.png</normaloff>:/icons/icons/new.png</iconset>
+                 </property>
                 </widget>
                </item>
                <item>
                 <widget class="QPushButton" name="load_network">
                  <property name="text">
-                  <string>Load From File...</string>
+                  <string>Open...</string>
+                 </property>
+                 <property name="icon">
+                  <iconset resource="icons.qrc">
+                   <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="save_network">
+                 <property name="minimumSize">
+                  <size>
+                   <width>0</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                 <property name="text">
+                  <string>Save as...</string>
+                 </property>
+                 <property name="icon">
+                  <iconset resource="icons.qrc">
+                   <normaloff>:/icons/icons/save.png</normaloff>:/icons/icons/save.png</iconset>
                  </property>
                 </widget>
                </item>
@@ -144,7 +226,7 @@
           <item>
            <widget class="QGroupBox" name="groupBox_2">
             <property name="title">
-             <string>Step 3: Train</string>
+             <string>Step 4: Train</string>
             </property>
             <layout class="QFormLayout" name="formLayout">
              <property name="leftMargin">
@@ -192,10 +274,10 @@
                 <number>1000</number>
                </property>
                <property name="maximum">
-                <number>70000</number>
+                <number>100000</number>
                </property>
                <property name="value">
-                <number>10000</number>
+                <number>100000</number>
                </property>
               </widget>
              </item>
@@ -284,15 +366,12 @@
               </layout>
              </item>
              <item row="4" column="0">
-              <widget class="QPushButton" name="save_network">
-               <property name="minimumSize">
-                <size>
-                 <width>0</width>
-                 <height>64</height>
-                </size>
-               </property>
+              <widget class="QLabel" name="training">
                <property name="text">
-                <string>Save As...</string>
+                <string/>
+               </property>
+               <property name="pixmap">
+                <pixmap resource="icons.qrc">:/icons/icons/ajax-loader.gif</pixmap>
                </property>
               </widget>
              </item>
@@ -370,13 +449,6 @@
                    <number>0</number>
                   </property>
                   <item>
-                   <widget class="QLabel" name="image_name">
-                    <property name="text">
-                     <string/>
-                    </property>
-                   </widget>
-                  </item>
-                  <item>
                    <widget class="QGraphicsView" name="view1"/>
                   </item>
                  </layout>
@@ -389,13 +461,6 @@
                   <property name="topMargin">
                    <number>0</number>
                   </property>
-                  <item>
-                   <widget class="QLabel" name="label_name">
-                    <property name="text">
-                     <string/>
-                    </property>
-                   </widget>
-                  </item>
                   <item>
                    <widget class="QGraphicsView" name="view2"/>
                   </item>
@@ -460,6 +525,13 @@
                   </property>
                  </widget>
                 </item>
+                <item>
+                 <widget class="QCheckBox" name="show_transform">
+                  <property name="text">
+                   <string>Show Transform</string>
+                  </property>
+                 </widget>
+                </item>
                </layout>
               </item>
              </layout>
@@ -492,7 +564,7 @@
              </sizepolicy>
             </property>
             <property name="title">
-             <string>Step 1: Specify Data</string>
+             <string>Step 1: Specify Input</string>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_6">
              <property name="topMargin">
@@ -507,6 +579,10 @@
                 <widget class="QPushButton" name="open_evale_image">
                  <property name="text">
                   <string>Open...</string>
+                 </property>
+                 <property name="icon">
+                  <iconset resource="icons.qrc">
+                   <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
                  </property>
                 </widget>
                </item>
@@ -528,6 +604,10 @@
                  <property name="text">
                   <string>Clear</string>
                  </property>
+                 <property name="icon">
+                  <iconset resource="icons.qrc">
+                   <normaloff>:/icons/icons/delete.png</normaloff>:/icons/icons/delete.png</iconset>
+                 </property>
                 </widget>
                </item>
               </layout>
@@ -541,13 +621,13 @@
           <item>
            <widget class="QGroupBox" name="groupBox_8">
             <property name="title">
-             <string>Step 2: Setup Network</string>
+             <string>Step 2: Configure Network</string>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_12">
              <item>
               <widget class="QLabel" name="evaluate_network">
                <property name="text">
-                <string> </string>
+                <string/>
                </property>
               </widget>
              </item>
@@ -559,14 +639,18 @@
                <item>
                 <widget class="QPushButton" name="eval_from_train">
                  <property name="text">
-                  <string>Copy From Trained</string>
+                  <string>From Train</string>
                  </property>
                 </widget>
                </item>
                <item>
                 <widget class="QPushButton" name="eval_from_file">
                  <property name="text">
-                  <string>Load From File...</string>
+                  <string>Open...</string>
+                 </property>
+                 <property name="icon">
+                  <iconset resource="icons.qrc">
+                   <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
                  </property>
                 </widget>
                </item>
@@ -580,28 +664,18 @@
             <property name="title">
              <string>Step 3: Evaluate</string>
             </property>
-            <layout class="QVBoxLayout" name="verticalLayout_7">
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_12">
-               <property name="spacing">
-                <number>0</number>
-               </property>
-               <property name="bottomMargin">
-                <number>0</number>
-               </property>
-               <item>
-                <widget class="QLabel" name="label_5">
-                 <property name="text">
-                  <string>Device</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QComboBox" name="evaluate_device"/>
-               </item>
-              </layout>
+            <layout class="QFormLayout" name="formLayout_2">
+             <item row="0" column="1">
+              <widget class="QComboBox" name="evaluate_device"/>
              </item>
-             <item>
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_5">
+               <property name="text">
+                <string>Device</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
               <widget class="QPushButton" name="evaluate">
                <property name="enabled">
                 <bool>false</bool>
@@ -609,7 +683,7 @@
                <property name="minimumSize">
                 <size>
                  <width>0</width>
-                 <height>128</height>
+                 <height>64</height>
                 </size>
                </property>
                <property name="text">
@@ -617,12 +691,71 @@
                </property>
               </widget>
              </item>
-             <item>
+             <item row="3" column="1">
               <widget class="QProgressBar" name="eval_prog">
                <property name="value">
                 <number>0</number>
                </property>
               </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="evaluating">
+               <property name="text">
+                <string/>
+               </property>
+               <property name="pixmap">
+                <pixmap resource="icons.qrc">:/icons/icons/ajax-loader.gif</pixmap>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="groupBox_12">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>2</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="title">
+             <string>Step 4: Output</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_15">
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_14">
+               <property name="spacing">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QPushButton" name="open_evale_image_2">
+                 <property name="text">
+                  <string>Save as...</string>
+                 </property>
+                 <property name="icon">
+                  <iconset resource="icons.qrc">
+                   <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer_5">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QListWidget" name="evaluate_list2"/>
              </item>
             </layout>
            </widget>
@@ -828,7 +961,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1150</width>
+     <width>1145</width>
      <height>22</height>
     </rect>
    </property>
@@ -845,6 +978,8 @@
    </property>
   </action>
  </widget>
- <resources/>
+ <resources>
+  <include location="icons.qrc"/>
+ </resources>
  <connections/>
 </ui>

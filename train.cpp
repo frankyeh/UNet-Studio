@@ -50,6 +50,7 @@ bool read_image_and_label(const std::string& image_name,
     nii.get_image_transformation(label_t);
     if(image.shape() != label_shape || label_t != image_t)
     {
+        tipl::out() << "spatial transform label file to image file space" << std::endl;
         tipl::image<3> new_label(image.shape().multiply(tipl::shape<3>::z,out_count));
         for(size_t i = 0;i < out_count;++i)
         {
@@ -61,62 +62,114 @@ bool read_image_and_label(const std::string& image_name,
     }
     return true;
 }
+
+template<typename image_type>
+void intensity_wave(image_type& image_out,tipl::uniform_dist<float>& one,float frequency,float magnitude)
+{
+    const double pi = std::acos(-1);
+    tipl::vector<3> f(one()*frequency*pi,one()*frequency*pi,one()*frequency*pi);
+    tipl::vector<3> shift(one()*pi,one()*pi,one()*pi);
+    float a = std::abs(one()*magnitude); // [0 0.25]
+    float b = 1.0f-a-a;
+    for(tipl::pixel_index<3> index(image_out.shape());index < image_out.size();++index)
+    {
+        tipl::vector<3> pos(index.begin());
+        tipl::divide(pos,image_out.shape());
+        pos += shift;
+        image_out[index.index()] *= ((std::cos(pos*f)+1.0f)*a+b);
+    }
+}
+template<typename image_type>
+void ghost(image_type& image_out,int shift,float magnitude,bool direction)
+{
+    tipl::image<3> ghost = image_out;
+    ghost *= magnitude;
+    if(direction)
+    {
+        tipl::draw<false>(ghost,image_out,tipl::vector<3,int>(shift,0,0));
+        tipl::draw<false>(ghost,image_out,tipl::vector<3,int>(-shift,0,0));
+    }
+    else
+    {
+        tipl::draw<false>(ghost,image_out,tipl::vector<3,int>(0,shift,0));
+        tipl::draw<false>(ghost,image_out,tipl::vector<3,int>(0,-shift,0));
+    }
+}
+template<typename image_type>
+void create_distortion_at(image_type& displaced,const tipl::vector<3,int>& center,float radius,float magnitude)
+{
+    auto radius_5 = radius*magnitude;
+    auto pi_2_radius = std::acos(-1)/radius;
+    tipl::for_each_neighbors(tipl::pixel_index<3>(center.begin(),displaced.shape()),displaced.shape(),radius,[&](const auto& pos)
+    {
+        tipl::vector<3> dir(pos);
+        dir -= center;
+        auto length = dir.length();
+        if(length > radius)
+            return;
+        dir *= -radius_5*std::sin(length*pi_2_radius)/length;
+        displaced[pos.index()] += dir;
+    });
+}
+
+template<typename image_type>
+void create_dropout_at(image_type& image,image_type& label,const tipl::vector<3,int>& center,const tipl::vector<3,int>& radius)
+{
+    auto pos = center-radius;
+    auto sizes = radius+radius;
+    tipl::draw_rect(image,pos,sizes,0);
+    if(!label.empty())
+    {
+        auto out_count = label.depth()/image.depth();
+        for(size_t i = 0;i < out_count;++i)
+        {
+            auto I = label.alias(image.size()*i,image.shape());
+            tipl::draw_rect(I,pos,sizes,0);
+        }
+    }
+}
+
 void load_image_and_label(tipl::image<3>& image,
                           tipl::image<3>& label,
                           const tipl::vector<3>& image_vs,
                           const tipl::shape<3>& template_shape)
 {
-    static tipl::uniform_dist<float>
-            trans(-30.0f,30.0f,time(0)),
-            rot(-0.45f,0.45f,time(0)),
-            scale(0.75f,2.0f,time(0)),
-            shear(-0.15f,0.15f,time(0)),
-            f0505(-0.5f,0.5f,time(0)),
-            f2020(-2.0f,2.0f,time(0)),
-            f100100(-10.0f,10.0f,time(0)),
-            f200200(-20.0f,20.0f,time(0)),
-            i2_6(2.0f,6.0f,time(0)),
-            f04(0.0f,4.0f,time(0)),
-            downsample(0.5f,1.0f,time(0)),
-            ring(0.2f,0.5f,time(0));
+    tipl::uniform_dist<float> one(-1.0f,1.0f,time(0));
+    auto range = [&one](float from,float to){return one()*(to-from)*0.5f+(to+from)*0.5f;};
     tipl::vector<3> template_vs(1.0f,1.0f,1.0f);
     if(image_vs[0] < 1.0f)
         template_vs[2] = template_vs[1] = template_vs[0] = image.width()*image_vs[0]/template_shape[0];
 
-    tipl::affine_transform<float> transform = {trans()*template_vs[0],trans()*template_vs[0],trans()*template_vs[0],
-                                        rot(),rot()/4.0f,rot()/4.0f,
-                                        scale(),scale(),scale(),
-                                        shear(),shear(),shear()};
+    tipl::affine_transform<float> transform = {one()*30.0f*template_vs[0],one()*30.0f*template_vs[0],one()*30.0f*template_vs[0],
+                                        one()*0.45f,one()*0.45f/4.0f,one()*0.45f/4.0f,
+                                        range(0.75f,2.0f),range(0.75f,2.0f),range(0.75f,2.0f),
+                                        one()*0.15f,one()*0.15f,one()*0.15f};
 
 
 
+    tipl::image<3,tipl::vector<3> > displaced(template_shape);
 
-    tipl::image<3,tipl::vector<3> > displaced(image.shape());
-
+    tipl::par_for(int(range(0.0f,4.0f)),[&](int)
     {
-        int count = f04()*2;
-        tipl::par_for(count,[&](int)
+        create_distortion_at(displaced,
+                             tipl::vector<3,int>(
+                                 (image.shape()[0]-1)*range(0.4f,0.6f),
+                                 (image.shape()[1]-1)*range(0.4f,0.6f),
+                                 (image.shape()[2]-1)*range(0.4f,0.6f)),
+                                 (image.shape()[0]-1)*range(0.2f,0.5f), // radius
+                                 range(0.05f,0.2f));                    //magnitude
+    });
+
+    tipl::par_for(int(range(0.0f,4.0f)),[&](int)
+    {
+        tipl::vector<3,int> center,radius;
+        for(int i = 0;i < 3;++i)
         {
-            tipl::vector<3,int> center;
-            for(int i = 0;i < 3;++i)
-                center[i] = (image.shape()[i]-1)*(f0505()/4.0f + 0.5f);
-            auto radius = 10+(f0505()+0.5)*(image.width()-1)/4;
-            auto radius_5 = radius/5.0f;
-            auto pi_2_radius = std::acos(-1)/radius;
-            std::vector<tipl::pixel_index<3> > neighbors;
-            tipl::get_neighbors(tipl::pixel_index<3>(center[0],center[1],center[2],image.shape()),image.shape(),radius,neighbors);
-            for(auto& pos : neighbors)
-            {
-                tipl::vector<3> dir(pos);
-                dir -= center;
-                auto length = dir.length();
-                if(length > radius)
-                    continue;
-                dir *= -radius_5*std::sin(length*pi_2_radius)/length;
-                displaced[pos.index()] += dir;
-            }
-        });
-    }
+            center[i] = (image.shape()[i]-1)*range(0.2f,0.8f);
+            radius[i] = (image.shape()[i]-1)*range(0.05f,0.1f);
+        }
+        create_dropout_at(image,label,center,radius);
+    });
 
 
     if(!label.empty())
@@ -127,7 +180,6 @@ void load_image_and_label(tipl::image<3>& image,
         {
             auto J = label_out.alias(template_shape.size()*i,template_shape);
             tipl::compose_displacement_with_affine(label.alias(image.size()*i,image.shape()),J,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs),displaced);
-            //tipl::resample_mt(label.alias(image.size()*i,image.shape()),J,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs));
         }
         label_out.swap(label);
     }
@@ -137,84 +189,40 @@ void load_image_and_label(tipl::image<3>& image,
 
     {
         tipl::image<3> reduced_image(image.shape());
-        tipl::vector<3> dd(downsample(),downsample(),downsample());
+        tipl::vector<3> dd(range(0.5f,1.0f),range(0.5f,1.0f),range(0.5f,1.0f));
         tipl::vector<3> new_vs(image_vs[0]/dd[0],image_vs[1]/dd[1],image_vs[2]/dd[2]);
         tipl::affine_transform<float> image_arg;
         image_arg.scaling[0] = 1.0f/dd[0];
         image_arg.scaling[1] = 1.0f/dd[1];
         image_arg.scaling[2] = 1.0f/dd[2];
-        tipl::resample_mt(image,reduced_image,tipl::transformation_matrix<float>(image_arg,image.shape(),new_vs,image.shape(),image_vs));
+        tipl::resample_mt(image,reduced_image,
+            tipl::transformation_matrix<float>(image_arg,image.shape(),new_vs,image.shape(),image_vs));
         image_arg = transform;
         image_arg.scaling[0] *= dd[0];
         image_arg.scaling[1] *= dd[1];
         image_arg.scaling[2] *= dd[2];
-        tipl::compose_displacement_with_affine(reduced_image,image_out,tipl::transformation_matrix<float>(image_arg,template_shape,template_vs,reduced_image.shape(),new_vs),displaced);
+        tipl::compose_displacement_with_affine(reduced_image,image_out,
+            tipl::transformation_matrix<float>(image_arg,template_shape,template_vs,image.shape(),new_vs),displaced);
     }
 
 
-    if(f0505() > 0)
-    {
-        tipl::image<3>  ghost = image_out;
-        ghost *= 0.125f;
-        if(f0505() > 0)
-        {
-            int shift_x = ring()*image_out.width()*2.0f;
-            tipl::draw<false>(ghost,image_out,tipl::vector<3,int>(shift_x,0,0));
-            tipl::draw<false>(ghost,image_out,tipl::vector<3,int>(-shift_x,0,0));
-        }
-        else
-        {
-            int shift_y = ring()*image_out.height()*2.0f;
-            tipl::draw<false>(ghost,image_out,tipl::vector<3,int>(0,shift_y,0));
-            tipl::draw<false>(ghost,image_out,tipl::vector<3,int>(0,-shift_y,0));
-        }
-    }
+    if(one() > 0)
+        ghost(image_out,range(0.05f,0.25f)*image_out.width(),0.125f,one() > 0);
 
-    {
-        const double pi = std::acos(-1);
-        float fx = f2020()*pi;// [pi,3pi]
-        float fy = f2020()*pi;// [pi,3pi]
-        float fz = f2020()*pi;// [pi,3pi]
-        tipl::vector<3> shift(f0505()*2.0f,f0505()*2.0f,f0505()*2.0f);
-        float a = std::abs(f0505()*0.5f); // [0 0.25]
-        float b = 1.0f-a-a;
-        for(tipl::pixel_index<3> index(image_out.shape());index < image_out.size();++index)
-        {
-            tipl::vector<3> pos(index.begin());
-            tipl::divide(pos,image_out.shape());
-            pos += shift;
-            image_out[index.index()] *= ((std::cos(pos[0]*fx+pos[1]*fy+pos[2]*fz)+1.0f)*a+b);
-        }
-    }
-
-    {
-        const double pi = std::acos(-1);
-        float fx = f200200()*pi;// [pi,3pi]
-        float fy = f200200()*pi;// [pi,3pi]
-        float fz = f200200()*pi;// [pi,3pi]
-        tipl::vector<3> shift(f0505()*2.0f,f0505()*2.0f,f0505()*2.0f);
-        float a = std::abs(f0505()*0.2f); // [0 0.25]
-        float b = 1.0f-a-a;
-        for(tipl::pixel_index<3> index(image_out.shape());index < image_out.size();++index)
-        {
-            tipl::vector<3> pos(index.begin());
-            tipl::divide(pos,image_out.shape());
-            pos += shift;
-            image_out[index.index()] *= ((std::cos(pos[0]*fx+pos[1]*fy+pos[2]*fz)+1.0f)*a+b);
-        }
-    }    
+    intensity_wave(image_out,one,2.0f,0.25f); // low frequency at 0.25 magnitude
+    intensity_wave(image_out,one,20.0f,0.1f); // high frequency at 0.1 magnitude
 
 
     tipl::normalize(image_out);
     tipl::lower_threshold(image_out,0.0f);
 
-    if(f0505() > 0)
+    if(one() > 0)
     {
         tipl::image<3> background(template_shape);
         {
-            tipl::affine_transform<float> arg= {trans(),trans(),trans(),
-                                                rot()*4.0f,rot()*4.0f,rot()*4.0f,
-                                                scale()*0.125f,scale()*0.125f,scale()*0.125f,
+            tipl::affine_transform<float> arg= {one()*30.0f,one()*30.0f,one()*30.0f,
+                                                one()*2.0f,one()*2.0f,one()*2.0f,
+                                                range(0.25f,0.5f),range(0.25f,0.5f),range(0.25f,0.5f),
                                                 0.0f,0.0f,0.0f};
             tipl::resample_mt(image,background,tipl::transformation_matrix<float>(arg,template_shape,template_vs,image.shape(),image_vs));
         }

@@ -66,5 +66,9 @@ private slots:
     void on_load_network_clicked();
     void on_save_network_clicked();
     void on_evaluate_clear_clicked();
+    void on_list2_currentRowChanged(int currentRow);
+    void on_autofill_clicked();
+    void on_show_transform_clicked();
+
 };
 #endif // MAINWINDOW_H
