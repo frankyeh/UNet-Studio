@@ -31,6 +31,8 @@ set(PROJECT_SOURCES
 set(UNet_STUDIO_CUDA
         cuda.cu)
 
+set(UNet_STUDIO_RESOURCES icons.qrc)
+
 if(WIN32)
     set(UNET_STUDIO_EXEC
         WIN32)
@@ -40,7 +42,7 @@ if(APPLE)
         MACOSX_BUNDLE)
 endif()
 
-qt_add_executable(unet_studio MANUAL_FINALIZATION ${PROJECT_SOURCES} ${UNet_STUDIO_CUDA})
+qt_add_executable(unet_studio MANUAL_FINALIZATION ${PROJECT_SOURCES} ${UNet_STUDIO_CUDA} ${UNet_STUDIO_RESOURCES})
 
 target_link_libraries(unet_studio PUBLIC Qt6::Widgets ZLIB::ZLIB ${CUDA_LIBRARIES} ${TORCH_LIBRARIES})
 target_include_directories(unet_studio PUBLIC ${TIPL_DIR})
