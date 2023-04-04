@@ -132,10 +132,14 @@ void create_dropout_at(image_type& image,image_type& label,const tipl::vector<3,
 void load_image_and_label(tipl::image<3>& image,
                           tipl::image<3>& label,
                           const tipl::vector<3>& image_vs,
-                          const tipl::shape<3>& template_shape)
+                          const tipl::shape<3>& template_shape,
+                          size_t random_seed)
 {
-    tipl::uniform_dist<float> one(-1.0f,1.0f,time(0));
+    tipl::uniform_dist<float> one(-1.0f,1.0f,random_seed);
     auto range = [&one](float from,float to){return one()*(to-from)*0.5f+(to+from)*0.5f;};
+    auto random_location = [&range](const tipl::shape<3>& sp,float from,float to)
+                    {return tipl::vector<3,int>((sp[0]-1)*range(from,to),(sp[1]-1)*range(from,to),(sp[2]-1)*range(from,to));};
+
     tipl::vector<3> template_vs(1.0f,1.0f,1.0f);
     if(image_vs[0] < 1.0f)
         template_vs[2] = template_vs[1] = template_vs[0] = image.width()*image_vs[0]/template_shape[0];
@@ -151,24 +155,14 @@ void load_image_and_label(tipl::image<3>& image,
 
     tipl::par_for(int(range(0.0f,4.0f)),[&](int)
     {
-        create_distortion_at(displaced,
-                             tipl::vector<3,int>(
-                                 (image.shape()[0]-1)*range(0.4f,0.6f),
-                                 (image.shape()[1]-1)*range(0.4f,0.6f),
-                                 (image.shape()[2]-1)*range(0.4f,0.6f)),
+        create_distortion_at(displaced,random_location(image.shape(),0.4f,0.6f),
                                  (image.shape()[0]-1)*range(0.2f,0.5f), // radius
                                  range(0.05f,0.2f));                    //magnitude
     });
 
     tipl::par_for(int(range(0.0f,4.0f)),[&](int)
     {
-        tipl::vector<3,int> center,radius;
-        for(int i = 0;i < 3;++i)
-        {
-            center[i] = (image.shape()[i]-1)*range(0.2f,0.8f);
-            radius[i] = (image.shape()[i]-1)*range(0.05f,0.1f);
-        }
-        create_dropout_at(image,label,center,radius);
+        create_dropout_at(image,label,random_location(image.shape(),0.2f,0.8f),random_location(image.shape(),0.05f,0.1f));
     });
 
 
@@ -216,7 +210,7 @@ void load_image_and_label(tipl::image<3>& image,
     tipl::normalize(image_out);
     tipl::lower_threshold(image_out,0.0f);
 
-    if(one() > 0)
+    //if(one() > 0)
     {
         tipl::image<3> background(template_shape);
         {
@@ -233,6 +227,11 @@ void load_image_and_label(tipl::image<3>& image,
 
 
     image_out.swap(image);
+
+    tipl::par_for(int(range(0.0f,2.0f)),[&](int)
+    {
+        create_dropout_at(image,label,random_location(image.shape(),0.0f,1.0f),random_location(image.shape(),0.05f,0.2f));
+    });
 }
 
 void train_unet::read_file(const TrainParam& param)
@@ -266,24 +265,24 @@ void train_unet::read_file(const TrainParam& param)
             aborted = true;
             return;
         }
-        const int thread_count = std::thread::hardware_concurrency()/2;
+        const int thread_count = std::thread::hardware_concurrency();
         tipl::par_for(thread_count,[&](size_t thread)
         {
             for(size_t i = thread;i < in_data.size() && !aborted;)
             {
-                while(i > (cur_epoch+2)*param.batch_size || pause)
+                while(i > cur_data_index+8 || pause)
                 {
                     if(aborted)
                         return;
                     using namespace std::chrono_literals;
-                    std::this_thread::sleep_for(200ms);
+                    std::this_thread::sleep_for(100ms);
                 }
                 auto read_id = std::rand() % image.size();
                 if(!image[read_id].size())
                     continue;
                 in_data[i] = image[read_id];
                 out_data[i] = label[read_id];
-                load_image_and_label(in_data[i],out_data[i],image_vs[read_id],param.dim);
+                load_image_and_label(in_data[i],out_data[i],image_vs[read_id],param.dim,i);
                 data_ready[i] = true;
                 i += thread_count;
             }
@@ -293,53 +292,44 @@ void train_unet::read_file(const TrainParam& param)
 
 void train_unet::prepare_tensor(const TrainParam& param)
 {
-    in_tensor = std::vector<torch::Tensor>(param.epoch);
-    out_tensor = std::vector<torch::Tensor>(param.epoch);
-    tensor_ready = std::vector<bool>(param.epoch,false);
-    freed_tensor = 0;
+    in_tensor = std::vector<torch::Tensor>(data_ready.size());
+    out_tensor = std::vector<torch::Tensor>(data_ready.size());
+    tensor_ready = std::vector<bool>(data_ready.size(),false);
     prepare_tensor_thread.reset(new std::thread([=](){
         try{
-            tipl::shape<3> in_dim(param.dim.multiply(tipl::shape<3>::z,param.batch_size*model->in_count)),
-                           out_dim(param.dim.multiply(tipl::shape<3>::z,param.batch_size*model->out_count));
-            for (size_t i = 0; i < param.epoch && !aborted; i++)
+            const int thread_count = 2;
+            tipl::par_for(thread_count,[&](size_t thread)
             {
-                for(;freed_tensor < cur_epoch;++freed_tensor)
+                for (size_t i = thread; i < data_ready.size() && !aborted; i += thread_count)
                 {
-                    in_tensor[freed_tensor] = torch::Tensor();
-                    out_tensor[freed_tensor] = torch::Tensor();
-                }
-                tipl::image<3> in(in_dim),out(out_dim);
-                tipl::par_for(param.batch_size,[&](size_t b)
-                {
-                    size_t j = i*param.batch_size + b;
-                    while(!data_ready[j] || pause)
+                    while(i >= cur_data_index+4 || !data_ready[i] || pause)
                     {
                         if(aborted)
                             return;
                         using namespace std::chrono_literals;
-                        std::this_thread::sleep_for(200ms);
-
+                        std::this_thread::sleep_for(100ms);
                     }
-                    std::copy(in_data[j].begin(),in_data[j].end(),in.begin()+b*in_data[j].size());
-                    std::copy(out_data[j].begin(),out_data[j].end(),out.begin()+b*out_data[j].size());
-                    tipl::image<3>().swap(in_data[j]);
-                    tipl::image<3>().swap(out_data[j]);
-                });
-                if(aborted)
-                    return;
-                in_tensor[i] = torch::from_blob(&in[0],
-                    {param.batch_size,model->in_count,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(param.device);
-                out_tensor[i] = torch::from_blob(&out[0],
-                    {param.batch_size,model->out_count,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(param.device);
-                tensor_ready[i] = true;
-            }
+                    if(aborted)
+                        return;
+                    in_tensor[i] = torch::from_blob(&in_data[i][0],
+                        {1,model->in_count,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(param.device);
+                    out_tensor[i] = torch::from_blob(&out_data[i][0],
+                        {1,model->out_count,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(param.device);
+                    tensor_ready[i] = true;
+                    tipl::image<3>().swap(in_data[i]);
+                    tipl::image<3>().swap(out_data[i]);
+                }
+            });
+        }
+        catch(const c10::Error& error)
+        {
+            error_msg = std::string("error in preparing tensor:") + error.what();
         }
         catch(...)
         {
-            error_msg = "error occured in preparing tensor";
-            std::cout << error_msg << std::endl;
-            pause = aborted = true;
         }
+        std::cout << error_msg << std::endl;
+        pause = aborted = true;
     }));
 }
 
@@ -349,31 +339,49 @@ void train_unet::train(const TrainParam& param)
     optimizer.reset(new torch::optim::Adam(model->parameters(), torch::optim::AdamOptions(param.learning_rate)));
     train_thread.reset(new std::thread([=](){
         try{
-            for (cur_epoch = 0; cur_epoch < param.epoch && !aborted; cur_epoch++)
+            for (cur_data_index = 0,cur_epoch = 0; cur_epoch < param.epoch && !aborted; cur_epoch++)
             {
-                while(!tensor_ready[cur_epoch] || pause)
+                float cur_error = 0.0f;
+                size_t cur_error_count = 0;
+                for(size_t b = 0;b < param.batch_size && !aborted;++b,++cur_data_index)
                 {
-                    if(aborted)
+                    while(!tensor_ready[cur_data_index] || pause)
                     {
-                        running = false;
-                        return;
+                        if(aborted)
+                        {
+                            running = false;
+                            return;
+                        }
+                        using namespace std::chrono_literals;
+                        std::this_thread::sleep_for(100ms);
                     }
-                    using namespace std::chrono_literals;
-                    std::this_thread::sleep_for(200ms);
+                    torch::Tensor loss = torch::mse_loss(model->forward(in_tensor[cur_data_index]),out_tensor[cur_data_index]);
+                    in_tensor[cur_data_index] = torch::Tensor();
+                    out_tensor[cur_data_index] = torch::Tensor();
+
+                    cur_error += loss.item().toFloat();
+                    ++cur_error_count;
+                    loss.backward();
+                    if(b+1 == param.batch_size ||
+                       (    param.from_scratch &&
+                            (b+1)%int(std::pow(2,std::floor(std::log2(cur_epoch/2+1)))) == 0) )
+                    {
+                        optimizer->step();
+                        optimizer->zero_grad();
+                    }
                 }
-                optimizer->zero_grad();
-                torch::Tensor loss = torch::mse_loss(model->forward(in_tensor[cur_epoch]),out_tensor[cur_epoch]);
-                loss.backward();
-                optimizer->step();
-                std::cout << "epoch:" << cur_epoch << " error:" << (error[cur_epoch] = loss.item().toFloat()) << std::endl;;
+                std::cout << "epoch:" << cur_epoch << " error:" << (error[cur_epoch] = cur_error/float(cur_error_count)) << std::endl;;
             }
+        }
+        catch(const c10::Error& error)
+        {
+            error_msg = std::string("error in training:") + error.what();
         }
         catch(...)
         {
-            error_msg = "error occured during training";
-            std::cout << error_msg << std::endl;
-            pause = aborted = true;
         }
+        std::cout << error_msg << std::endl;
+        pause = aborted = true;
         running = false;
     }));
 }

@@ -10,6 +10,7 @@ struct TrainParam{
     std::vector<std::string> label_file_name;
     int batch_size = 6;
     int epoch = 1000;
+    bool from_scratch = true;
     float learning_rate = 0.01f;
     tipl::shape<3> dim;
     torch::Device device = torch::kCPU;
@@ -26,7 +27,8 @@ bool read_image_and_label(const std::string& image_name,
 void load_image_and_label(tipl::image<3>& image,
                           tipl::image<3>& label,
                           const tipl::vector<3>& image_vs,
-                          const tipl::shape<3>& template_shape);
+                          const tipl::shape<3>& template_shape,
+                          size_t random_seed);
 
 class train_unet{
 public:
@@ -42,7 +44,6 @@ private:
 private:
     std::vector<torch::Tensor> in_tensor,out_tensor;
     std::vector<bool> tensor_ready;
-    size_t freed_tensor = 0;
     std::shared_ptr<std::thread> prepare_tensor_thread;
     void prepare_tensor(const TrainParam& param);
 private:
@@ -51,6 +52,7 @@ private:
     void train(const TrainParam& param);
 public:
     size_t cur_epoch = 0;
+    size_t cur_data_index = 0;
     std::vector<float> error;
 public:
     UNet3d model;
