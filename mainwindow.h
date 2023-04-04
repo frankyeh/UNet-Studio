@@ -71,5 +71,6 @@ private slots:
     void on_show_transform_clicked();
 
     void on_evaluate_list2_currentRowChanged(int currentRow);
+    void on_save_evale_image_clicked();
 };
 #endif // MAINWINDOW_H

@@ -89,6 +89,7 @@ void MainWindow::on_save_network_clicked()
 }
 void MainWindow::on_start_training_clicked()
 {
+    bool from_scratch = false;
     if(train.running)
     {
         train.pause = !train.pause;
@@ -102,7 +103,10 @@ void MainWindow::on_start_training_clicked()
         return;
     }
     if(train.model->feature_string.empty())
+    {
         train.model = UNet3d(1,out_count,ui->feature_string->text().toStdString());
+        from_scratch = true;
+    }
     else
     if(out_count != train.model->out_count || ui->feature_string->text().toStdString() != train.model->feature_string)
     {
@@ -120,6 +124,7 @@ void MainWindow::on_start_training_clicked()
     param.learning_rate = ui->learning_rate->value();
     param.dim = tipl::shape<3>(ui->dim_x->value(),ui->dim_y->value(),ui->dim_z->value());
     param.device = ui->gpu->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->gpu->currentIndex()-1):torch::Device(torch::kCPU);
+    param.from_scratch = from_scratch;
     for(size_t i = 0;i < image_list.size();++i)
     {
         param.image_file_name.push_back(image_list[i].toStdString());
@@ -239,6 +244,7 @@ void MainWindow::evaluating()
     ui->train_prog->setFormat(QString("%1/%2").arg(evaluate.cur_output).arg(evaluate_list.size()));
     while(ui->evaluate_list2->count() < evaluate.cur_output)
         ui->evaluate_list2->addItem(ui->evaluate_list->item(ui->evaluate_list2->count())->text());
+    ui->save_evale_image->setEnabled(ui->evaluate_list2->count());
     if(!evaluate.running)
     {
         eval_timer->stop();
@@ -305,6 +311,7 @@ void MainWindow::on_evaluate_clear_clicked()
     evaluate.evaluate_output.clear();
     ui->evaluate_list->clear();
     ui->evaluate_list2->clear();
+    ui->save_evale_image->setEnabled(false);
 }
 
 
@@ -372,7 +379,7 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),I1,I2,out_count,vs))
             I2.clear();
         if(ui->show_transform->isChecked())
-            load_image_and_label(I1,I2,vs,tipl::shape<3>(ui->dim_x->value(),ui->dim_y->value(),ui->dim_z->value()));
+            load_image_and_label(I1,I2,vs,tipl::shape<3>(ui->dim_x->value(),ui->dim_y->value(),ui->dim_z->value()),time(0));
         v2c1.set_range(0,tipl::max_value_mt(I1));
         ui->pos->setMaximum(I1.shape()[ui->view_dim->currentIndex()]-1);
     }
@@ -446,11 +453,17 @@ void MainWindow::on_eval_pos_valueChanged(int value)
        currentRow < evaluate.evaluate_output.size() &&
        !evaluate.evaluate_output[currentRow].empty() &&
        evaluate.evaluate_output[currentRow].size() == eval_I1.size()*evaluate.model->out_count)
+    {
         eval_scene2 << (QImage() << eval_v2c2[tipl::volume2slice_scaled(
                            evaluate.evaluate_output[currentRow].alias(eval_I1.size()*ui->eval_label_slider->value(),eval_I1.shape()),
                            ui->eval_view_dim->currentIndex(),value,2.0f)]);
+        ui->save_evale_image->setEnabled(true);
+    }
     else
+    {
         eval_scene2 << QImage();
+        ui->save_evale_image->setEnabled(false);
+    }
 
 }
 
@@ -474,11 +487,27 @@ void MainWindow::on_open_evale_image_clicked()
     evaluate_list << file;
     update_evaluate_list();
 }
-
+void MainWindow::on_save_evale_image_clicked()
+{
+    QString file = QFileDialog::getSaveFileName(this,"Save Image",evaluate_list[ui->evaluate_list->currentRow()],"NIFTI files (*nii.gz);;All files (*)");
+    if(file.isEmpty())
+        return;
+    auto currentRow = ui->evaluate_list2->currentRow();
+    if(!tipl::io::gz_nifti::save_to_file(file.toStdString().c_str(),
+                                         evaluate.evaluate_output[currentRow],
+                                         evaluate.evaluate_image_vs[currentRow],
+                                         evaluate.evaluate_image_trans[currentRow]))
+    {
+        QMessageBox::critical(this,"Error","Cannot save file");
+    }
+}
 
 void MainWindow::on_eval_view_dim_currentIndexChanged(int index){   on_eval_pos_valueChanged(ui->eval_pos->value()); }
 void MainWindow::on_view_dim_currentIndexChanged(int index){  on_pos_valueChanged(ui->pos->value()); }
 void MainWindow::on_label_slider_valueChanged(int value){    on_pos_valueChanged(ui->pos->value());}
 void MainWindow::on_eval_label_slider_valueChanged(int value){    on_eval_pos_valueChanged(ui->eval_pos->value());}
+
+
+
 
 
