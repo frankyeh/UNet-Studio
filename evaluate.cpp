@@ -61,12 +61,15 @@ void evaluate_unet::evaluate(const EvaluateParam& param)
                 std::memcpy(&evaluate_result[cur_prog][0],out.to(torch::kCPU).data_ptr<float>(),evaluate_result[cur_prog].size()*sizeof(float));
             }
         }
+        catch(const c10::Error& error)
+        {
+            error_msg = std::string("error during evaluation:") + error.what();
+        }
         catch(...)
         {
-            error_msg = "error occured during evaluation";
-            std::cout << error_msg << std::endl;
-            aborted = true;
         }
+        std::cout << error_msg << std::endl;
+        aborted = true;
     }));
 }
 
@@ -103,12 +106,15 @@ void evaluate_unet::output(void)
                 evaluate_result[cur_output] = tipl::image<3>();
             }
         }
+        catch(const c10::Error& error)
+        {
+            error_msg = std::string("error during output:") + error.what();
+        }
         catch(...)
         {
-            error_msg = "error occured during output";
-            std::cout << error_msg << std::endl;
-            aborted = true;
         }
+        std::cout << error_msg << std::endl;
+        aborted = true;
         running = false;
     }));
 }
