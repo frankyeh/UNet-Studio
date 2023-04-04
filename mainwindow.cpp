@@ -178,7 +178,7 @@ void MainWindow::on_evaluate_clicked()
     ui->eval_prog->setMaximum(evaluate_list.size());
     ui->eval_label_slider->setMaximum(evaluate.model->out_count-1);
     ui->eval_label_slider->setValue(0);
-
+    ui->evaluate_list2->clear();
     evaluate.start(param);
     eval_timer->start();
 
@@ -225,12 +225,10 @@ void MainWindow::evaluating()
     ui->eval_from_file->setEnabled(!evaluate.running);
     ui->eval_from_train->setEnabled(!evaluate.running);
     ui->evaluate_device->setEnabled(!evaluate.running);
-
     if(!evaluate.running)
     {
         ui->evaluating->movie()->stop();
         ui->evaluating->hide();
-
     }
     else
     {
@@ -239,6 +237,8 @@ void MainWindow::evaluating()
     }
     ui->eval_prog->setValue(evaluate.cur_output);
     ui->train_prog->setFormat(QString("%1/%2").arg(evaluate.cur_output).arg(evaluate_list.size()));
+    while(ui->evaluate_list2->count() < evaluate.cur_output)
+        ui->evaluate_list2->addItem(ui->evaluate_list->item(ui->evaluate_list2->count())->text());
     if(!evaluate.running)
     {
         eval_timer->stop();
@@ -395,32 +395,28 @@ void MainWindow::on_list2_currentRowChanged(int currentRow)
 void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
 {
     auto pos_index = ui->eval_pos->value();
+    eval_I1.clear();
     if(currentRow >= 0 && currentRow < evaluate_list.size())
     {
         tipl::vector<3> vs;
         if(!tipl::io::gz_nifti::load_from_file(evaluate_list[currentRow].toStdString().c_str(),eval_I1,vs))
             return;
-        if(currentRow < evaluate.cur_output &&
-           currentRow < evaluate.evaluate_output.size() &&
-           !evaluate.evaluate_output[currentRow].empty())
-            eval_I2 = evaluate.evaluate_output[currentRow];
-        else
-        {
-            eval_I2.resize(eval_I1.shape().multiply(tipl::shape<3>::z,evaluate.model->out_count));
-            eval_I2 = 0;
-        }
         eval_v2c1.set_range(0,tipl::max_value_mt(eval_I1));
-        eval_v2c2.set_range(0,tipl::max_value_mt(eval_I2));
+        eval_v2c2.set_range(0,1.0f);
         ui->eval_pos->setMaximum(eval_I1.shape()[ui->eval_view_dim->currentIndex()]-1);
     }
     else
-    {
-        eval_I1.clear();
-        eval_I2.clear();
         ui->eval_pos->setMaximum(0);
-    }
     ui->eval_pos->setValue(pos_index);
     on_eval_pos_valueChanged(ui->eval_pos->value());
+    if(currentRow != ui->evaluate_list2->currentRow())
+        ui->evaluate_list2->setCurrentRow(currentRow);
+}
+
+void MainWindow::on_evaluate_list2_currentRowChanged(int currentRow)
+{
+    if(currentRow >= 0 && currentRow != ui->evaluate_list->currentRow())
+        ui->evaluate_list->setCurrentRow(currentRow);
 }
 
 void MainWindow::on_pos_valueChanged(int value)
@@ -445,9 +441,13 @@ void MainWindow::on_eval_pos_valueChanged(int value)
 
     eval_scene1 << (QImage() << eval_v2c1[tipl::volume2slice_scaled(eval_I1,ui->eval_view_dim->currentIndex(),value,2.0f)]);
 
-    if(eval_I2.size() == eval_I1.size()*evaluate.model->out_count)
+    auto currentRow = ui->evaluate_list->currentRow();
+    if(currentRow < evaluate.cur_output &&
+       currentRow < evaluate.evaluate_output.size() &&
+       !evaluate.evaluate_output[currentRow].empty() &&
+       evaluate.evaluate_output[currentRow].size() == eval_I1.size()*evaluate.model->out_count)
         eval_scene2 << (QImage() << eval_v2c2[tipl::volume2slice_scaled(
-                           eval_I2.alias(eval_I1.size()*ui->eval_label_slider->value(),eval_I1.shape()),
+                           evaluate.evaluate_output[currentRow].alias(eval_I1.size()*ui->eval_label_slider->value(),eval_I1.shape()),
                            ui->eval_view_dim->currentIndex(),value,2.0f)]);
     else
         eval_scene2 << QImage();
@@ -480,28 +480,5 @@ void MainWindow::on_eval_view_dim_currentIndexChanged(int index){   on_eval_pos_
 void MainWindow::on_view_dim_currentIndexChanged(int index){  on_pos_valueChanged(ui->pos->value()); }
 void MainWindow::on_label_slider_valueChanged(int value){    on_pos_valueChanged(ui->pos->value());}
 void MainWindow::on_eval_label_slider_valueChanged(int value){    on_eval_pos_valueChanged(ui->eval_pos->value());}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

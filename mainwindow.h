@@ -29,7 +29,7 @@ public:
     void update_list(void);
 public: //evalute
     QGraphicsScene eval_scene1,eval_scene2;
-    tipl::image<3> eval_I1,eval_I2;
+    tipl::image<3> eval_I1;
     tipl::value_to_color<float> eval_v2c1,eval_v2c2;
 private:
     int out_count = 1;
@@ -70,5 +70,6 @@ private slots:
     void on_autofill_clicked();
     void on_show_transform_clicked();
 
+    void on_evaluate_list2_currentRowChanged(int currentRow);
 };
 #endif // MAINWINDOW_H
