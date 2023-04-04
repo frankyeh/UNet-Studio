@@ -5,6 +5,8 @@ void evaluate_unet::read_file(const EvaluateParam& param)
     evaluate_image = std::vector<tipl::image<3> >(param.image_file_name.size());
     evaluate_result  = std::vector<tipl::image<3> >(param.image_file_name.size());
     evaluate_image_shape = std::vector<tipl::shape<3> >(param.image_file_name.size());
+    evaluate_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
+    evaluate_image_trans = std::vector<tipl::matrix<4,4> >(param.image_file_name.size());
     data_ready = std::vector<bool> (param.image_file_name.size());
     read_file_thread.reset(new std::thread([=]()
     {
@@ -22,7 +24,7 @@ void evaluate_unet::read_file(const EvaluateParam& param)
 
                 }
                 tipl::vector<3> vs;
-                if(tipl::io::gz_nifti::load_from_file(param.image_file_name[i].c_str(),evaluate_image[i],vs))
+                if(tipl::io::gz_nifti::load_from_file(param.image_file_name[i].c_str(),evaluate_image[i],evaluate_image_vs[i],evaluate_image_trans[i]))
                 {
                     evaluate_image_shape[i] = evaluate_image[i].shape();
                     tipl::image<3> new_sized_image(tipl::shape<3>(
