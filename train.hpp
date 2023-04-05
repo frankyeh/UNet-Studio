@@ -17,6 +17,7 @@ struct TrainParam{
 };
 bool save_to_file(UNet3d& model,const char* file_name);
 bool load_from_file(UNet3d& model,const char* file_name);
+std::string show_structure(const UNet3d& model);
 size_t get_label_out_count(const std::string& label_name);
 bool read_image_and_label(const std::string& image_name,
                           const std::string& label_name,
@@ -29,6 +30,9 @@ void load_image_and_label(tipl::image<3>& image,
                           const tipl::vector<3>& image_vs,
                           const tipl::shape<3>& template_shape,
                           size_t random_seed);
+
+
+
 
 class train_unet{
 public:
