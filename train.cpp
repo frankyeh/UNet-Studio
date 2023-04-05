@@ -324,12 +324,13 @@ void train_unet::prepare_tensor(const TrainParam& param)
         catch(const c10::Error& error)
         {
             error_msg = std::string("error in preparing tensor:") + error.what();
+            pause = aborted = true;
         }
         catch(...)
         {
+            pause = aborted = true;
         }
         tipl::out() << error_msg << std::endl;
-        pause = aborted = true;
     }));
 }
 
