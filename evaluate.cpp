@@ -70,7 +70,7 @@ void evaluate_unet::evaluate(const EvaluateParam& param)
         catch(...)
         {
         }
-        std::cout << error_msg << std::endl;
+        tipl::out() << error_msg << std::endl;
         aborted = true;
     }));
 }
@@ -115,7 +115,7 @@ void evaluate_unet::output(void)
         catch(...)
         {
         }
-        std::cout << error_msg << std::endl;
+        tipl::out() << error_msg << std::endl;
         aborted = true;
         running = false;
     }));
