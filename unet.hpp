@@ -70,25 +70,6 @@ public:
                    torch::nn::Conv3d(torch::nn::Conv3dOptions(features_up[0].back(), out_count, 1)));
         register_module("output",output);
     }
-    template <typename out_type>
-    void show_structure(out_type& out)
-    {
-        auto features = parse_feature_string();
-        std::vector<std::vector<int> > features_down(std::move(features.first));
-        std::vector<std::vector<int> > features_up(std::move(features.second));
-
-        for(int level=0; level< features_down.size(); level++)
-        {
-            for(auto i : features_down[level])
-                out << std::string(level,'\t') << i << std::endl;
-        }
-        for(int level=features_down.size()-2; level>=0; level--)
-        {
-            out << std::string(level,'\t') << features_down[level].back() << "+" << features_down[level].back() << "<-" << features_up[level+1].back() << std::endl;
-            for(auto i : features_up[level])
-                out << std::string(level,'\t') << i << std::endl;
-        }
-    }
     void copy_from(UNet3dImpl& r)
     {
         auto rhs = r.parameters();
