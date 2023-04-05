@@ -44,8 +44,26 @@ bool save_to_file(UNet3d& model,const char* file_name)
     }
     return true;
 }
+std::string show_structure(const UNet3d& model)
+{
+    std::ostringstream out;
+    auto features = model->parse_feature_string();
+    std::vector<std::vector<int> > features_down(std::move(features.first));
+    std::vector<std::vector<int> > features_up(std::move(features.second));
 
-
+    for(int level=0; level< features_down.size(); level++)
+    {
+        for(auto i : features_down[level])
+            out << std::string(level,'\t') << i << std::endl;
+    }
+    for(int level=features_down.size()-2; level>=0; level--)
+    {
+        out << std::string(level,'\t') << features_down[level].back() << "+" << features_down[level].back() << "<-" << features_up[level+1].back() << std::endl;
+        for(auto i : features_up[level])
+            out << std::string(level,'\t') << i << std::endl;
+    }
+    return out.str();
+}
 size_t get_cost(std::string feature_string)
 {
     UNet3d model;
@@ -99,7 +117,7 @@ void gen_list(std::vector<std::string>& network_list)
     {
         auto cur_network = beg->second;
         network_list.push_back(cur_network);
-        std::cout << beg->first << " " << cur_network << std::endl;
+        tipl::out() << beg->first << " " << cur_network << std::endl;
         auto feature_vector = feature_string2features_vector(cur_network);
         for(int level = 0;level < feature_vector.size();++level)
         {
@@ -117,7 +135,7 @@ void gen_list(std::vector<std::string>& network_list)
                         networks.insert(new_network);
                     }
                     feature_vector[level][b] /= 2;
-                    //std::cout << "adding " << new_network << " cost=" << cost << std::endl;
+                    //tipl::out() << "adding " << new_network << " cost=" << cost << std::endl;
                 }
             }
             if(feature_vector[level].size() < 3)
@@ -132,7 +150,7 @@ void gen_list(std::vector<std::string>& network_list)
                     networks.insert(new_network);
                 }
                 feature_vector[level].pop_back();
-                //std::cout << "adding " << new_network << " cost=" << cost << std::endl;
+                //tipl::out() << "adding " << new_network << " cost=" << cost << std::endl;
             }
         }
     }
