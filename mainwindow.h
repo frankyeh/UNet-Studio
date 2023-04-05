@@ -47,9 +47,10 @@ class MainWindow : public QMainWindow
 private:
     Ui::MainWindow *ui;
 public: //training
-    QGraphicsScene train_scene1,train_scene2;
+    QGraphicsScene train_scene1,train_scene2,error_scene;
     tipl::image<3> I1,I2;
     tipl::value_to_color<float> v2c1,v2c2;
+    size_t error_view_epoch = 0;
 public:
     QStringList evaluate_list;
     void update_evaluate_list(void);
@@ -102,5 +103,7 @@ private slots:
 
     void on_evaluate_list2_currentRowChanged(int currentRow);
     void on_save_evale_image_clicked();
+    void on_error_x_scale_valueChanged(int arg1);
+    void on_error_y_size_valueChanged(int arg1);
 };
 #endif // MAINWINDOW_H

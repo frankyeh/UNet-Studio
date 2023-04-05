@@ -18,7 +18,7 @@
     <item>
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
@@ -210,7 +210,7 @@
                   </size>
                  </property>
                  <property name="text">
-                  <string>Save as...</string>
+                  <string>Save...</string>
                  </property>
                  <property name="icon">
                   <iconset resource="icons.qrc">
@@ -317,6 +317,16 @@
              <item row="3" column="1">
               <widget class="QComboBox" name="gpu"/>
              </item>
+             <item row="4" column="0">
+              <widget class="QLabel" name="training">
+               <property name="text">
+                <string/>
+               </property>
+               <property name="pixmap">
+                <pixmap resource="icons.qrc">:/icons/icons/ajax-loader.gif</pixmap>
+               </property>
+              </widget>
+             </item>
              <item row="4" column="1">
               <layout class="QHBoxLayout" name="horizontalLayout_4">
                <property name="spacing">
@@ -327,10 +337,16 @@
                  <property name="enabled">
                   <bool>false</bool>
                  </property>
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>1</verstretch>
+                  </sizepolicy>
+                 </property>
                  <property name="minimumSize">
                   <size>
                    <width>0</width>
-                   <height>64</height>
+                   <height>0</height>
                   </size>
                  </property>
                  <property name="maximumSize">
@@ -346,10 +362,16 @@
                </item>
                <item>
                 <widget class="QPushButton" name="end_training">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>1</verstretch>
+                  </sizepolicy>
+                 </property>
                  <property name="minimumSize">
                   <size>
                    <width>0</width>
-                   <height>64</height>
+                   <height>0</height>
                   </size>
                  </property>
                  <property name="maximumSize">
@@ -364,16 +386,6 @@
                 </widget>
                </item>
               </layout>
-             </item>
-             <item row="4" column="0">
-              <widget class="QLabel" name="training">
-               <property name="text">
-                <string/>
-               </property>
-               <property name="pixmap">
-                <pixmap resource="icons.qrc">:/icons/icons/ajax-loader.gif</pixmap>
-               </property>
-              </widget>
              </item>
             </layout>
            </widget>
@@ -560,9 +572,66 @@
              <property name="title">
               <string>Epoch vs Errors</string>
              </property>
-             <layout class="QVBoxLayout" name="verticalLayout_17">
+             <layout class="QHBoxLayout" name="horizontalLayout_12">
               <item>
-               <widget class="QGraphicsView" name="graphicsView"/>
+               <widget class="QGraphicsView" name="error_view">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                  <horstretch>5</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <layout class="QFormLayout" name="formLayout_3">
+                <property name="leftMargin">
+                 <number>10</number>
+                </property>
+                <item row="0" column="0">
+                 <widget class="QLabel" name="label_6">
+                  <property name="text">
+                   <string>x scale</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QSpinBox" name="error_x_scale">
+                  <property name="minimum">
+                   <number>1</number>
+                  </property>
+                  <property name="maximum">
+                   <number>10</number>
+                  </property>
+                  <property name="value">
+                   <number>2</number>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="label_7">
+                  <property name="text">
+                   <string>y size</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QSpinBox" name="error_y_size">
+                  <property name="minimum">
+                   <number>50</number>
+                  </property>
+                  <property name="maximum">
+                   <number>500</number>
+                  </property>
+                  <property name="singleStep">
+                   <number>100</number>
+                  </property>
+                  <property name="value">
+                   <number>100</number>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
               </item>
              </layout>
             </widget>

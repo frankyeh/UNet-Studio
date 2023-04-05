@@ -27,7 +27,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->view2->setScene(&train_scene2);
     ui->eval_view1->setScene(&eval_scene1);
     ui->eval_view2->setScene(&eval_scene2);
-
+    ui->error_view->setScene(&error_scene);
     v2c1.two_color(tipl::rgb(0,0,0),tipl::rgb(255,255,255));
     v2c1.set_range(0.0f,4.0f);
     v2c2.two_color(tipl::rgb(0,0,0),tipl::rgb(255,255,255));
@@ -141,6 +141,8 @@ void MainWindow::on_start_training_clicked()
     ui->train_prog->setValue(1);
     timer->start();
     ui->start_training->setText(train.pause ? "Resume":"Pause");
+    error_view_epoch = 0;
+    error_scene << QImage();
 }
 void MainWindow::on_eval_from_train_clicked()
 {
@@ -222,6 +224,35 @@ void MainWindow::training()
     }
     ui->train_prog->setValue(train.cur_epoch+1);
     ui->train_prog->setFormat(QString( "epoch: %1/%2 error: %3" ).arg(train.cur_epoch).arg(ui->train_prog->maximum()).arg(train.cur_epoch ? std::to_string(train.error[train.cur_epoch-1]).c_str():"pending"));
+
+
+    if(train.cur_epoch > 1 && train.cur_epoch >= error_view_epoch)
+    {
+        auto x_scale = ui->error_x_scale->value();
+        QImage image(std::max<int>(500,(train.cur_epoch+2)*ui->error_x_scale->value()+10),
+                     ui->error_y_size->value(),QImage::Format_RGB32);
+        QPainter painter(&image);
+        painter.fillRect(image.rect(), Qt::white);
+        painter.setPen(QPen(Qt::black, 2));
+        painter.drawRect(QRectF(5, 5, image.width() - 10, image.height() - 10));
+        std::vector<float> y_value(train.error);
+        for(size_t i = 0;i < train.cur_epoch;++i)
+            y_value[i] = -std::log10(y_value[i]);
+
+        tipl::add_constant(y_value,-y_value[0]);
+        float m = tipl::max_value(y_value)*1.1f;
+        tipl::multiply_constant(y_value,-float(image.height()-10)/m);
+        tipl::add_constant(y_value,image.height() - 10);
+
+        QVector<QPointF> points;
+        for(size_t i = 0;i < train.cur_epoch;++i)
+            points << QPointF(i*x_scale+5,y_value[i]);
+        painter.drawPolyline(points);
+        error_view_epoch = train.cur_epoch;
+        error_scene << image;
+    }
+
+
     if(!train.running)
     {
         timer->stop();
@@ -503,7 +534,13 @@ void MainWindow::on_save_evale_image_clicked()
         return;
     auto currentRow = ui->evaluate_list2->currentRow();
     if(!tipl::io::gz_nifti::save_to_file(file.toStdString().c_str(),
-                                         evaluate.evaluate_output[currentRow],
+                                         evaluate.evaluate_output[currentRow].alias(0,
+                                                tipl::shape<4>(
+                                                    evaluate.evaluate_image_shape[currentRow][0],
+                                                    evaluate.evaluate_image_shape[currentRow][1],
+                                                    evaluate.evaluate_image_shape[currentRow][2],
+                                                    evaluate.evaluate_output[currentRow].depth()/
+                                                    evaluate.evaluate_image_shape[currentRow][2])),
                                          evaluate.evaluate_image_vs[currentRow],
                                          evaluate.evaluate_image_trans[currentRow]))
     {
@@ -515,8 +552,6 @@ void MainWindow::on_eval_view_dim_currentIndexChanged(int index){   on_eval_pos_
 void MainWindow::on_view_dim_currentIndexChanged(int index){  on_pos_valueChanged(ui->pos->value()); }
 void MainWindow::on_label_slider_valueChanged(int value){    on_pos_valueChanged(ui->pos->value());}
 void MainWindow::on_eval_label_slider_valueChanged(int value){    on_eval_pos_valueChanged(ui->eval_pos->value());}
-
-
-
-
+void MainWindow::on_error_x_scale_valueChanged(int arg1){error_view_epoch = 0;}
+void MainWindow::on_error_y_size_valueChanged(int arg1){error_view_epoch = 0;}
 
