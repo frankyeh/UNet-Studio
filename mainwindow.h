@@ -7,6 +7,36 @@
 #include "train.hpp"
 #include "evaluate.hpp"
 
+
+
+class QTextEdit;
+class console_stream :  public std::basic_streambuf<char>
+{
+    std::basic_streambuf<char>* cout_buf = nullptr;
+public:
+    console_stream(void):std::basic_streambuf<char>(){}
+protected:
+    virtual int_type overflow(int_type v) override;
+    virtual std::streamsize xsputn(const char *p, std::streamsize n) override;
+public:
+    void show_output(void);
+    std::mutex edit_buf;
+    QString buf;
+    QTextEdit* log_window = nullptr;
+    bool has_output = false;
+    void attach(void)
+    {
+        if(!cout_buf)
+            cout_buf = std::cout.rdbuf(this);
+    }
+    void detach(void)
+    {
+        if(cout_buf)
+            std::cout.rdbuf(cout_buf);
+    }
+};
+extern console_stream console;
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE

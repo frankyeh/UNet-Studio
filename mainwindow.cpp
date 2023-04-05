@@ -5,6 +5,7 @@
 #include <QMovie>
 #include <QMessageBox>
 #include "TIPL/tipl.hpp"
+
 extern QSettings settings;
 extern std::vector<std::string> gpu_names;
 void gen_list(std::vector<std::string>& network_list);
@@ -14,6 +15,10 @@ MainWindow::MainWindow(QWidget *parent)
 {
 
     ui->setupUi(this);
+    ui->tabWidget->setCurrentIndex(0);
+    console.log_window = ui->console;
+    console.show_output();
+
     ui->training->hide();
     ui->training->setMovie(new QMovie(":/icons/icons/ajax-loader.gif"));
     ui->evaluating->hide();
@@ -89,6 +94,7 @@ void MainWindow::on_save_network_clicked()
 }
 void MainWindow::on_start_training_clicked()
 {
+    tipl::progress p("initiate training");
     bool from_scratch = false;
     if(train.running)
     {
@@ -116,7 +122,7 @@ void MainWindow::on_start_training_clicked()
         train.model = new_model;
     }
     ui->network->setText(QString("UNet %1->%2->%3").arg(train.model->in_count).arg(train.model->feature_string.c_str()).arg(train.model->out_count));
-    train.model->show_structure(std::cout);
+    //tipl::out() << show_structure(train.model);
 
     TrainParam param;
     param.batch_size = ui->batch_size->value();
@@ -165,6 +171,7 @@ void MainWindow::on_eval_from_file_clicked()
 
 void MainWindow::on_evaluate_clicked()
 {
+    tipl::progress p("initiate evaluation");
     if(evaluate.running)
     {
         evaluate.stop();
@@ -191,6 +198,7 @@ void MainWindow::on_evaluate_clicked()
 
 void MainWindow::training()
 {
+    console.show_output();
     ui->open_files->setEnabled(!train.running);
     ui->clear->setEnabled(!train.running);
     ui->open_labels->setEnabled(!train.running);
@@ -225,6 +233,7 @@ void MainWindow::training()
 }
 void MainWindow::evaluating()
 {
+    console.show_output();
     ui->open_evale_image->setEnabled(!evaluate.running);
     ui->evaluate_clear->setEnabled(!evaluate.running);
     ui->eval_from_file->setEnabled(!evaluate.running);
