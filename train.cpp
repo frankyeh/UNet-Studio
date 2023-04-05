@@ -328,7 +328,7 @@ void train_unet::prepare_tensor(const TrainParam& param)
         catch(...)
         {
         }
-        std::cout << error_msg << std::endl;
+        tipl::out() << error_msg << std::endl;
         pause = aborted = true;
     }));
 }
@@ -370,7 +370,7 @@ void train_unet::train(const TrainParam& param)
                         optimizer->zero_grad();
                     }
                 }
-                std::cout << "epoch:" << cur_epoch << " error:" << (error[cur_epoch] = cur_error/float(cur_error_count)) << std::endl;;
+                tipl::out() << "epoch:" << cur_epoch << " error:" << (error[cur_epoch] = cur_error/float(cur_error_count)) << std::endl;;
             }
         }
         catch(const c10::Error& error)
@@ -380,7 +380,7 @@ void train_unet::train(const TrainParam& param)
         catch(...)
         {
         }
-        std::cout << error_msg << std::endl;
+        tipl::out() << error_msg << std::endl;
         pause = aborted = true;
         running = false;
     }));
