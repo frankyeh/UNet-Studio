@@ -80,7 +80,7 @@ public:
             float* dest = lhs[index].data_ptr<float>();
             const float* src = data.data_ptr<float>();
             size_t s = std::min<size_t>(rhs[index].numel(),lhs[index].numel());
-            for(size_t size = 0;size < lhs[index].numel();size += s,dest += s)
+            for(size_t size = 0;size+s <= lhs[index].numel();size += s,dest += s)
                 std::memcpy(dest,src,sizeof(float)*s);
         }
     }
