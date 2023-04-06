@@ -269,22 +269,31 @@ void train_unet::read_file(const TrainParam& param)
         std::vector<tipl::image<3> > label;
         std::vector<std::vector<float> > label_weight;
         std::vector<tipl::vector<3> > image_vs;
-        for(int read_id = 0;read_id < param.image_file_name.size();++read_id)
         {
-            tipl::image<3> new_image,new_label;
-            tipl::vector<3> new_vs;
+            tipl::progress prog("read images");
+            for(int read_id = 0;read_id < param.image_file_name.size();++read_id)
+            {
+                tipl::out() << "reading " << param.image_file_name[read_id] << std::endl;
+                tipl::out() << "reading " << param.label_file_name[read_id] << std::endl;
+                tipl::image<3> new_image,new_label;
+                tipl::vector<3> new_vs;
 
-            if(!read_image_and_label(param.image_file_name[read_id],
-                                     param.label_file_name[read_id],
-                                     new_image,new_label,new_vs))
-                continue;
-
-            label_weight.push_back(model->out_count > 1 ? get_weight(new_label,model->out_count) : std::vector<float>(model->out_count));
-            image.push_back(std::move(new_image));
-            label.push_back(std::move(new_label));
-            image_vs.push_back(new_vs);
+                if(!read_image_and_label(param.image_file_name[read_id],
+                                         param.label_file_name[read_id],
+                                         new_image,new_label,new_vs))
+                    continue;
+                label_weight.push_back(model->out_count > 1 ? get_weight(new_label,model->out_count) : std::vector<float>(model->out_count));
+                image.push_back(std::move(new_image));
+                label.push_back(std::move(new_label));
+                image_vs.push_back(new_vs);
+                if(model->out_count > 1)
+                {
+                    std::ostringstream out;
+                    std::copy(label_weight.back().begin(),label_weight.back().end(),std::ostream_iterator<float>(out," "));
+                    tipl::out() << "label weightes: " << out.str();
+                }
+            }
         }
-
         if(image.empty())
         {
             error_msg = "no training image";
