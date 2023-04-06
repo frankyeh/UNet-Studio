@@ -103,23 +103,6 @@ void evaluate_unet::output(void)
                 tipl::par_for(model->out_count,[&](int i)
                 {
                     auto from = evaluate_result[cur_output].alias(dim_in.size()*i,dim_in);
-                    /*
-                    tipl::image<3> smoothed_from(from);
-                    tipl::filter::mean(smoothed_from);
-                    tipl::filter::mean(smoothed_from);
-                    tipl::image<3,char> mask(dim_in);
-                    for(size_t i = 0;i < mask.size();++i)
-                        mask[i] = smoothed_from[i] > 0.5f ? 1:0;
-                    tipl::morphology::defragment(mask);
-                    tipl::morphology::dilation(mask);
-                    tipl::morphology::smoothing(mask);
-                    tipl::morphology::dilation(mask);
-                    tipl::morphology::smoothing(mask);
-                    for(size_t i = 0;i < mask.size();++i)
-                        if(mask[i] == 0)
-                            from[i] = 0;
-                    tipl::lower_threshold(from,0.0f);
-                    tipl::upper_threshold(from,1.0f);*/
                     auto to = evaluate_output[cur_output].alias(dim_out.size()*i,dim_out);
                     tipl::draw(from,to,tipl::vector<3,int>(0,0,0));
                 });
