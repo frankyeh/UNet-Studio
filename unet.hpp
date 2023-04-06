@@ -76,8 +76,12 @@ public:
         auto lhs = parameters();
         for(size_t index = 0;index < rhs.size();++index)
         {
+            auto data = rhs[index].to(torch::kCPU);
+            float* dest = lhs[index].data_ptr<float>();
+            const float* src = data.data_ptr<float>();
             size_t s = std::min<size_t>(rhs[index].numel(),lhs[index].numel());
-            std::memcpy(lhs[index].data_ptr<float>(),rhs[index].to(torch::kCPU).data_ptr<float>(),sizeof(float)*s);
+            for(size_t size = 0;size < lhs[index].numel();size += s,dest += s)
+                std::memcpy(dest,src,sizeof(float)*s);
         }
     }
     size_t size(void)
