@@ -239,7 +239,7 @@ void MainWindow::training()
         for(size_t i = 0;i < train.cur_epoch;++i)
             y_value[i] = -std::log10(y_value[i]);
 
-        tipl::add_constant(y_value,-y_value[0]);
+        tipl::minus_constant(y_value,tipl::min_value(y_value));
         float m = tipl::max_value(y_value)*1.1f;
         tipl::multiply_constant(y_value,-float(image.height()-10)/m);
         tipl::add_constant(y_value,image.height() - 10);
@@ -554,4 +554,39 @@ void MainWindow::on_label_slider_valueChanged(int value){    on_pos_valueChanged
 void MainWindow::on_eval_label_slider_valueChanged(int value){    on_eval_pos_valueChanged(ui->eval_pos->value());}
 void MainWindow::on_error_x_scale_valueChanged(int arg1){error_view_epoch = 0;}
 void MainWindow::on_error_y_size_valueChanged(int arg1){error_view_epoch = 0;}
+
+
+void MainWindow::on_post_processing_clicked()
+{
+    tipl::progress p("processing",true);
+    size_t count = 0;
+    tipl::par_for(evaluate.evaluate_output.size(),[&](size_t index)
+    {
+        if(!p(count,evaluate.evaluate_output.size()))
+            return;
+        auto dim = evaluate.evaluate_image_shape[index];
+        size_t out_count = evaluate.evaluate_output[index].depth()/dim.depth();
+        for(size_t label = 0;label < out_count;++label)
+        {
+            auto from = evaluate.evaluate_output[index].alias(dim.size()*label,dim);
+            tipl::image<3> smoothed_from(from);
+            tipl::filter::mean(smoothed_from);
+            tipl::filter::mean(smoothed_from);
+            tipl::image<3,char> mask(dim);
+            for(size_t i = 0;i < mask.size();++i)
+                mask[i] = smoothed_from[i] > 0.5f ? 1:0;
+            tipl::morphology::defragment(mask);
+            tipl::morphology::dilation(mask);
+            tipl::morphology::dilation(mask);
+            for(size_t i = 0;i < mask.size();++i)
+                if(mask[i] == 0)
+                    from[i] = 0;
+            tipl::lower_threshold(from,0.0f);
+            tipl::upper_threshold(from,1.0f);
+        }
+        ++count;
+    });
+    if(!p.aborted())
+        QMessageBox::information(this,"Done","Completed");
+}
 

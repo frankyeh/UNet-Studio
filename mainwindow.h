@@ -105,5 +105,6 @@ private slots:
     void on_save_evale_image_clicked();
     void on_error_x_scale_valueChanged(int arg1);
     void on_error_y_size_valueChanged(int arg1);
+    void on_post_processing_clicked();
 };
 #endif // MAINWINDOW_H
