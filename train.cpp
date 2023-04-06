@@ -1,26 +1,39 @@
 #include "train.hpp"
 
-size_t get_label_out_count(const std::string& label_name)
+bool get_label_info(const std::string& label_name,int& out_count)
 {
     tipl::io::gz_nifti nii;
     if(!nii.load_from_file(label_name))
-        return 0;
+        return false;
     if(nii.dim(4) != 1)
-        return nii.dim(4);
+        out_count = nii.dim(4);
+    bool is_label = true;
+    if(nii.is_integer())
+    {
+        if(nii.dim(4) == 1)
+        {
+            tipl::image<3,short> labels;
+            nii >> labels;
+            out_count = tipl::max_value(labels)+1;
+        }
+    }
     else
     {
         tipl::image<3,float> labels;
         nii >> labels;
-        if(tipl::is_label_image(labels))
-            return tipl::max_value(labels);
+        is_label = tipl::is_label_image(labels);
+        if(nii.dim(4) == 1)
+            out_count = (is_label ? tipl::max_value(labels)+1 : 1);
     }
-    return 1;
+
+    if(out_count > 255)
+        out_count = 1;
+    return true;
 }
 bool read_image_and_label(const std::string& image_name,
                           const std::string& label_name,
                           tipl::image<3>& image,
                           tipl::image<3>& label,
-                          size_t out_count,
                           tipl::vector<3>& vs)
 {
     tipl::matrix<4,4,float> image_t((tipl::identity_matrix()));
@@ -34,30 +47,29 @@ bool read_image_and_label(const std::string& image_name,
     nii.get_image_dimension(label_shape);
     if(nii.dim(4) > 1)
     {
-        if(nii.dim(4) != out_count)
-            return false;
-        label.resize(label_shape.multiply(tipl::shape<3>::z,out_count));
-        auto label_alias = label.alias(0,tipl::shape<4>(label_shape[0],label_shape[1],label_shape[2],out_count));
-        nii >> label_alias;
+        label.resize(label_shape);
+        for(size_t index = 1;index <= nii.dim(4);++index)
+        {
+            tipl::image<3> I;
+            nii >> I;
+            tipl::par_for(I.size(),[&](size_t pos)
+            {
+                if(I[pos])
+                    label[pos] = index;
+            });
+        }
     }
     else
     {
         nii >> label;
-        if(out_count != 1)
-            tipl::expand_label_to_dimension(label,out_count);
     }
     tipl::matrix<4,4,float> label_t((tipl::identity_matrix()));
     nii.get_image_transformation(label_t);
     if(image.shape() != label_shape || label_t != image_t)
     {
         tipl::out() << "spatial transform label file to image file space" << std::endl;
-        tipl::image<3> new_label(image.shape().multiply(tipl::shape<3>::z,out_count));
-        for(size_t i = 0;i < out_count;++i)
-        {
-            auto I = label.alias(label_shape.size()*i,label_shape);
-            auto J = new_label.alias(image.shape().size()*i,image.shape());
-            tipl::resample_mt(I,J,tipl::from_space(image_t).to(label_t));
-        }
+        tipl::image<3> new_label(image.shape());
+        tipl::resample_mt<tipl::nearest>(label,new_label,tipl::from_space(image_t).to(label_t));
         label.swap(new_label);
     }
     return true;
@@ -113,20 +125,11 @@ void create_distortion_at(image_type& displaced,const tipl::vector<3,int>& cente
 }
 
 template<typename image_type>
-void create_dropout_at(image_type& image,image_type& label,const tipl::vector<3,int>& center,const tipl::vector<3,int>& radius)
+void create_dropout_at(image_type& image,const tipl::vector<3,int>& center,const tipl::vector<3,int>& radius)
 {
     auto pos = center-radius;
     auto sizes = radius+radius;
     tipl::draw_rect(image,pos,sizes,0);
-    if(!label.empty())
-    {
-        auto out_count = label.depth()/image.depth();
-        for(size_t i = 0;i < out_count;++i)
-        {
-            auto I = label.alias(image.size()*i,image.shape());
-            tipl::draw_rect(I,pos,sizes,0);
-        }
-    }
 }
 
 void load_image_and_label(tipl::image<3>& image,
@@ -163,19 +166,17 @@ void load_image_and_label(tipl::image<3>& image,
 
     tipl::par_for(int(range(0.0f,4.0f)),[&](int)
     {
-        create_dropout_at(image,label,random_location(image.shape(),0.2f,0.8f),random_location(image.shape(),0.05f,0.1f));
+        auto center = random_location(image.shape(),0.2f,0.8f);
+        auto radius = random_location(image.shape(),0.05f,0.1f);
+        create_dropout_at(image,center,radius);
+        create_dropout_at(label,center,radius);
     });
 
 
     if(!label.empty())
     {
-        auto out_count = label.depth()/image.depth();
-        tipl::image<3> label_out(template_shape.multiply(tipl::shape<3>::z,out_count));
-        for(size_t i = 0;i < out_count;++i)
-        {
-            auto J = label_out.alias(template_shape.size()*i,template_shape);
-            tipl::compose_displacement_with_affine(label.alias(image.size()*i,image.shape()),J,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs),displaced);
-        }
+        tipl::image<3> label_out(template_shape);
+        tipl::compose_displacement_with_affine<tipl::nearest>(label,label_out,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs),displaced);
         label_out.swap(label);
     }
 
@@ -232,30 +233,53 @@ void load_image_and_label(tipl::image<3>& image,
 
     tipl::par_for(int(range(0.0f,2.0f)),[&](int)
     {
-        create_dropout_at(image,label,random_location(image.shape(),0.0f,1.0f),random_location(image.shape(),0.05f,0.2f));
+        auto center = random_location(image.shape(),0.0f,1.0f);
+        auto radius = random_location(image.shape(),0.05f,0.2f);
+        create_dropout_at(image,center,radius);
+        create_dropout_at(label,center,radius);
     });
+}
+
+auto get_weight(const tipl::image<3>& label,size_t out_count)
+{
+    std::vector<size_t> sum(out_count);
+    for(size_t i = 0;i < label.size();++i)
+    {
+        auto v = label[i];
+        if(v < out_count)
+            ++sum[v];
+    }
+    auto max_value = tipl::max_value(sum);
+    std::vector<float> weight(out_count);
+    for(size_t i = 0;i < out_count;++i)
+        weight[i] = (sum[i] ? float(max_value)/float(sum[i]) : 0.0f);
+    return weight;
 }
 
 void train_unet::read_file(const TrainParam& param)
 {
     in_data = std::vector<tipl::image<3> >(param.epoch*param.batch_size);
     out_data = std::vector<tipl::image<3> >(in_data.size());
+    out_data_weight = std::vector<std::vector<float> >(in_data.size());
     data_ready = std::vector<bool>(in_data.size(),false);
 
     read_file_thread.reset(new std::thread([=]()
     {
         std::vector<tipl::image<3> > image;
         std::vector<tipl::image<3> > label;
+        std::vector<std::vector<float> > label_weight;
         std::vector<tipl::vector<3> > image_vs;
-
         for(int read_id = 0;read_id < param.image_file_name.size();++read_id)
         {
             tipl::image<3> new_image,new_label;
             tipl::vector<3> new_vs;
+
             if(!read_image_and_label(param.image_file_name[read_id],
                                      param.label_file_name[read_id],
-                                     new_image,new_label,model->out_count,new_vs))
+                                     new_image,new_label,new_vs))
                 continue;
+
+            label_weight.push_back(model->out_count > 1 ? get_weight(new_label,model->out_count) : std::vector<float>(model->out_count));
             image.push_back(std::move(new_image));
             label.push_back(std::move(new_label));
             image_vs.push_back(new_vs);
@@ -270,6 +294,7 @@ void train_unet::read_file(const TrainParam& param)
         const int thread_count = std::thread::hardware_concurrency();
         tipl::par_for(thread_count,[&](size_t thread)
         {
+            tipl::uniform_dist<float> retaining(-1.0f,1.0f,thread);
             for(size_t i = thread;i < in_data.size() && !aborted;)
             {
                 while(i > cur_data_index+8 || pause)
@@ -284,6 +309,7 @@ void train_unet::read_file(const TrainParam& param)
                     continue;
                 in_data[i] = image[read_id];
                 out_data[i] = label[read_id];
+                out_data_weight[i] = label_weight[read_id];
                 load_image_and_label(in_data[i],out_data[i],image_vs[read_id],param.dim,i);
                 data_ready[i] = true;
                 i += thread_count;
@@ -296,6 +322,7 @@ void train_unet::prepare_tensor(const TrainParam& param)
 {
     in_tensor = std::vector<torch::Tensor>(data_ready.size());
     out_tensor = std::vector<torch::Tensor>(data_ready.size());
+    out_tensor_weight = std::vector<torch::Tensor>(data_ready.size());
     tensor_ready = std::vector<bool>(data_ready.size(),false);
     prepare_tensor_thread.reset(new std::thread([=](){
         try{
@@ -315,8 +342,13 @@ void train_unet::prepare_tensor(const TrainParam& param)
                         return;
                     in_tensor[i] = torch::from_blob(&in_data[i][0],
                         {1,model->in_count,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(param.device);
-                    out_tensor[i] = torch::from_blob(&out_data[i][0],
-                        {1,model->out_count,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(param.device);
+                    if(model->out_count > 1) // label
+                        out_tensor[i] = torch::from_blob(&out_data[i][0],{1,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(torch::kLong).to(param.device);
+                    else
+                        out_tensor[i] = torch::from_blob(&out_data[i][0],{1,1,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(param.device);
+
+                    out_tensor_weight[i] = torch::from_blob(&out_data_weight[i][0],
+                        {model->out_count}).to(param.device);
                     tensor_ready[i] = true;
                     tipl::image<3>().swap(in_data[i]);
                     tipl::image<3>().swap(out_data[i]);
@@ -358,10 +390,14 @@ void train_unet::train(const TrainParam& param)
                         using namespace std::chrono_literals;
                         std::this_thread::sleep_for(100ms);
                     }
-                    torch::Tensor loss = torch::mse_loss(model->forward(in_tensor[cur_data_index]),out_tensor[cur_data_index]);
+                    torch::Tensor loss;
+                    if(model->out_count > 1)
+                        loss = torch::cross_entropy_loss(model->forward(in_tensor[cur_data_index]),out_tensor[cur_data_index],out_tensor_weight[cur_data_index]);
+                    else
+                        loss = torch::mse_loss(model->forward(in_tensor[cur_data_index]),out_tensor[cur_data_index]);
                     in_tensor[cur_data_index] = torch::Tensor();
                     out_tensor[cur_data_index] = torch::Tensor();
-
+                    out_tensor_weight[cur_data_index] = torch::Tensor();
                     cur_error += loss.item().toFloat();
                     ++cur_error_count;
                     loss.backward();

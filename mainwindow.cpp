@@ -63,6 +63,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+
     delete ui;
 }
 
@@ -116,10 +117,11 @@ void MainWindow::on_start_training_clicked()
     else
     if(out_count != train.model->out_count || ui->feature_string->text().toStdString() != train.model->feature_string)
     {
-        tipl::out() << "ccopy pretrained model" << std::endl;
+        tipl::out() << "copy pretrained model" << std::endl;
         auto new_model = UNet3d(1,out_count,ui->feature_string->text().toStdString());
         new_model->copy_from(*train.model.get());
         train.model = new_model;
+        from_scratch = true;
     }
     ui->network->setText(QString("UNet %1->%2->%3").arg(train.model->in_count).arg(train.model->feature_string.c_str()).arg(train.model->out_count));
     //tipl::out() << show_structure(train.model);
@@ -236,22 +238,33 @@ void MainWindow::training()
         painter.setPen(QPen(Qt::black, 2));
         painter.drawRect(QRectF(5, 5, image.width() - 10, image.height() - 10));
         std::vector<float> y_value(train.error);
-        for(size_t i = 0;i < train.cur_epoch;++i)
-            y_value[i] = -std::log10(y_value[i]);
+        if(out_count > 1)
+        {
+            float m = tipl::max_value(y_value);
+            if(m > 0.0f)
+            for(auto& v:y_value)
+                v = 1.0f-v/m;
+        }
+        else
+        {
+            for(auto& v:y_value)
+                v = -std::log10(v);
+            tipl::minus_constant(y_value,tipl::min_value(y_value));
+            float m = tipl::max_value(y_value);
+            if(m > 0.0f)
+                tipl::multiply_constant(y_value,1.0f/m);
+        }
 
-        tipl::minus_constant(y_value,tipl::min_value(y_value));
-        float m = tipl::max_value(y_value)*1.1f;
-        tipl::multiply_constant(y_value,-float(image.height()-10)/m);
-        tipl::add_constant(y_value,image.height() - 10);
-
+        tipl::multiply_constant(y_value,float(image.height()-10));
         QVector<QPointF> points;
         for(size_t i = 0;i < train.cur_epoch;++i)
-            points << QPointF(i*x_scale+5,y_value[i]);
+            points << QPointF(i*x_scale+5,y_value[i]+5);
         painter.drawPolyline(points);
         error_view_epoch = train.cur_epoch;
         error_scene << image;
     }
 
+    ui->end_training->setEnabled(train.running);
 
     if(!train.running)
     {
@@ -341,6 +354,7 @@ void MainWindow::on_clear_clicked()
     label_list.clear();
     ui->list1->clear();
     ui->open_labels->setEnabled(false);
+    ui->start_training->setEnabled(false);
     update_list();
 }
 
@@ -365,12 +379,15 @@ void MainWindow::on_open_labels_clicked()
     settings.setValue("on_open_labels_clicked",fileNames[0]);
     if(ui->list2->currentRow() == 0)
     {
-        if(!(out_count = get_label_out_count(fileNames[0].toStdString())))
+        if(!get_label_info(fileNames[0].toStdString(),out_count))
         {
-            out_count = 1;
             QMessageBox::critical(this,"Error","Not a valid label image");
             return;
         }
+        if(out_count == 1)
+            ui->output_info->setText(QString("dim: 1 type: scalar"));
+        else
+            ui->output_info->setText(QString("dim: background + %1 type: label").arg(out_count-1));
     }
     auto index = ui->list2->currentRow();
     for(int i = 0;i < fileNames.size() && index < label_list.size();++i,++index)
@@ -416,10 +433,13 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
     if(currentRow >= 0 && currentRow < image_list.size())
     {
         tipl::vector<3> vs;
-        if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),I1,I2,out_count,vs))
+        if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),I1,I2,vs))
             I2.clear();
         if(ui->show_transform->isChecked())
+        {
             load_image_and_label(I1,I2,vs,tipl::shape<3>(ui->dim_x->value(),ui->dim_y->value(),ui->dim_z->value()),time(0));
+            tipl::expand_label_to_dimension(I2,out_count);
+        }
         v2c1.set_range(0,tipl::max_value_mt(I1));
         ui->pos->setMaximum(I1.shape()[ui->view_dim->currentIndex()]-1);
     }

@@ -18,12 +18,11 @@ struct TrainParam{
 bool save_to_file(UNet3d& model,const char* file_name);
 bool load_from_file(UNet3d& model,const char* file_name);
 std::string show_structure(const UNet3d& model);
-size_t get_label_out_count(const std::string& label_name);
+bool get_label_info(const std::string& label_name,int& out_count);
 bool read_image_and_label(const std::string& image_name,
                           const std::string& label_name,
                           tipl::image<3>& image,
                           tipl::image<3>& label,
-                          size_t out_count,
                           tipl::vector<3>& vs);
 void load_image_and_label(tipl::image<3>& image,
                           tipl::image<3>& label,
@@ -42,11 +41,12 @@ public:
     std::string error_msg;
 private:
     std::vector<tipl::image<3> > in_data,out_data;
+    std::vector<std::vector<float> > out_data_weight;
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;
     void read_file(const TrainParam& param);
 private:
-    std::vector<torch::Tensor> in_tensor,out_tensor;
+    std::vector<torch::Tensor> in_tensor,out_tensor,out_tensor_weight;
     std::vector<bool> tensor_ready;
     std::shared_ptr<std::thread> prepare_tensor_thread;
     void prepare_tensor(const TrainParam& param);

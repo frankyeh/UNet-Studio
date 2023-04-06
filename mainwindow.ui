@@ -369,6 +369,9 @@
                </item>
                <item>
                 <widget class="QPushButton" name="end_training">
+                 <property name="enabled">
+                  <bool>false</bool>
+                 </property>
                  <property name="sizePolicy">
                   <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
                    <horstretch>0</horstretch>

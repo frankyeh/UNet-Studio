@@ -63,8 +63,7 @@ public: //evalute
     tipl::image<3> eval_I1;
     tipl::value_to_color<float> eval_v2c1,eval_v2c2;
 private:
-    int out_count = 1;
-    bool is_label = true;
+    int out_count = 2;
 public:
     train_unet train;
     evaluate_unet evaluate;
