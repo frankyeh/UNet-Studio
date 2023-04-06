@@ -144,9 +144,10 @@ void load_image_and_label(tipl::image<3>& image,
     if(image_vs[0] < 1.0f)
         template_vs[2] = template_vs[1] = template_vs[0] = image.width()*image_vs[0]/template_shape[0];
 
+    auto resolution = range(0.75f,1.5f);
     tipl::affine_transform<float> transform = {one()*30.0f*template_vs[0],one()*30.0f*template_vs[0],one()*30.0f*template_vs[0],
                                         one()*0.45f,one()*0.45f/4.0f,one()*0.45f/4.0f,
-                                        range(0.75f,2.0f),range(0.75f,2.0f),range(0.75f,2.0f),
+                                        resolution*range(0.8f,1.25f),resolution*range(0.8f,1.25f),resolution*range(0.8f,1.25f),
                                         one()*0.15f,one()*0.15f,one()*0.15f};
 
 
@@ -214,9 +215,10 @@ void load_image_and_label(tipl::image<3>& image,
     {
         tipl::image<3> background(template_shape);
         {
+            auto resolution = range(0.25f,0.4f);
             tipl::affine_transform<float> arg= {one()*30.0f,one()*30.0f,one()*30.0f,
                                                 one()*2.0f,one()*2.0f,one()*2.0f,
-                                                range(0.25f,0.5f),range(0.25f,0.5f),range(0.25f,0.5f),
+                                                resolution,resolution,resolution,
                                                 0.0f,0.0f,0.0f};
             tipl::resample_mt(image,background,tipl::transformation_matrix<float>(arg,template_shape,template_vs,image.shape(),image_vs));
         }
