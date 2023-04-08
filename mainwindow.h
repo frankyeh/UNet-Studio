@@ -51,7 +51,7 @@ public: //training
     tipl::image<3> I1,I2;
     tipl::value_to_color<float> v2c1,v2c2;
     size_t error_view_epoch = 0;
-    std::vector<float> loaded_error;
+    std::vector<float> loaded_error1,loaded_error2;
 public:
     QStringList evaluate_list;
     void update_evaluate_list(void);
