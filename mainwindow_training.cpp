@@ -147,6 +147,7 @@ void MainWindow::on_clear_clicked()
 
 void MainWindow::on_train_from_scratch_clicked()
 {
+    torch::manual_seed(0);
     train.model = UNet3d(1,out_count,ui->feature_string->text().toStdString());
     QMessageBox::information(this,"","A new network loaded");
 }
@@ -170,9 +171,13 @@ void MainWindow::on_save_network_clicked()
     }
 
 }
+#include <ATen/Context.h>
 void MainWindow::on_start_training_clicked()
 {
     tipl::progress p("initiate training");
+    torch::manual_seed(0);
+    at::globalContext().setDeterministicCuDNN(true);
+    qputenv("CUDNN_DETERMINISTIC", "1");
     bool from_scratch = false;
     if(train.running)
     {
@@ -272,7 +277,8 @@ void MainWindow::training()
         auto x_scale = std::min<float>(5.0f,float(ui->error_x_size->value())/float(train.cur_epoch+1));
         size_t s = train.cur_epoch;
         size_t s2 = train.cur_test_epoch;
-        size_t s3 = std::min<int>(loaded_error.size(),(ui->error_x_size->value()-10)/x_scale);
+        size_t s3 = std::min<int>(loaded_error1.size(),(ui->error_x_size->value()-10)/x_scale);
+        size_t s4 = std::min<int>(loaded_error2.size(),(ui->error_x_size->value()-10)/x_scale);
 
         QImage image(ui->error_x_size->value(),ui->error_y_size->value(),QImage::Format_RGB32);
         QPainter painter(&image);
@@ -284,7 +290,9 @@ void MainWindow::training()
         if(s2)
             y_value.insert(y_value.end(),train.test_error.begin(),train.test_error.begin()+s2);
         if(s3)
-            y_value.insert(y_value.end(),loaded_error.begin(),loaded_error.begin()+s3);
+            y_value.insert(y_value.end(),loaded_error1.begin(),loaded_error1.begin()+s3);
+        if(s4)
+            y_value.insert(y_value.end(),loaded_error2.begin(),loaded_error2.begin()+s4);
 
         for(auto& v : y_value)
             v = -std::log10(v);
@@ -292,27 +300,35 @@ void MainWindow::training()
 
         auto y_value1 = std::vector<float>(y_value.begin(),y_value.begin()+s);
         auto y_value2 = std::vector<float>(y_value.begin()+s,y_value.begin()+s+s2);
-        auto y_value3 = std::vector<float>(y_value.begin()+s+s2,y_value.end());
+        auto y_value3 = std::vector<float>(y_value.begin()+s+s2,y_value.begin()+s+s2+s3);
+        auto y_value4 = std::vector<float>(y_value.begin()+s+s2+s3,y_value.end());
 
-        QVector<QPointF> p1,p2,p3;
+        QVector<QPointF> p1,p2,p3,p4;
         for(size_t i = 0;i < y_value1.size();++i)
             p1 << QPointF(i*x_scale+5,y_value1[i]+5);
         for(size_t i = 0;i < y_value2.size();++i)
             p2 << QPointF(i*x_scale+5,y_value2[i]+5);
         for(size_t i = 0;i < y_value3.size();++i)
             p3 << QPointF(i*x_scale+5,y_value3[i]+5);
+        for(size_t i = 0;i < y_value4.size();++i)
+            p4 << QPointF(i*x_scale+5,y_value4[i]+5);
 
         if(!p1.empty())
             painter.drawPolyline(p1);
+        if(!p3.empty())
+        {
+            painter.setPen(QPen(Qt::black, 1));
+            painter.drawPolyline(p3);
+        }
         if(!p2.empty())
         {
             painter.setPen(QPen(Qt::red, 2));
             painter.drawPolyline(p2);
         }
-        if(!p3.empty())
+        if(!p4.empty())
         {
-            painter.setPen(QPen(Qt::blue, 2));
-            painter.drawPolyline(p3);
+            painter.setPen(QPen(Qt::red, 1));
+            painter.drawPolyline(p4);
         }
         error_view_epoch = train.cur_epoch;
         error_scene << image;
@@ -342,9 +358,7 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),I1,I2,vs))
             I2.clear();
         if(ui->show_transform->isChecked())
-        {
             load_image_and_label(I1,I2,vs,tipl::shape<3>(ui->dim_x->value(),ui->dim_y->value(),ui->dim_z->value()),time(0));
-        }
         if(!I2.empty())
             tipl::expand_label_to_dimension(I2,out_count);
         v2c1.set_range(0,tipl::max_value_mt(I1));
@@ -414,13 +428,14 @@ void MainWindow::on_open_error_clicked()
     std::getline(in,line1);
     std::getline(in,line2);
     std::istringstream in1(line1),in2(line2);
-    loaded_error = std::vector<float>(std::istream_iterator<float>(in1),std::istream_iterator<float>());
-    QMessageBox::information(this,"","Load");
+    loaded_error1 = std::vector<float>(std::istream_iterator<float>(in1),std::istream_iterator<float>());
+    loaded_error2 = std::vector<float>(std::istream_iterator<float>(in2),std::istream_iterator<float>());
 }
 
 
 void MainWindow::on_clear_error_clicked()
 {
-    loaded_error.clear();
+    loaded_error1.clear();
+    loaded_error2.clear();
 }
 
