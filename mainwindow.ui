@@ -56,11 +56,22 @@
                <item>
                 <widget class="QPushButton" name="open_files">
                  <property name="text">
-                  <string>Open...</string>
+                  <string/>
                  </property>
                  <property name="icon">
                   <iconset resource="icons.qrc">
                    <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="clear">
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="icon">
+                  <iconset resource="icons.qrc">
+                   <normaloff>:/icons/icons/delete.png</normaloff>:/icons/icons/delete.png</iconset>
                  </property>
                 </widget>
                </item>
@@ -78,13 +89,15 @@
                 </spacer>
                </item>
                <item>
-                <widget class="QPushButton" name="clear">
-                 <property name="text">
-                  <string>Clear</string>
+                <widget class="QPushButton" name="show_advanced">
+                 <property name="maximumSize">
+                  <size>
+                   <width>30</width>
+                   <height>16777215</height>
+                  </size>
                  </property>
-                 <property name="icon">
-                  <iconset resource="icons.qrc">
-                   <normaloff>:/icons/icons/delete.png</normaloff>:/icons/icons/delete.png</iconset>
+                 <property name="text">
+                  <string>...</string>
                  </property>
                 </widget>
                </item>
@@ -92,6 +105,97 @@
              </item>
              <item>
               <widget class="QListWidget" name="list1"/>
+             </item>
+             <item>
+              <widget class="QWidget" name="input_dim_panel" native="true">
+               <property name="enabled">
+                <bool>true</bool>
+               </property>
+               <layout class="QFormLayout" name="formLayout_4">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <item row="0" column="0">
+                 <widget class="QLabel" name="label_10">
+                  <property name="text">
+                   <string>Input sizes</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <layout class="QHBoxLayout" name="horizontalLayout_15">
+                  <item>
+                   <widget class="QSpinBox" name="dim_x">
+                    <property name="minimum">
+                     <number>16</number>
+                    </property>
+                    <property name="maximum">
+                     <number>512</number>
+                    </property>
+                    <property name="value">
+                     <number>192</number>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QSpinBox" name="dim_y">
+                    <property name="minimum">
+                     <number>16</number>
+                    </property>
+                    <property name="maximum">
+                     <number>512</number>
+                    </property>
+                    <property name="singleStep">
+                     <number>16</number>
+                    </property>
+                    <property name="value">
+                     <number>224</number>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QSpinBox" name="dim_z">
+                    <property name="minimum">
+                     <number>16</number>
+                    </property>
+                    <property name="maximum">
+                     <number>512</number>
+                    </property>
+                    <property name="singleStep">
+                     <number>16</number>
+                    </property>
+                    <property name="value">
+                     <number>192</number>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="label_11">
+                  <property name="text">
+                   <string>Test sample</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QSpinBox" name="num_test_data">
+                  <property name="maximum">
+                   <number>0</number>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
              </item>
             </layout>
            </widget>
@@ -119,7 +223,7 @@
                   <bool>false</bool>
                  </property>
                  <property name="text">
-                  <string>Open...</string>
+                  <string/>
                  </property>
                  <property name="icon">
                   <iconset resource="icons.qrc">
@@ -155,7 +259,7 @@
              <item>
               <widget class="QLabel" name="output_info">
                <property name="text">
-                <string> </string>
+                <string/>
                </property>
               </widget>
              </item>
@@ -172,11 +276,25 @@
               <number>2</number>
              </property>
              <item>
-              <widget class="QLabel" name="network">
-               <property name="text">
-                <string/>
+              <layout class="QHBoxLayout" name="horizontalLayout_16">
+               <property name="topMargin">
+                <number>0</number>
                </property>
-              </widget>
+               <item>
+                <widget class="QLabel" name="label">
+                 <property name="text">
+                  <string>Structure</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLineEdit" name="feature_string">
+                 <property name="text">
+                  <string>8x8+16x16+32x32+64x64+128x128</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
              </item>
              <item>
               <layout class="QHBoxLayout" name="horizontalLayout_3">
@@ -189,7 +307,7 @@
                <item>
                 <widget class="QPushButton" name="train_from_scratch">
                  <property name="text">
-                  <string>New</string>
+                  <string/>
                  </property>
                  <property name="icon">
                   <iconset resource="icons.qrc">
@@ -200,7 +318,7 @@
                <item>
                 <widget class="QPushButton" name="load_network">
                  <property name="text">
-                  <string>Open...</string>
+                  <string/>
                  </property>
                  <property name="icon">
                   <iconset resource="icons.qrc">
@@ -217,13 +335,26 @@
                   </size>
                  </property>
                  <property name="text">
-                  <string>Save...</string>
+                  <string/>
                  </property>
                  <property name="icon">
                   <iconset resource="icons.qrc">
                    <normaloff>:/icons/icons/save.png</normaloff>:/icons/icons/save.png</iconset>
                  </property>
                 </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
                </item>
               </layout>
              </item>
@@ -245,14 +376,14 @@
              <property name="rightMargin">
               <number>6</number>
              </property>
-             <item row="0" column="0">
+             <item row="1" column="0">
               <widget class="QLabel" name="label_2">
                <property name="text">
                 <string>Batch Size</string>
                </property>
               </widget>
              </item>
-             <item row="0" column="1">
+             <item row="1" column="1">
               <widget class="QSpinBox" name="batch_size">
                <property name="minimum">
                 <number>1</number>
@@ -268,14 +399,14 @@
                </property>
               </widget>
              </item>
-             <item row="1" column="0">
+             <item row="2" column="0">
               <widget class="QLabel" name="label_4">
                <property name="text">
                 <string>Epoch</string>
                </property>
               </widget>
              </item>
-             <item row="1" column="1">
+             <item row="2" column="1">
               <widget class="QSpinBox" name="epoch">
                <property name="minimum">
                 <number>10</number>
@@ -288,14 +419,14 @@
                </property>
               </widget>
              </item>
-             <item row="2" column="0">
+             <item row="3" column="0">
               <widget class="QLabel" name="label_3">
                <property name="text">
                 <string>Learning Rate</string>
                </property>
               </widget>
              </item>
-             <item row="2" column="1">
+             <item row="3" column="1">
               <widget class="QDoubleSpinBox" name="learning_rate">
                <property name="decimals">
                 <number>4</number>
@@ -314,27 +445,36 @@
                </property>
               </widget>
              </item>
-             <item row="3" column="0">
+             <item row="4" column="0">
               <widget class="QLabel" name="label_9">
                <property name="text">
                 <string>Device</string>
                </property>
               </widget>
              </item>
-             <item row="3" column="1">
+             <item row="4" column="1">
               <widget class="QComboBox" name="gpu"/>
              </item>
-             <item row="4" column="0">
+             <item row="5" column="0">
               <widget class="QLabel" name="training">
+               <property name="enabled">
+                <bool>false</bool>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>100</width>
+                 <height>83</height>
+                </size>
+               </property>
                <property name="text">
                 <string/>
                </property>
                <property name="pixmap">
-                <pixmap resource="icons.qrc">:/icons/icons/ajax-loader.gif</pixmap>
+                <pixmap resource="icons.qrc">:/icons/icons/processing.gif</pixmap>
                </property>
               </widget>
              </item>
-             <item row="4" column="1">
+             <item row="5" column="1">
               <layout class="QHBoxLayout" name="horizontalLayout_4">
                <property name="spacing">
                 <number>0</number>
@@ -594,52 +734,114 @@
                </widget>
               </item>
               <item>
-               <layout class="QFormLayout" name="formLayout_3">
-                <property name="leftMargin">
-                 <number>10</number>
+               <layout class="QVBoxLayout" name="verticalLayout_16">
+                <property name="spacing">
+                 <number>0</number>
                 </property>
-                <item row="0" column="0">
-                 <widget class="QLabel" name="label_6">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <item>
+                 <layout class="QFormLayout" name="formLayout_3">
+                  <item row="0" column="0">
+                   <widget class="QLabel" name="label_6">
+                    <property name="text">
+                     <string>width</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="1">
+                   <widget class="QSpinBox" name="error_x_size">
+                    <property name="minimum">
+                     <number>100</number>
+                    </property>
+                    <property name="maximum">
+                     <number>1000</number>
+                    </property>
+                    <property name="singleStep">
+                     <number>100</number>
+                    </property>
+                    <property name="value">
+                     <number>500</number>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="1" column="0">
+                   <widget class="QLabel" name="label_7">
+                    <property name="text">
+                     <string>height</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="1" column="1">
+                   <widget class="QSpinBox" name="error_y_size">
+                    <property name="minimum">
+                     <number>50</number>
+                    </property>
+                    <property name="maximum">
+                     <number>500</number>
+                    </property>
+                    <property name="singleStep">
+                     <number>100</number>
+                    </property>
+                    <property name="value">
+                     <number>100</number>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="open_error">
+                  <property name="enabled">
+                   <bool>true</bool>
+                  </property>
                   <property name="text">
-                   <string>x scale</string>
+                   <string/>
+                  </property>
+                  <property name="icon">
+                   <iconset resource="icons.qrc">
+                    <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
                   </property>
                  </widget>
                 </item>
-                <item row="0" column="1">
-                 <widget class="QSpinBox" name="error_x_scale">
-                  <property name="minimum">
-                   <number>1</number>
+                <item>
+                 <widget class="QPushButton" name="save_error">
+                  <property name="enabled">
+                   <bool>false</bool>
                   </property>
-                  <property name="maximum">
-                   <number>10</number>
-                  </property>
-                  <property name="value">
-                   <number>2</number>
-                  </property>
-                 </widget>
-                </item>
-                <item row="1" column="0">
-                 <widget class="QLabel" name="label_7">
                   <property name="text">
-                   <string>y size</string>
+                   <string/>
+                  </property>
+                  <property name="icon">
+                   <iconset resource="icons.qrc">
+                    <normaloff>:/icons/icons/save.png</normaloff>:/icons/icons/save.png</iconset>
                   </property>
                  </widget>
                 </item>
-                <item row="1" column="1">
-                 <widget class="QSpinBox" name="error_y_size">
-                  <property name="minimum">
-                   <number>50</number>
+                <item>
+                 <widget class="QPushButton" name="clear_error">
+                  <property name="text">
+                   <string/>
                   </property>
-                  <property name="maximum">
-                   <number>500</number>
-                  </property>
-                  <property name="singleStep">
-                   <number>100</number>
-                  </property>
-                  <property name="value">
-                   <number>100</number>
+                  <property name="icon">
+                   <iconset resource="icons.qrc">
+                    <normaloff>:/icons/icons/delete.png</normaloff>:/icons/icons/delete.png</iconset>
                   </property>
                  </widget>
+                </item>
+                <item>
+                 <spacer name="verticalSpacer">
+                  <property name="orientation">
+                   <enum>Qt::Vertical</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>20</width>
+                    <height>40</height>
+                   </size>
+                  </property>
+                 </spacer>
                 </item>
                </layout>
               </item>
@@ -687,11 +889,22 @@
                <item>
                 <widget class="QPushButton" name="open_evale_image">
                  <property name="text">
-                  <string>Open...</string>
+                  <string/>
                  </property>
                  <property name="icon">
                   <iconset resource="icons.qrc">
                    <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="evaluate_clear">
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="icon">
+                  <iconset resource="icons.qrc">
+                   <normaloff>:/icons/icons/delete.png</normaloff>:/icons/icons/delete.png</iconset>
                  </property>
                 </widget>
                </item>
@@ -707,17 +920,6 @@
                   </size>
                  </property>
                 </spacer>
-               </item>
-               <item>
-                <widget class="QPushButton" name="evaluate_clear">
-                 <property name="text">
-                  <string>Clear</string>
-                 </property>
-                 <property name="icon">
-                  <iconset resource="icons.qrc">
-                   <normaloff>:/icons/icons/delete.png</normaloff>:/icons/icons/delete.png</iconset>
-                 </property>
-                </widget>
                </item>
               </layout>
              </item>
@@ -755,7 +957,7 @@
                <item>
                 <widget class="QPushButton" name="eval_from_file">
                  <property name="text">
-                  <string>Open...</string>
+                  <string/>
                  </property>
                  <property name="icon">
                   <iconset resource="icons.qrc">
@@ -806,7 +1008,7 @@
                 <string/>
                </property>
                <property name="pixmap">
-                <pixmap resource="icons.qrc">:/icons/icons/ajax-loader.gif</pixmap>
+                <pixmap>:/icons/icons/ajax-loader.gif</pixmap>
                </property>
               </widget>
              </item>
@@ -836,11 +1038,18 @@
                   <bool>false</bool>
                  </property>
                  <property name="text">
-                  <string>Save as...</string>
+                  <string/>
                  </property>
                  <property name="icon">
                   <iconset resource="icons.qrc">
                    <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="post_processing">
+                 <property name="text">
+                  <string>Post Proc</string>
                  </property>
                 </widget>
                </item>
@@ -856,13 +1065,6 @@
                   </size>
                  </property>
                 </spacer>
-               </item>
-               <item>
-                <widget class="QPushButton" name="post_processing">
-                 <property name="text">
-                  <string>Post Proc</string>
-                 </property>
-                </widget>
                </item>
               </layout>
              </item>
@@ -983,110 +1185,6 @@
        <attribute name="title">
         <string>Setup</string>
        </attribute>
-       <widget class="QGroupBox" name="groupBox">
-        <property name="geometry">
-         <rect>
-          <x>9</x>
-          <y>9</y>
-          <width>331</width>
-          <height>48</height>
-         </rect>
-        </property>
-        <property name="title">
-         <string>Network Architecture</string>
-        </property>
-        <layout class="QHBoxLayout" name="horizontalLayout_6">
-         <property name="spacing">
-          <number>6</number>
-         </property>
-         <property name="leftMargin">
-          <number>6</number>
-         </property>
-         <property name="topMargin">
-          <number>2</number>
-         </property>
-         <property name="rightMargin">
-          <number>6</number>
-         </property>
-         <property name="bottomMargin">
-          <number>6</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="label">
-           <property name="text">
-            <string>Feature Count</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="feature_string">
-           <property name="text">
-            <string>8x8+16x16+32x32+64x64+128x128</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-       <widget class="QGroupBox" name="groupBox_10">
-        <property name="geometry">
-         <rect>
-          <x>10</x>
-          <y>70</y>
-          <width>331</width>
-          <height>58</height>
-         </rect>
-        </property>
-        <property name="title">
-         <string>Input Ouput Dimension</string>
-        </property>
-        <layout class="QHBoxLayout" name="horizontalLayout_15">
-         <item>
-          <widget class="QSpinBox" name="dim_x">
-           <property name="minimum">
-            <number>16</number>
-           </property>
-           <property name="maximum">
-            <number>512</number>
-           </property>
-           <property name="value">
-            <number>192</number>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QSpinBox" name="dim_y">
-           <property name="minimum">
-            <number>16</number>
-           </property>
-           <property name="maximum">
-            <number>512</number>
-           </property>
-           <property name="singleStep">
-            <number>16</number>
-           </property>
-           <property name="value">
-            <number>224</number>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QSpinBox" name="dim_z">
-           <property name="minimum">
-            <number>16</number>
-           </property>
-           <property name="maximum">
-            <number>512</number>
-           </property>
-           <property name="singleStep">
-            <number>16</number>
-           </property>
-           <property name="value">
-            <number>192</number>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
       </widget>
      </widget>
     </item>
@@ -1101,16 +1199,32 @@
      <height>22</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menu_File">
+    <property name="title">
+     <string>&amp;File</string>
+    </property>
+    <addaction name="actionOpen_Training"/>
+    <addaction name="actionSave_Training"/>
+   </widget>
+   <addaction name="menu_File"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <action name="actionOpen">
+  <action name="actionOpen_Training">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
+   </property>
    <property name="text">
-    <string>Open Network...</string>
+    <string>Open Training...</string>
    </property>
   </action>
-  <action name="actionSave_as">
+  <action name="actionSave_Training">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/icons/icons/save.png</normaloff>:/icons/icons/save.png</iconset>
+   </property>
    <property name="text">
-    <string>Save Network As...</string>
+    <string>Save Training...</string>
    </property>
   </action>
  </widget>

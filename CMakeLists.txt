@@ -24,6 +24,8 @@ set(PROJECT_SOURCES
         evaluate.hpp
         evaluate.cpp
         mainwindow.cpp
+        mainwindow_training.cpp
+        mainwindow_evaluation.cpp
         mainwindow.h
         mainwindow.ui
 )

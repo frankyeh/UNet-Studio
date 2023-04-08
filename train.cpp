@@ -1,20 +1,20 @@
 #include "train.hpp"
 
-bool get_label_info(const std::string& label_name,int& out_count)
+bool get_label_info(const std::string& label_name,int& out_count,bool& is_label)
 {
     tipl::io::gz_nifti nii;
     if(!nii.load_from_file(label_name))
         return false;
     if(nii.dim(4) != 1)
         out_count = nii.dim(4);
-    bool is_label = true;
     if(nii.is_integer())
     {
+        is_label = true;
         if(nii.dim(4) == 1)
         {
             tipl::image<3,short> labels;
             nii >> labels;
-            out_count = tipl::max_value(labels)+1;
+            out_count = tipl::max_value(labels);
         }
     }
     else
@@ -23,11 +23,14 @@ bool get_label_info(const std::string& label_name,int& out_count)
         nii >> labels;
         is_label = tipl::is_label_image(labels);
         if(nii.dim(4) == 1)
-            out_count = (is_label ? tipl::max_value(labels)+1 : 1);
+            out_count = (is_label ? tipl::max_value(labels) : 1);
     }
 
     if(out_count > 255)
+    {
         out_count = 1;
+        is_label = false;
+    }
     return true;
 }
 bool read_image_and_label(const std::string& image_name,
@@ -212,18 +215,18 @@ void load_image_and_label(tipl::image<3>& image,
     tipl::normalize(image_out);
     tipl::lower_threshold(image_out,0.0f);
 
-    //if(one() > 0)
+    if(one() > 0)
     {
         tipl::image<3> background(template_shape);
         {
-            auto resolution = range(0.25f,0.4f);
+            auto resolution = range(0.05f,0.1f);
             tipl::affine_transform<float> arg= {one()*30.0f,one()*30.0f,one()*30.0f,
                                                 one()*2.0f,one()*2.0f,one()*2.0f,
                                                 resolution,resolution,resolution,
                                                 0.0f,0.0f,0.0f};
             tipl::resample_mt(image,background,tipl::transformation_matrix<float>(arg,template_shape,template_vs,image.shape(),image_vs));
         }
-        tipl::normalize(background,0.1f);
+        tipl::normalize(background,0.05f);
         for(size_t i = 0;i < image_out.size();++i)
             image_out[i] += background[i]/(0.1f+image_out[i]);
     }
@@ -244,16 +247,102 @@ auto get_weight(const tipl::image<3>& label,size_t out_count)
 {
     std::vector<size_t> sum(out_count);
     for(size_t i = 0;i < label.size();++i)
-    {
-        auto v = label[i];
-        if(v < out_count)
-            ++sum[v];
-    }
+        if(label[i])
+        {
+            auto v = label[i]-1;
+            if(v < out_count)
+                ++sum[v];
+        }
     auto max_value = tipl::max_value(sum);
     std::vector<float> weight(out_count);
     for(size_t i = 0;i < out_count;++i)
         weight[i] = (sum[i] ? float(max_value)/float(sum[i]) : 0.0f);
     return weight;
+}
+tipl::shape<3> unet_inputsize(const tipl::shape<3>& s);
+void train_unet::test_results(const TrainParam& param)
+{
+    cur_test_epoch = 0;
+    if(param.test_image_file_name.empty())
+    {
+        test_error.clear();
+        return;
+    }
+    else
+        test_error = std::vector<float>(param.epoch);
+
+    test_results_thread.reset(new std::thread([=]()
+    {
+        try{
+            using namespace std::chrono_literals;
+            std::this_thread::sleep_for(1000ms);
+            std::vector<torch::Tensor> test_in_tensor,test_out_tensor;
+
+            for(int read_id = 0;read_id < param.test_image_file_name.size();++read_id)
+            {
+                tipl::out() << "reading test image " << param.test_image_file_name[read_id] << std::endl;
+                tipl::out() << "reading test label " << param.test_label_file_name[read_id] << std::endl;
+                tipl::image<3> new_image,new_label;
+                tipl::vector<3> new_vs;
+                if(!read_image_and_label(param.test_image_file_name[read_id],
+                                         param.test_label_file_name[read_id],
+                                         new_image,new_label,new_vs))
+                    continue;
+
+                auto new_shape = unet_inputsize(new_image.shape());
+                if(new_shape != new_image.shape())
+                {
+                    tipl::image<3> image(new_shape),label(new_shape);
+                    tipl::draw(new_image,image,tipl::vector<3,int>(0,0,0));
+                    tipl::draw(new_label,label,tipl::vector<3,int>(0,0,0));
+                    new_image.swap(image);
+                    new_label.swap(label);
+                }
+
+                tipl::expand_label_to_dimension(new_label,model->out_count);
+                test_in_tensor.push_back(torch::from_blob(&new_image[0],
+                    {1,model->in_count,int(new_image.shape()[2]),int(new_image.shape()[1]),int(new_image.shape()[0])}).to(param.device));
+                test_out_tensor.push_back(torch::from_blob(&new_label[0],
+                    {1,model->out_count,int(new_image.shape()[2]),int(new_image.shape()[1]),int(new_image.shape()[0])}).to(param.device));
+
+            }
+            if(test_in_tensor.empty())
+                return;
+            test_model = UNet3d(model->in_count,model->out_count,model->feature_string);
+            test_model->train();
+            test_model->to(param.device);
+            test_model->set_requires_grad(false);
+            for (cur_test_epoch = 0; cur_test_epoch < param.epoch && !aborted; cur_test_epoch++)
+            {
+                while(cur_test_epoch >= cur_epoch || pause)
+                {
+                    if(aborted)
+                        return;
+                    using namespace std::chrono_literals;
+                    std::this_thread::sleep_for(100ms);
+                }
+                auto rhs = model->parameters();
+                auto lhs = test_model->parameters();
+                for(size_t i = 0;i < rhs.size();++i)
+                    lhs[i].copy_(rhs[i]);
+                float sum_error = 0.0f;
+                test_model->set_requires_grad(false);
+                for(size_t i = 0;i < test_in_tensor.size();++i)
+                    sum_error += torch::mse_loss(test_model->forward(test_in_tensor[i]),test_out_tensor[i]).item().toFloat();
+                tipl::out() << "epoch:" << cur_epoch << " test error:" << (test_error[cur_test_epoch] = sum_error/float(test_in_tensor.size())) << std::endl;
+            }
+        }
+        catch(const c10::Error& error)
+        {
+            error_msg = std::string("error in testing:") + error.what();
+            pause = aborted = true;
+        }
+        catch(...)
+        {
+            pause = aborted = true;
+        }
+        tipl::out() << error_msg << std::endl;
+    }));
 }
 
 void train_unet::read_file(const TrainParam& param)
@@ -270,6 +359,7 @@ void train_unet::read_file(const TrainParam& param)
         std::vector<std::vector<float> > label_weight;
         std::vector<tipl::vector<3> > image_vs;
         {
+            status = "reading input data";
             tipl::progress prog("read images");
             for(int read_id = 0;read_id < param.image_file_name.size();++read_id)
             {
@@ -311,6 +401,7 @@ void train_unet::read_file(const TrainParam& param)
                     if(aborted)
                         return;
                     using namespace std::chrono_literals;
+                    status = "network training";
                     std::this_thread::sleep_for(100ms);
                 }
                 auto read_id = std::rand() % image.size();
@@ -320,6 +411,7 @@ void train_unet::read_file(const TrainParam& param)
                 out_data[i] = label[read_id];
                 out_data_weight[i] = label_weight[read_id];
                 load_image_and_label(in_data[i],out_data[i],image_vs[read_id],param.dim,i);
+                tipl::expand_label_to_dimension(out_data[i],model->out_count);
                 data_ready[i] = true;
                 i += thread_count;
             }
@@ -345,17 +437,15 @@ void train_unet::prepare_tensor(const TrainParam& param)
                         if(aborted)
                             return;
                         using namespace std::chrono_literals;
+                        status = "image deformation and transformation";
                         std::this_thread::sleep_for(100ms);
                     }
                     if(aborted)
                         return;
                     in_tensor[i] = torch::from_blob(&in_data[i][0],
                         {1,model->in_count,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(param.device);
-                    if(model->out_count > 1) // label
-                        out_tensor[i] = torch::from_blob(&out_data[i][0],{1,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(torch::kLong).to(param.device);
-                    else
-                        out_tensor[i] = torch::from_blob(&out_data[i][0],{1,1,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(param.device);
-
+                    out_tensor[i] = torch::from_blob(&out_data[i][0],
+                        {1,model->out_count,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(param.device);
                     out_tensor_weight[i] = torch::from_blob(&out_data_weight[i][0],
                         {model->out_count}).to(param.device);
                     tensor_ready[i] = true;
@@ -396,29 +486,31 @@ void train_unet::train(const TrainParam& param)
                             running = false;
                             return;
                         }
+                        status = "tensor allocation";
                         using namespace std::chrono_literals;
                         std::this_thread::sleep_for(100ms);
                     }
-                    torch::Tensor loss;
-                    if(model->out_count > 1)
-                        loss = torch::cross_entropy_loss(model->forward(in_tensor[cur_data_index]),out_tensor[cur_data_index],out_tensor_weight[cur_data_index]);
-                    else
-                        loss = torch::mse_loss(model->forward(in_tensor[cur_data_index]),out_tensor[cur_data_index]);
-                    in_tensor[cur_data_index] = torch::Tensor();
-                    out_tensor[cur_data_index] = torch::Tensor();
-                    out_tensor_weight[cur_data_index] = torch::Tensor();
+                    status = "training with weighted MSE";
+                    torch::Tensor loss = (torch::mse_loss(model->forward(in_tensor[cur_data_index]),out_tensor[cur_data_index],at::Reduction::None).
+                                        mean({-3,-2,-1})*out_tensor_weight[cur_data_index]).mean();
+                    status = "backward propagation";
                     cur_error += loss.item().toFloat();
                     ++cur_error_count;
                     loss.backward();
+                    in_tensor[cur_data_index].reset();
+                    out_tensor[cur_data_index].reset();
+                    out_tensor_weight[cur_data_index].reset();
+
                     if(b+1 == param.batch_size ||
                        (    param.from_scratch &&
                             (b+1)%int(std::pow(2,std::floor(std::log2(cur_epoch/2+1)))) == 0) )
                     {
+                        status = "step";
                         optimizer->step();
                         optimizer->zero_grad();
                     }
                 }
-                tipl::out() << "epoch:" << cur_epoch << " error:" << (error[cur_epoch] = cur_error/float(cur_error_count)) << std::endl;;
+                tipl::out() << "epoch:" << cur_epoch << " error:" << (error[cur_epoch] = cur_error/float(cur_error_count)) << std::endl;
             }
         }
         catch(const c10::Error& error)
@@ -430,12 +522,14 @@ void train_unet::train(const TrainParam& param)
         }
         tipl::out() << error_msg << std::endl;
         pause = aborted = true;
+        status = "complete";
         running = false;
     }));
 }
 void train_unet::start(const TrainParam& param)
 {
     stop();
+    status = "initializing";
     model->to(param.device);
     model->train();
     pause = aborted = false;
@@ -444,6 +538,7 @@ void train_unet::start(const TrainParam& param)
     read_file(param);
     prepare_tensor(param);
     train(param);
+    test_results(param);
 }
 void train_unet::stop(void)
 {
@@ -462,6 +557,11 @@ void train_unet::stop(void)
     {
         train_thread->join();
         train_thread.reset();
+    }
+    if(test_results_thread.get())
+    {
+        test_results_thread->join();
+        test_results_thread.reset();
     }
     cur_epoch = 0;
 }

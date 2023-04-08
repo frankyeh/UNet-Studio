@@ -51,6 +51,7 @@ public: //training
     tipl::image<3> I1,I2;
     tipl::value_to_color<float> v2c1,v2c2;
     size_t error_view_epoch = 0;
+    std::vector<float> loaded_error;
 public:
     QStringList evaluate_list;
     void update_evaluate_list(void);
@@ -104,8 +105,14 @@ private slots:
 
     void on_evaluate_list2_currentRowChanged(int currentRow);
     void on_save_evale_image_clicked();
-    void on_error_x_scale_valueChanged(int arg1);
+    void on_error_x_size_valueChanged(int arg1);
     void on_error_y_size_valueChanged(int arg1);
     void on_post_processing_clicked();
+    void on_save_error_clicked();
+    void on_open_error_clicked();
+    void on_clear_error_clicked();
+    void on_show_advanced_clicked();
+    void on_actionSave_Training_triggered();
+    void on_actionOpen_Training_triggered();
 };
 #endif // MAINWINDOW_H

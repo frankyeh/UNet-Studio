@@ -70,19 +70,24 @@ public:
                    torch::nn::Conv3d(torch::nn::Conv3dOptions(features_up[0].back(), out_count, 1)));
         register_module("output",output);
     }
-    void copy_from(UNet3dImpl& r)
+    void copy_from(UNet3dImpl& r,torch::Device device)
     {
         auto rhs = r.parameters();
         auto lhs = parameters();
         for(size_t index = 0;index < rhs.size();++index)
         {
-            auto data = rhs[index].to(torch::kCPU);
+            auto data = rhs[index].to(device);
             float* dest = lhs[index].data_ptr<float>();
             const float* src = data.data_ptr<float>();
             size_t s = std::min<size_t>(rhs[index].numel(),lhs[index].numel());
             for(size_t size = 0;size+s <= lhs[index].numel();size += s,dest += s)
                 std::memcpy(dest,src,sizeof(float)*s);
         }
+    }
+    void set_requires_grad(bool req)
+    {
+        for (auto& p : parameters())
+            p.set_requires_grad(req);
     }
     size_t size(void)
     {
