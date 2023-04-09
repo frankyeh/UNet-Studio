@@ -18,6 +18,7 @@ public:
     std::string feature_string;
     int kernel_size = 3;
     std::deque<torch::nn::Sequential> encoding,decoding,up;
+    std::vector<torch::nn::BatchNorm3d> bn_layers;
     torch::nn::Sequential output;
 public:
     auto parse_feature_string(void) const
@@ -137,6 +138,11 @@ public:
 
         return output->forward(inputTensor);
     }
+    void set_bn_tracking_running_stats(bool stat)
+    {
+        for(auto bn : bn_layers)
+            bn->options.track_running_stats(stat);
+    }
 private:
     torch::nn::Sequential ConvBlock(const std::vector<int>& rhs,torch::nn::Sequential s = torch::nn::Sequential())
     {
@@ -147,7 +153,9 @@ private:
             {
                 s->push_back(torch::nn::Conv3d(torch::nn::Conv3dOptions(count, next_count, kernel_size).padding((kernel_size-1)/2)));
                 s->push_back(torch::nn::ReLU());
-                s->push_back(torch::nn::BatchNorm3d(next_count));
+                auto bn = torch::nn::BatchNorm3d(next_count);
+                s->push_back(bn);
+                bn_layers.push_back(bn);
             }
             count = next_count;
         }
