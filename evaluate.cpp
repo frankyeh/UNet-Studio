@@ -129,8 +129,9 @@ void evaluate_unet::start(const EvaluateParam& param)
 {
     stop();
     model->to(param.device);
-    model->train();
     model->set_requires_grad(false);
+    model->set_bn_tracking_running_stats(false);
+    model->eval();
     aborted = false;
     running = true;
     error_msg.clear();
