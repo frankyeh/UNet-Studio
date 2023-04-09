@@ -276,7 +276,7 @@ void MainWindow::training()
     {
         auto x_scale = std::min<float>(5.0f,float(ui->error_x_size->value())/float(train.cur_epoch+1));
         size_t s = train.cur_epoch;
-        size_t s2 = train.cur_test_epoch;
+        size_t s2 = train.cur_epoch;
         size_t s3 = std::min<int>(loaded_error1.size(),(ui->error_x_size->value()-10)/x_scale);
         size_t s4 = std::min<int>(loaded_error2.size(),(ui->error_x_size->value()-10)/x_scale);
 
@@ -409,10 +409,10 @@ void MainWindow::on_save_error_clicked()
         return;
     std::ofstream out(file.toStdString());
     std::copy(train.error.begin(),train.error.begin()+train.cur_epoch,std::ostream_iterator<float>(out," "));
-    if(train.cur_test_epoch)
+    if(train.cur_epoch)
     {
         out << std::endl;
-        std::copy(train.test_error.begin(),train.test_error.begin()+train.cur_test_epoch,std::ostream_iterator<float>(out," "));
+        std::copy(train.test_error.begin(),train.test_error.begin()+train.cur_epoch,std::ostream_iterator<float>(out," "));
     }
     if(out.is_open())
         QMessageBox::information(this,"","Saved");
