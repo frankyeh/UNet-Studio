@@ -44,10 +44,8 @@ private:
     std::vector<std::vector<float> > out_data_weight;
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;
+    std::vector<torch::Tensor> test_in_tensor,test_out_tensor;
     void read_file(const TrainParam& param);
-private:
-    std::shared_ptr<std::thread> test_results_thread;
-    void test_results(const TrainParam& param);
 private:
     std::vector<torch::Tensor> in_tensor,out_tensor,out_tensor_weight;
     std::vector<bool> tensor_ready;
@@ -59,7 +57,6 @@ private:
     void train(const TrainParam& param);
 public:
     size_t cur_epoch = 0;
-    size_t cur_test_epoch = 0;
     size_t cur_data_index = 0;
     std::vector<float> error,test_error;
 public:
