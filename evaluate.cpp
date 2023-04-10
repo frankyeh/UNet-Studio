@@ -31,6 +31,7 @@ void evaluate_unet::read_file(const EvaluateParam& param)
                 tipl::vector<3> vs;
                 if(tipl::io::gz_nifti::load_from_file(param.image_file_name[i].c_str(),evaluate_image[i],evaluate_image_vs[i],evaluate_image_trans[i]))
                 {
+                    tipl::normalize(evaluate_image[i]);
                     evaluate_image_shape[i] = evaluate_image[i].shape();
                     tipl::image<3> new_sized_image(unet_inputsize(evaluate_image[i].shape()));
                     tipl::draw(evaluate_image[i],new_sized_image,tipl::vector<3,int>(0,0,0));
