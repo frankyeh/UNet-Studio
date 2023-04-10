@@ -275,8 +275,8 @@ void MainWindow::training()
     if(train.cur_epoch > 1 && train.cur_epoch >= error_view_epoch)
     {
         auto x_scale = std::min<float>(5.0f,float(ui->error_x_size->value())/float(train.cur_epoch+1));
-        size_t s = train.cur_epoch;
-        size_t s2 = train.cur_epoch;
+        size_t s = std::min<int>(train.cur_epoch,train.error.size());
+        size_t s2 = std::min<int>(train.cur_epoch,train.test_error.size());
         size_t s3 = std::min<int>(loaded_error1.size(),(ui->error_x_size->value()-10)/x_scale);
         size_t s4 = std::min<int>(loaded_error2.size(),(ui->error_x_size->value()-10)/x_scale);
 
@@ -293,7 +293,8 @@ void MainWindow::training()
             y_value.insert(y_value.end(),loaded_error1.begin(),loaded_error1.begin()+s3);
         if(s4)
             y_value.insert(y_value.end(),loaded_error2.begin(),loaded_error2.begin()+s4);
-
+        if(y_value.empty())
+            return;
         for(auto& v : y_value)
             v = -std::log10(v);
         tipl::normalize_upper_lower(y_value,(image.height()-10));
