@@ -22,11 +22,10 @@ void evaluate_unet::read_file(const EvaluateParam& param)
             {
                 while(i > cur_prog+6)
                 {
-                    if(aborted)
-                        return;
                     using namespace std::chrono_literals;
                     std::this_thread::sleep_for(200ms);
-
+                    if(aborted)
+                        return;
                 }
                 tipl::vector<3> vs;
                 if(tipl::io::gz_nifti::load_from_file(param.image_file_name[i].c_str(),evaluate_image[i],evaluate_image_vs[i],evaluate_image_trans[i]))
@@ -52,11 +51,10 @@ void evaluate_unet::evaluate(const EvaluateParam& param)
             {
                 while(!data_ready[cur_prog])
                 {
-                    if(aborted)
-                        return;
                     using namespace std::chrono_literals;
                     std::this_thread::sleep_for(200ms);
-
+                    if(aborted)
+                        return;
                 }
                 auto& eval_I1 = evaluate_image[cur_prog];
                 if(eval_I1.empty())

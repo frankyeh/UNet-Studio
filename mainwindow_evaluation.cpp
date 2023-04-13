@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
+#include "optiontablewidget.hpp"
 #include <QFileDialog>
 #include <QSettings>
 #include <QMessageBox>
@@ -69,7 +70,6 @@ void MainWindow::on_evaluate_clicked()
         return;
     }
     EvaluateParam param;
-    param.dim = tipl::shape<3>(ui->dim_x->value(),ui->dim_y->value(),ui->dim_z->value());
     param.device = ui->evaluate_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->evaluate_device->currentIndex()-1):torch::Device(torch::kCPU);
     for(auto s : evaluate_list)
         param.image_file_name.push_back(s.toStdString());
@@ -101,7 +101,7 @@ void MainWindow::evaluating()
     else
         ui->evaluating->movie()->start();
     ui->eval_prog->setValue(evaluate.cur_output);
-    ui->train_prog->setFormat(QString("%1/%2").arg(evaluate.cur_output).arg(evaluate_list.size()));
+    ui->eval_prog->setFormat(QString("%1/%2").arg(evaluate.cur_output).arg(evaluate_list.size()));
     while(ui->evaluate_list2->count() < evaluate.cur_output)
         ui->evaluate_list2->addItem(ui->evaluate_list->item(ui->evaluate_list2->count())->text());
     ui->save_evale_image->setEnabled(ui->evaluate_list2->count());
@@ -233,4 +233,5 @@ void MainWindow::on_post_processing_clicked()
     if(!p.aborted())
         QMessageBox::information(this,"Done","Completed");
 }
+
 

@@ -7,5 +7,7 @@
         <file>icons/delete.png</file>
         <file>icons/processing.gif</file>
     </qresource>
-    <qresource prefix="/"/>
+    <qresource prefix="/">
+        <file>options.txt</file>
+    </qresource>
 </RCC>

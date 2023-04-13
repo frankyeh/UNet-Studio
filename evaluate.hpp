@@ -7,7 +7,6 @@
 
 struct EvaluateParam{
     std::vector<std::string> image_file_name;
-    tipl::shape<3> dim;
     torch::Device device = torch::kCPU;
 };
 

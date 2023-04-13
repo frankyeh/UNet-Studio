@@ -10,6 +10,7 @@
 
 
 class QTextEdit;
+class OptionTableWidget;
 class console_stream :  public std::basic_streambuf<char>
 {
     std::basic_streambuf<char>* cout_buf = nullptr;
@@ -46,6 +47,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 private:
     Ui::MainWindow *ui;
+    OptionTableWidget* option;
 public: //training
     QGraphicsScene train_scene1,train_scene2,error_scene;
     tipl::image<3> I1,I2;
@@ -111,7 +113,6 @@ private slots:
     void on_save_error_clicked();
     void on_open_error_clicked();
     void on_clear_error_clicked();
-    void on_show_advanced_clicked();
     void on_actionSave_Training_triggered();
     void on_actionOpen_Training_triggered();
 };

@@ -23,6 +23,8 @@ set(PROJECT_SOURCES
         train.cpp
         evaluate.hpp
         evaluate.cpp
+        optiontablewidget.hpp
+        optiontablewidget.cpp
         mainwindow.cpp
         mainwindow_training.cpp
         mainwindow_evaluation.cpp

@@ -1,11 +1,11 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
+#include "optiontablewidget.hpp"
 #include <QFileDialog>
 #include <QSettings>
 #include <QMessageBox>
 #include <QMovie>
 #include "TIPL/tipl.hpp"
-
 extern QSettings settings;
 
 void MainWindow::on_actionOpen_Training_triggered()
@@ -21,11 +21,11 @@ void MainWindow::on_actionOpen_Training_triggered()
     image_list = ini.value("image",image_list).toStringList();
     label_list = ini.value("label",label_list).toStringList();
     update_list();
-    ui->num_test_data->setValue(ini.value("num_test_data",ui->num_test_data->value()).toInt());
-    ui->feature_string->setText(ini.value("feature_string",ui->num_test_data->text()).toString());
+    ui->feature_string->setText(ini.value("feature_string",ui->feature_string->text()).toString());
     ui->epoch->setValue(ini.value("epoch",ui->epoch->value()).toInt());
     ui->batch_size->setValue(ini.value("batch_size",ui->batch_size->value()).toInt());
     ui->learning_rate->setValue(ini.value("learning_rate",ui->learning_rate->value()).toFloat());
+    option->load(ini);
 }
 
 void MainWindow::on_actionSave_Training_triggered()
@@ -40,12 +40,13 @@ void MainWindow::on_actionSave_Training_triggered()
     QSettings ini(fileName,QSettings::IniFormat);
     ini.setValue("image",image_list);
     ini.setValue("label",label_list);
-    ini.setValue("num_test_data",ui->num_test_data->value());
     ini.setValue("feature_string",ui->feature_string->text());
     ini.setValue("epoch",ui->epoch->value());
     ini.setValue("batch_size",ui->batch_size->value());
     ini.setValue("learning_rate",ui->learning_rate->value());
+    option->save(ini);
     ini.sync();
+
 }
 
 void MainWindow::update_list(void)
@@ -77,8 +78,8 @@ void MainWindow::update_list(void)
             return;
         }
         ui->output_info->setText(QString("dim: %1 type: %2").arg(out_count).arg(is_label?"label":"scalar"));
+        ui->label_slider->setMaximum(out_count-1);
     }
-    ui->num_test_data->setMaximum(ui->list1->count() > 1 ? ui->list1->count()-1 : 0);
 }
 
 void MainWindow::on_open_files_clicked()
@@ -111,7 +112,7 @@ void MainWindow::on_open_labels_clicked()
         label_list[index] = fileNames[i];
 
     update_list();
-    ui->label_slider->setMaximum(out_count-1);
+
 }
 
 
@@ -179,6 +180,12 @@ void MainWindow::on_start_training_clicked()
     at::globalContext().setDeterministicCuDNN(true);
     qputenv("CUDNN_DETERMINISTIC", "1");
     bool from_scratch = false;
+
+    train.param.epoch = ui->epoch->value();
+    train.param.batch_size = ui->batch_size->value();
+    train.param.learning_rate = ui->learning_rate->value();
+
+    train.option = option;
     if(train.running)
     {
         train.pause = !train.pause;
@@ -207,27 +214,27 @@ void MainWindow::on_start_training_clicked()
     }
     //tipl::out() << show_structure(train.model);
 
-    TrainParam param;
-    param.batch_size = ui->batch_size->value();
-    param.epoch = ui->epoch->value();
-    param.learning_rate = ui->learning_rate->value();
-    param.dim = tipl::shape<3>(ui->dim_x->value(),ui->dim_y->value(),ui->dim_z->value());
-    param.device = ui->gpu->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->gpu->currentIndex()-1):torch::Device(torch::kCPU);
-    param.from_scratch = from_scratch;
+    train.param.dim = tipl::shape<3>(option->get<int>("dim_x"),
+                                     option->get<int>("dim_y"),
+                                     option->get<int>("dim_z"));
+    train.param.device = ui->gpu->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->gpu->currentIndex()-1):torch::Device(torch::kCPU);
+    train.param.from_scratch = from_scratch;
+
+    train.param.image_file_name.clear();
+    train.param.label_file_name.clear();
     for(size_t i = 0;i < image_list.size();++i)
     {
-        if(i < image_list.size()-ui->num_test_data->value())
-        {
-            param.image_file_name.push_back(image_list[i].toStdString());
-            param.label_file_name.push_back(label_list[i].toStdString());
-        }
-        else
-        {
-            param.test_image_file_name.push_back(image_list[i].toStdString());
-            param.test_label_file_name.push_back(label_list[i].toStdString());
-        }
+        train.param.image_file_name.push_back(image_list[i].toStdString());
+        train.param.label_file_name.push_back(label_list[i].toStdString());
     }
-    train.start(param);
+
+    train.param.test_image_file_name.clear();
+    train.param.test_label_file_name.clear();
+    {
+        train.param.test_image_file_name = train.param.image_file_name;
+        train.param.test_label_file_name = train.param.label_file_name;
+    }
+    train.start();
     ui->train_prog->setMaximum(ui->epoch->value());
     ui->train_prog->setValue(1);
     timer->start();
@@ -244,15 +251,16 @@ void MainWindow::on_end_training_clicked()
 void MainWindow::training()
 {
     console.show_output();
+    ui->batch_size->setEnabled(!train.running || train.pause);
+    ui->epoch->setEnabled(!train.running || train.pause);
+    ui->learning_rate->setEnabled(!train.running || train.pause);
+
     ui->open_files->setEnabled(!train.running);
     ui->clear->setEnabled(!train.running);
     ui->open_labels->setEnabled(!train.running);
     ui->autofill->setEnabled(!train.running);
     ui->load_network->setEnabled(!train.running);
     ui->train_from_scratch->setEnabled(!train.running);
-    ui->batch_size->setEnabled(!train.running);
-    ui->epoch->setEnabled(!train.running);
-    ui->learning_rate->setEnabled(!train.running);
     ui->gpu->setEnabled(!train.running);
     ui->feature_string->setEnabled(!train.running);
     ui->save_error->setEnabled(train.cur_epoch);
@@ -347,7 +355,8 @@ void MainWindow::training()
 }
 
 
-
+void fuzzy_labels(tipl::image<3>& label,const std::vector<size_t>& weights);
+std::vector<size_t> get_label_count(const tipl::image<3>& label,size_t out_count);
 void MainWindow::on_list1_currentRowChanged(int currentRow)
 {
     if(ui->list2->currentRow() != currentRow)
@@ -359,10 +368,11 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),I1,I2,vs))
             I2.clear();
         if(ui->show_transform->isChecked())
-            load_image_and_label(I1,I2,vs,tipl::shape<3>(ui->dim_x->value(),ui->dim_y->value(),ui->dim_z->value()),time(0));
+            load_image_and_label(*option,I1,I2,vs,tipl::shape<3>(option->get<int>("dim_x"),
+                                                                 option->get<int>("dim_y"),
+                                                                 option->get<int>("dim_z")),time(0));
         if(!I2.empty())
-            tipl::expand_label_to_dimension(I2,out_count);
-        v2c1.set_range(0,tipl::max_value_mt(I1));
+            fuzzy_labels(I2,get_label_count(I2,out_count));
         ui->pos->setMaximum(I1.shape()[ui->view_dim->currentIndex()]-1);
     }
     else

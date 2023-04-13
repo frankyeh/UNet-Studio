@@ -1,0 +1,517 @@
+#include <QSlider>
+#include <QComboBox>
+#include <QHeaderView>
+#include <QDoubleSpinBox>
+#include <QSpinBox>
+#include <QLineEdit>
+#include <QFile>
+#include <QTextStream>
+#include "optiontablewidget.hpp"
+#include <iostream>
+#include <cmath>
+
+extern QSettings settings;
+void OptionItem::setValue(QVariant new_value)
+{
+    if(value == new_value)
+        return;
+    value = new_value;
+    if(!GUI)
+        return;
+    if(QString(GUI->metaObject()->className()) == "QSlider")
+    {
+        QSlider *slider = reinterpret_cast<QSlider*>(GUI);
+        if(slider->maximum() == 10) // int
+            slider->setValue(new_value.toInt());
+        else
+            slider->setValue(int(new_value.toFloat()*5.0f));
+    }
+    if(QString(GUI->metaObject()->className()) == "QDoubleSpinBox")
+    {
+        reinterpret_cast<QDoubleSpinBox*>(GUI)->setValue(double(new_value.toFloat()));
+    }
+    if(QString(GUI->metaObject()->className()) == "QSpinBox")
+    {
+        reinterpret_cast<QSpinBox*>(GUI)->setValue(new_value.toInt());
+
+    }
+    if(QString(GUI->metaObject()->className()) == "QLineEdit")
+    {
+        reinterpret_cast<QLineEdit*>(GUI)->setText(new_value.toString());
+
+    }
+    if(QString(GUI->metaObject()->className()) == "QComboBox")
+    {
+        reinterpret_cast<QComboBox*>(GUI)->setCurrentIndex(new_value.toInt());
+    }
+}
+void OptionItem::setMinMax(float min,float max,float step)
+{
+    if(!GUI)
+        return;
+    if(QString(GUI->metaObject()->className()) == "QDoubleSpinBox")
+    {
+        reinterpret_cast<QDoubleSpinBox*>(GUI)->setMaximum(double(max));
+        reinterpret_cast<QDoubleSpinBox*>(GUI)->setMinimum(double(min));
+        reinterpret_cast<QDoubleSpinBox*>(GUI)->setSingleStep(double(step));
+    }
+}
+void OptionItem::setList(QStringList list)
+{
+    if(!GUI)
+        return;
+    if(QString(GUI->metaObject()->className()) == "QComboBox")
+    {
+        reinterpret_cast<QComboBox*>(GUI)->clear();
+        reinterpret_cast<QComboBox*>(GUI)->addItems(list);
+    }
+}
+
+QWidget *OptionDelegate::createEditor(QWidget *parent,
+        const QStyleOptionViewItem &option,
+        const QModelIndex &index) const
+{
+    auto cur_node = reinterpret_cast<OptionItem*>(index.internalPointer());
+    QString string = index.data(Qt::UserRole+1).toString();
+    if (string == QString("int"))
+    {
+        QSlider* sd = new QSlider(parent);
+        sd->setOrientation(Qt::Horizontal);
+        sd->setRange(0,10);
+        sd->setMaximumWidth(100);
+        connect(sd, SIGNAL(valueChanged(int)), this, SLOT(emitCommitData()));
+        sd->setToolTip(cur_node->hint);
+        cur_node->GUI = sd;
+        return sd;
+    }
+    if (string == QString("slider"))
+    {
+        QSlider* sd = new QSlider(parent);
+        sd->setOrientation(Qt::Horizontal);
+        sd->setRange(0,50);
+        sd->setMaximumWidth(100);
+        connect(sd, SIGNAL(valueChanged(int)), this, SLOT(emitCommitData()));
+        sd->setToolTip(cur_node->hint);
+        cur_node->GUI = sd;
+        return sd;
+    }
+
+    QStringList string_list = index.data(Qt::UserRole+1).toStringList();
+    if (string_list.size() >= 1)
+    {
+        if(string_list[0] == QString("float"))
+        {
+            QDoubleSpinBox* dsb = new QDoubleSpinBox(parent);
+            dsb->setMinimum(string_list[1].toDouble());
+            dsb->setMaximum(string_list[2].toDouble());
+            if(string_list.size() > 3)
+                dsb->setSingleStep(string_list[3].toDouble());
+            else
+                dsb->setSingleStep((dsb->maximum()-dsb->minimum())/10);
+            if(string_list.size() > 4)
+                dsb->setDecimals(string_list[4].toInt());
+            else
+                dsb->setDecimals(std::max<int>(0,4-int(std::log10(dsb->maximum()))));
+            connect(dsb, SIGNAL(valueChanged(double)), this, SLOT(emitCommitData()));
+            dsb->setMaximumWidth(100);
+            dsb->setToolTip(cur_node->hint);
+            cur_node->GUI = dsb;
+            return dsb;
+        }
+        if(string_list[0] == QString("int"))
+        {
+            QSpinBox* dsb = new QSpinBox(parent);
+            dsb->setMinimum(string_list[1].toInt());
+            dsb->setMaximum(string_list[2].toInt());
+            if(string_list.size() > 3)
+                dsb->setSingleStep(string_list[3].toInt());
+            else
+                dsb->setSingleStep(std::max<int>(1,(dsb->maximum()-dsb->minimum())/10));
+            dsb->setMaximumWidth(100);
+            connect(dsb, SIGNAL(valueChanged(int)), this, SLOT(emitCommitData()));
+            dsb->setToolTip(cur_node->hint);
+            cur_node->GUI = dsb;
+            return dsb;
+        }
+        if(string_list[0] == QString("text"))
+        {
+            QLineEdit* txt = new QLineEdit(parent);
+            connect(txt, SIGNAL(valueChanged(QString)), this, SLOT(emitCommitData()));
+            txt->setToolTip(cur_node->hint);
+            cur_node->GUI = txt;
+            return txt;
+        }
+
+        {
+            QComboBox* cb = new QComboBox(parent);
+            cb->addItems(string_list);
+            cb->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+            cb->setMaximumWidth(100);
+            cb->setFocusPolicy(Qt::WheelFocus);
+            connect(cb, SIGNAL(currentIndexChanged(int)), this, SLOT(emitCommitData()));
+            cb->setToolTip(cur_node->hint);
+            cur_node->GUI = cb;
+            return cb;
+        }
+    }
+
+    return QItemDelegate::createEditor(parent,option,index);
+
+}
+
+void OptionDelegate::setEditorData(QWidget *editor,
+                                      const QModelIndex &index) const
+{
+    QString string = index.data(Qt::UserRole+1).toString();
+    if (string == QString("int"))
+    {
+        reinterpret_cast<QSlider*>(editor)->setValue(index.data(Qt::UserRole).toInt());
+        return;
+    }
+    if (string == QString("slider"))
+    {
+        reinterpret_cast<QSlider*>(editor)->setValue(int(index.data(Qt::UserRole).toFloat()*5.0f));
+        return;
+    }
+    if (string == QString("text"))
+    {
+        reinterpret_cast<QLineEdit*>(editor)->setText(index.data(Qt::UserRole).toString());
+        return;
+    }
+    QStringList string_list = index.data(Qt::UserRole+1).toStringList();
+    if (string_list.size() > 1)
+    {
+        if(string_list[0] == QString("float"))
+            reinterpret_cast<QDoubleSpinBox*>(editor)->setValue(index.data(Qt::UserRole).toDouble());
+        else
+            if(string_list[0] == QString("int"))
+                reinterpret_cast<QSpinBox*>(editor)->setValue(index.data(Qt::UserRole).toInt());
+            else
+                reinterpret_cast<QComboBox*>(editor)->setCurrentIndex(index.data(Qt::UserRole).toInt());
+        return;
+    }
+
+    QItemDelegate::setEditorData(editor,index);
+}
+
+void OptionDelegate::setModelData(QWidget *editor, QAbstractItemModel *model,
+                                     const QModelIndex &index) const
+{
+    if(index.column() == 0)
+    {
+        QItemDelegate::setModelData(editor,model,index);
+        return;
+    }
+    QString string = index.data(Qt::UserRole+1).toString();
+    if (string == QString("int"))
+    {
+        model->setData(index,reinterpret_cast<QSlider*>(editor)->value(),Qt::UserRole);
+        return;
+    }
+    if (string == QString("slider"))
+    {
+        model->setData(index,reinterpret_cast<QSlider*>(editor)->value()/5.0,Qt::UserRole);
+        return;
+    }
+    if (string == QString("text"))
+    {
+        model->setData(index,reinterpret_cast<QLineEdit*>(editor)->text(),Qt::UserRole);
+        return;
+    }
+
+    QStringList string_list = index.data(Qt::UserRole+1).toStringList();
+    if (string_list.size() > 1)
+    {
+        if(string_list[0] == QString("float"))
+            model->setData(index,reinterpret_cast<QDoubleSpinBox*>(editor)->value(),Qt::UserRole);
+        else
+            if(string_list[0] == QString("int"))
+                model->setData(index,reinterpret_cast<QSpinBox*>(editor)->value(),Qt::UserRole);
+            else
+                model->setData(index,reinterpret_cast<QComboBox*>(editor)->currentIndex(),Qt::UserRole);
+        return;
+    }
+    QItemDelegate::setModelData(editor,model,index);
+}
+
+void OptionDelegate::emitCommitData()
+{
+    emit commitData(qobject_cast<QWidget *>(sender()));
+}
+
+//---------------------------------
+
+TreeModel::TreeModel(OptionTableWidget *parent)
+        : QAbstractItemModel(parent)
+{
+    root.reset(new OptionItem("Objects","","root",0,nullptr));
+    root_mapping["Root"] = root.get();
+}
+void TreeModel::save(QSettings& set)
+{
+    std::map<QString,OptionItem*>::const_iterator iter = name_data_mapping.begin();
+    std::map<QString,OptionItem*>::const_iterator end = name_data_mapping.end();
+    set.beginGroup("Options");
+    for(;iter != end;++iter)
+        set.setValue(iter->first,iter->second->getValue());
+    set.endGroup();
+}
+void TreeModel::load(QSettings& set)
+{
+    std::map<QString,OptionItem*>::const_iterator iter = name_data_mapping.begin();
+    std::map<QString,OptionItem*>::const_iterator end = name_data_mapping.end();
+    std::map<QString,QVariant>::iterator iter2 = name_default_values.begin();
+    set.beginGroup("Options");
+    for(;iter != end;++iter,++iter2)
+        if(set.contains(iter->first))
+            iter->second->setValue(set.value(iter->first,iter2->second));
+    set.endGroup();
+}
+TreeModel::~TreeModel()
+{
+    save(settings);
+}
+
+int TreeModel::columnCount(const QModelIndex &) const
+{
+    return 2;
+}
+
+QVariant TreeModel::data(const QModelIndex &index, int role) const
+{
+    if (!index.isValid())
+        return QVariant();
+    auto cur_node = reinterpret_cast<OptionItem*>(index.internalPointer());
+    if (index.column() == 0) // title column
+    {
+        if(role == Qt::CheckStateRole &&
+            cur_node->type == QString("check"))
+            return cur_node->value;
+        if(role == Qt::DisplayRole)
+            return cur_node->title;
+    }
+    else // editor column
+    {
+        if (role == Qt::UserRole)
+            return cur_node->value;
+        if (role == Qt::UserRole+1)
+            return cur_node->type;
+    }
+
+    if (role == Qt::SizeHintRole)
+        return QSize(250,24);
+    return QVariant();
+}
+
+bool TreeModel::setData ( const QModelIndex & index, const QVariant & value, int role)
+{
+    if (!index.isValid())
+        return false;
+    auto cur_node = reinterpret_cast<OptionItem*>(index.internalPointer());
+    if(index.column() == 0) // title column
+    {
+        if (role == Qt::DisplayRole)
+            cur_node->title = value;
+        if (role == Qt::CheckStateRole &&
+            cur_node->type == QString("check"))
+        {
+            QVariant old_value = cur_node->value;
+            cur_node->value = value;
+            if(old_value != value)
+                emit dataChanged(index,index);
+        }
+        return true;
+    }
+    else// editor column
+    {
+        switch(role)
+        {
+        case Qt::UserRole:
+            {
+                QVariant old_value = cur_node->value;
+                cur_node->value = value;
+                if(old_value != value)
+                    emit dataChanged(index,index);
+            }
+            return true;
+        case Qt::UserRole+1:
+            cur_node->type = value;
+            return true;
+        case Qt::DisplayRole:
+            return true;
+        }
+    }
+    return false;
+}
+
+Qt::ItemFlags TreeModel::flags(const QModelIndex &index) const
+{
+    if (!index.isValid())
+        return Qt::NoItemFlags;
+    auto cur_node = reinterpret_cast<OptionItem*>(index.internalPointer());
+    if (index.column() >= 1 && !cur_node->type.isNull())
+        return Qt::ItemIsEnabled | Qt::ItemIsEditable;
+    else
+    if(cur_node->type == QString("check"))
+    {
+        return Qt::ItemIsUserCheckable | Qt::ItemIsEnabled;
+    }
+    else
+        return Qt::ItemIsEnabled;
+}
+
+QVariant TreeModel::headerData(int section, Qt::Orientation orientation,
+                               int role) const
+{
+    if (orientation == Qt::Horizontal && role == Qt::DisplayRole)
+        return (section) ? root->title : root->type;
+    return QVariant();
+}
+
+QModelIndex TreeModel::index(int row, int column, const QModelIndex &parent)
+const
+{
+    if (!hasIndex(row, column, parent))
+        return QModelIndex();
+
+    OptionItem *parentItem;
+
+    if (!parent.isValid())
+        parentItem = root.get();
+    else
+        parentItem = static_cast<OptionItem*>(parent.internalPointer());
+
+    OptionItem *childItem = parentItem->child(row);
+    if (childItem)
+        return createIndex(row, column, childItem);
+    else
+        return QModelIndex();
+}
+
+QModelIndex TreeModel::parent(const QModelIndex &index) const
+{
+    if (!index.isValid())
+        return QModelIndex();
+
+    OptionItem *childItem = reinterpret_cast<OptionItem*>(index.internalPointer());
+    OptionItem *parentItem = childItem->parent();
+
+    if (parentItem == root.get())
+        return QModelIndex();
+
+    return createIndex(parentItem->row(), 0, parentItem);
+}
+
+int TreeModel::rowCount(const QModelIndex &parent) const
+{
+    OptionItem *parentItem;
+    if (parent.column() > 0)
+        return 0;
+
+    if (!parent.isValid())
+        parentItem = root.get();
+    else
+        parentItem = static_cast<OptionItem*>(parent.internalPointer());
+
+    return parentItem->childCount();
+}
+void TreeModel::addNode(QString root_name,QString id,QVariant title)
+{
+    root_mapping[id] = new OptionItem(title,QVariant(),id,0,root_mapping[root_name]);
+}
+QModelIndex TreeModel::addItem(QString root_name,QString id,QVariant title, QVariant type, QVariant value,QString hint)
+{
+    if(!name_data_mapping[id])
+    {
+        settings.beginGroup("Options");
+        auto item = new OptionItem(title,type,id,settings.value(id,value),root_mapping[root_name]);
+        item->hint = hint;
+        name_data_mapping[id] = item;
+        name_default_values[id] = value;
+        settings.endGroup();
+    }
+    else
+        std::cout << "Duplicated item name in rending option" << std::endl;
+    return createIndex(root_mapping[root_name]->childCount()-1,1,name_data_mapping[id]);
+}
+
+void TreeModel::setDefault(QString parent_id)
+{
+    std::map<QString,OptionItem*>::iterator iter = name_data_mapping.begin();
+    std::map<QString,OptionItem*>::iterator end = name_data_mapping.end();
+    std::map<QString,QVariant>::iterator iter2 = name_default_values.begin();
+    for(;iter != end;++iter,++iter2)
+        if(iter->second->parent() && iter->second->parent()->id == parent_id)
+        iter->second->setValue(iter2->second);
+
+}
+
+OptionTableWidget::OptionTableWidget(MainWindow& mainwindow_,QWidget *parent) :
+        QTreeView(parent),mainwindow(mainwindow_)
+{
+    setItemDelegateForColumn(1,data_delegate = new OptionDelegate(this));
+    setAlternatingRowColors(true);
+
+    setModel(treemodel = new TreeModel(this));
+    connect(treemodel,SIGNAL(dataChanged(QModelIndex,QModelIndex)),this,SLOT(dataChanged(QModelIndex,QModelIndex)));
+    initialize();
+
+    header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    header()->setSectionResizeMode(1, QHeaderView::Fixed);
+    header()->setStretchLastSection(false);
+    header()->resizeSection(0, 150);
+    header()->resizeSection(1, 100);
+    header()->hide();
+    expandAll();
+    collapseAll();
+
+}
+
+void OptionTableWidget::initialize(void)
+{
+    // Environment
+    QFile data(":/options.txt");
+    if (!data.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
+    QTextStream in(&data);
+    QString last_root;
+    while (!in.atEnd())
+    {
+        QStringList list = in.readLine().split('/');
+        if(list[0] != last_root)
+        {
+            treemodel->addNode("Root",list[0],list[0]);
+            last_root = list[0];
+        }
+        if(list.size() == 3) // tree node
+        {
+            treemodel->addNode(list[0],list[2],list[1]);
+            continue;
+        }
+        if(list.size() < 5)
+            continue;
+        QStringList value_list = list[3].split(':');
+        QModelIndex index;
+        if(value_list.size() == 1)
+            index = treemodel->addItem(list[0],list[2],list[1],list[3],list[4].toDouble(),list.size() == 6 ? list[5]:QString());
+        else
+            index = treemodel->addItem(list[0],list[2],list[1],value_list,list[4].toDouble(),list.size() == 6 ? list[5]:QString());
+        openPersistentEditor(index);
+    }
+}
+void OptionTableWidget::setDefault(QString parent_id)
+{
+    treemodel->setDefault(parent_id);
+}
+void OptionTableWidget::dataChanged(const QModelIndex &, const QModelIndex &bottomRight)
+{
+    /*
+    auto cur_node = reinterpret_cast<OptionItem*>(bottomRight.internalPointer());
+    if(cur_node->id == "option")
+    {
+        //
+        return;
+    }
+     */
+
+}
