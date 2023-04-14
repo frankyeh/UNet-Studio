@@ -47,7 +47,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 private:
     Ui::MainWindow *ui;
-    OptionTableWidget* option;
+    OptionTableWidget* option,*postproc;
 public: //training
     QGraphicsScene train_scene1,train_scene2,error_scene;
     tipl::image<3> I1,I2;
@@ -109,11 +109,13 @@ private slots:
     void on_save_evale_image_clicked();
     void on_error_x_size_valueChanged(int arg1);
     void on_error_y_size_valueChanged(int arg1);
-    void on_post_processing_clicked();
     void on_save_error_clicked();
     void on_open_error_clicked();
     void on_clear_error_clicked();
     void on_actionSave_Training_triggered();
     void on_actionOpen_Training_triggered();
+
+    void plot_error();
+    void runAction(QString);
 };
 #endif // MAINWINDOW_H

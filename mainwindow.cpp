@@ -16,7 +16,11 @@ MainWindow::MainWindow(QWidget *parent)
 {
 
     ui->setupUi(this);
-    ui->option_widget_layout->addWidget(option = new OptionTableWidget(*this,ui->option_widget));
+    ui->option_widget_layout->addWidget(option = new OptionTableWidget(*this,ui->option_widget,":/options.txt"));
+    ui->postproc_widget_layout->addWidget(postproc = new OptionTableWidget(*this,ui->postproc_widget,":/postproc.txt"));
+    connect(postproc,SIGNAL(runAction(QString)),this,SLOT(runAction(QString)));
+
+
     ui->tabWidget->setCurrentIndex(0);
     console.log_window = ui->console;
     console.show_output();
@@ -71,5 +75,5 @@ void MainWindow::on_eval_view_dim_currentIndexChanged(int index){   on_eval_pos_
 void MainWindow::on_view_dim_currentIndexChanged(int index){  on_pos_valueChanged(ui->pos->value()); }
 void MainWindow::on_label_slider_valueChanged(int value){    on_pos_valueChanged(ui->pos->value());}
 void MainWindow::on_eval_label_slider_valueChanged(int value){    on_eval_pos_valueChanged(ui->eval_pos->value());}
-void MainWindow::on_error_x_size_valueChanged(int arg1){error_view_epoch = 0;}
-void MainWindow::on_error_y_size_valueChanged(int arg1){error_view_epoch = 0;}
+void MainWindow::on_error_x_size_valueChanged(int arg1){plot_error();}
+void MainWindow::on_error_y_size_valueChanged(int arg1){plot_error();}

@@ -2,6 +2,7 @@
 #include <QComboBox>
 #include <QHeaderView>
 #include <QDoubleSpinBox>
+#include <QPushButton>
 #include <QSpinBox>
 #include <QLineEdit>
 #include <QFile>
@@ -73,6 +74,15 @@ QWidget *OptionDelegate::createEditor(QWidget *parent,
 {
     auto cur_node = reinterpret_cast<OptionItem*>(index.internalPointer());
     QString string = index.data(Qt::UserRole+1).toString();
+    if (string == QString("button"))
+    {
+        QPushButton* pb = new QPushButton(parent);
+        connect(pb, SIGNAL(clicked()), this->parent(), SLOT(action()));
+        pb->setText("Apply");
+        pb->setObjectName(cur_node->id);
+        cur_node->GUI = pb;
+        return pb;
+    }
     if (string == QString("int"))
     {
         QSlider* sd = new QSlider(parent);
@@ -238,6 +248,7 @@ void OptionDelegate::emitCommitData()
 {
     emit commitData(qobject_cast<QWidget *>(sender()));
 }
+
 
 //---------------------------------
 
@@ -446,7 +457,7 @@ void TreeModel::setDefault(QString parent_id)
 
 }
 
-OptionTableWidget::OptionTableWidget(MainWindow& mainwindow_,QWidget *parent) :
+OptionTableWidget::OptionTableWidget(MainWindow& mainwindow_,QWidget *parent,const char* source) :
         QTreeView(parent),mainwindow(mainwindow_)
 {
     setItemDelegateForColumn(1,data_delegate = new OptionDelegate(this));
@@ -454,7 +465,7 @@ OptionTableWidget::OptionTableWidget(MainWindow& mainwindow_,QWidget *parent) :
 
     setModel(treemodel = new TreeModel(this));
     connect(treemodel,SIGNAL(dataChanged(QModelIndex,QModelIndex)),this,SLOT(dataChanged(QModelIndex,QModelIndex)));
-    initialize();
+    initialize(source);
 
     header()->setSectionResizeMode(0, QHeaderView::Stretch);
     header()->setSectionResizeMode(1, QHeaderView::Fixed);
@@ -467,10 +478,10 @@ OptionTableWidget::OptionTableWidget(MainWindow& mainwindow_,QWidget *parent) :
 
 }
 
-void OptionTableWidget::initialize(void)
+void OptionTableWidget::initialize(const char* source)
 {
     // Environment
-    QFile data(":/options.txt");
+    QFile data(source);
     if (!data.open(QIODevice::ReadOnly | QIODevice::Text))
         return;
     QTextStream in(&data);
@@ -505,13 +516,12 @@ void OptionTableWidget::setDefault(QString parent_id)
 }
 void OptionTableWidget::dataChanged(const QModelIndex &, const QModelIndex &bottomRight)
 {
-    /*
-    auto cur_node = reinterpret_cast<OptionItem*>(bottomRight.internalPointer());
-    if(cur_node->id == "option")
-    {
-        //
-        return;
-    }
-     */
-
+    //auto cur_node = reinterpret_cast<OptionItem*>(bottomRight.internalPointer());
+    //std::cout << cur_node->id.toStdString() << std::endl;
+}
+void OptionTableWidget::action()
+{
+    auto button = reinterpret_cast<QPushButton*>(sender());
+    if(button)
+        emit runAction(button->objectName());
 }

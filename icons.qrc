@@ -9,5 +9,6 @@
     </qresource>
     <qresource prefix="/">
         <file>options.txt</file>
+        <file>postproc.txt</file>
     </qresource>
 </RCC>

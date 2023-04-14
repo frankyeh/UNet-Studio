@@ -147,7 +147,7 @@ public:
     OptionDelegate* data_delegate;
     TreeModel* treemodel;
 public:
-    explicit OptionTableWidget(MainWindow& mainwindow_,QWidget *parent);
+    explicit OptionTableWidget(MainWindow& mainwindow_,QWidget *parent,const char* source);
     QVariant getData(QString name) const{return treemodel->getData(name);}
     bool has(QString name) const{return treemodel->getData(name).toBool();}
     template<typename T>
@@ -167,12 +167,16 @@ public:
     void setData(QString name,QVariant data){(*treemodel)[name].setValue(data);}
     void setMinMax(QString name,float min,float max,float step){(*treemodel)[name].setMinMax(min,max,step);}
     void setList(QString name,QStringList list){(*treemodel)[name].setList(list);}
-    void initialize(void);
+    void initialize(const char* source);
     void load(QSettings& set){treemodel->load(set);}
     void save(QSettings& set){treemodel->save(set);}
+
+Q_SIGNALS:
+    void runAction(QString command);
 public slots:
     void setDefault(QString parent_id);
     void dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight);
+    void action();
 };
 
 #endif // OptionTABLEWIDGET_H

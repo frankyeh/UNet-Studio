@@ -23,10 +23,9 @@ void MainWindow::update_evaluate_list(void)
 }
 void MainWindow::on_open_evale_image_clicked()
 {
-    QStringList file = QFileDialog::getOpenFileNames(this,"Open Image",settings.value("on_open_evale_image_clicked").toString(),"NIFTI files (*nii.gz);;All files (*)");
+    QStringList file = QFileDialog::getOpenFileNames(this,"Open Image",settings.value("work_dir").toString(),"NIFTI files (*nii.gz);;All files (*)");
     if(file.isEmpty())
         return;
-    settings.setValue("on_open_evale_image_clicked",file[0]);
     evaluate_list << file;
     update_evaluate_list();
 }
@@ -50,13 +49,15 @@ void MainWindow::on_eval_from_train_clicked()
 
 void MainWindow::on_eval_from_file_clicked()
 {
-    QString file = QFileDialog::getOpenFileName(this,"Open Network File",settings.value("on_eval_from_file_clicked").toString(),"Network files (*net.gz);;All files (*)");
-    if(file.isEmpty() || !load_from_file(evaluate.model,file.toStdString().c_str()))
+    QString fileName = QFileDialog::getOpenFileName(this,"Open Network File",                                                settings.value("work_dir").toString() + "/" +
+                                                    settings.value("work_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
+    if(fileName.isEmpty() || !load_from_file(evaluate.model,fileName.toStdString().c_str()))
         return;
     ui->evaluate_network->setText(QString("UNet %1->%2->%3").arg(evaluate.model->in_count).arg(evaluate.model->feature_string.c_str()).arg(evaluate.model->out_count));
     ui->evaluate->setEnabled(true);
     QMessageBox::information(this,"","Loaded");
-    settings.setValue("on_eval_from_file_clicked",file);
+    settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
+    settings.setValue("work_file",QFileInfo(fileName.remove(".net.gz")).fileName());
 }
 
 void MainWindow::on_evaluate_clicked()
@@ -200,38 +201,41 @@ void MainWindow::on_save_evale_image_clicked()
 }
 
 
-void MainWindow::on_post_processing_clicked()
+void MainWindow::runAction(QString command)
 {
-    tipl::progress p("processing",true);
-    size_t count = 0;
-    tipl::par_for(evaluate.evaluate_output.size(),[&](size_t index)
+    tipl::out() << "run " << command.toStdString();
+    /*
     {
-        if(!p(count,evaluate.evaluate_output.size()))
-            return;
-        auto dim = evaluate.evaluate_image_shape[index];
-        size_t out_count = evaluate.evaluate_output[index].depth()/dim.depth();
-        for(size_t label = 0;label < out_count;++label)
+        tipl::progress p("processing",true);
+        size_t count = 0;
+        tipl::par_for(evaluate.evaluate_output.size(),[&](size_t index)
         {
-            auto from = evaluate.evaluate_output[index].alias(dim.size()*label,dim);
-            tipl::image<3> smoothed_from(from);
-            tipl::filter::mean(smoothed_from);
-            tipl::filter::mean(smoothed_from);
-            tipl::image<3,char> mask(dim);
-            for(size_t i = 0;i < mask.size();++i)
-                mask[i] = smoothed_from[i] > 0.5f ? 1:0;
-            tipl::morphology::defragment(mask);
-            tipl::morphology::dilation(mask);
-            tipl::morphology::dilation(mask);
-            for(size_t i = 0;i < mask.size();++i)
-                if(mask[i] == 0)
-                    from[i] = 0;
-            tipl::lower_threshold(from,0.0f);
-            tipl::upper_threshold(from,1.0f);
-        }
-        ++count;
-    });
-    if(!p.aborted())
-        QMessageBox::information(this,"Done","Completed");
+            if(!p(count,evaluate.evaluate_output.size()))
+                return;
+            auto dim = evaluate.evaluate_image_shape[index];
+            size_t out_count = evaluate.evaluate_output[index].depth()/dim.depth();
+            for(size_t label = 0;label < out_count;++label)
+            {
+                auto from = evaluate.evaluate_output[index].alias(dim.size()*label,dim);
+                tipl::image<3> smoothed_from(from);
+                tipl::filter::mean(smoothed_from);
+                tipl::filter::mean(smoothed_from);
+                tipl::image<3,char> mask(dim);
+                for(size_t i = 0;i < mask.size();++i)
+                    mask[i] = smoothed_from[i] > 0.5f ? 1:0;
+                tipl::morphology::defragment(mask);
+                tipl::morphology::dilation(mask);
+                tipl::morphology::dilation(mask);
+                for(size_t i = 0;i < mask.size();++i)
+                    if(mask[i] == 0)
+                        from[i] = 0;
+                tipl::lower_threshold(from,0.0f);
+                tipl::upper_threshold(from,1.0f);
+            }
+            ++count;
+        });
+        if(!p.aborted())
+            QMessageBox::information(this,"Done","Completed");
+    }*/
 }
-
 

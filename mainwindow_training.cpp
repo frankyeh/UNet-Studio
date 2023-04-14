@@ -11,11 +11,11 @@ extern QSettings settings;
 void MainWindow::on_actionOpen_Training_triggered()
 {
     QString fileName = QFileDialog::getOpenFileName(
-        this,"Open Training Setting",settings.value("on_actionOpen_Training_triggered").toString(),"INI files (*.ini);;All files (*)"
+        this,"Open Training Setting",settings.value("work_dir").toString() + "/" +
+                                     settings.value("work_file").toString() + ".ini","INI files (*.ini);;All files (*)"
     );
     if (fileName.isEmpty())
         return;
-    settings.setValue("on_actionOpen_Training_triggered",fileName);
 
     QSettings ini(fileName,QSettings::IniFormat);
     image_list = ini.value("image",image_list).toStringList();
@@ -26,16 +26,20 @@ void MainWindow::on_actionOpen_Training_triggered()
     ui->batch_size->setValue(ini.value("batch_size",ui->batch_size->value()).toInt());
     ui->learning_rate->setValue(ini.value("learning_rate",ui->learning_rate->value()).toFloat());
     option->load(ini);
+
+    settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
+    settings.setValue("work_file",QFileInfo(fileName.remove(".ini")).fileName());
+
 }
 
 void MainWindow::on_actionSave_Training_triggered()
 {
     QString fileName = QFileDialog::getSaveFileName(
-        this,"Save Training Setting",settings.value("on_actionSave_Training_triggered").toString(),"INI files (*.ini);;All files (*)"
+        this,"Save Training Setting",settings.value("work_dir").toString() + "/" +
+                                     settings.value("work_file").toString() + ".ini","INI files (*.ini);;All files (*)"
     );
     if (fileName.isEmpty())
         return;
-    settings.setValue("on_actionSave_Training_triggered",fileName);
 
     QSettings ini(fileName,QSettings::IniFormat);
     ini.setValue("image",image_list);
@@ -46,6 +50,9 @@ void MainWindow::on_actionSave_Training_triggered()
     ini.setValue("learning_rate",ui->learning_rate->value());
     option->save(ini);
     ini.sync();
+
+    settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
+    settings.setValue("work_file",QFileInfo(fileName.remove(".ini")).fileName());
 
 }
 
@@ -85,11 +92,12 @@ void MainWindow::update_list(void)
 void MainWindow::on_open_files_clicked()
 {
     QStringList fileNames = QFileDialog::getOpenFileNames(
-        this,"Select NIFTI images",settings.value("on_open_files_clicked").toString(),"NIFTI files (*nii.gz);;All files (*)"
+        this,"Select NIFTI images",settings.value("work_dir").toString(),"NIFTI files (*nii.gz);;All files (*)"
     );
     if (fileNames.isEmpty())
         return;
-    settings.setValue("on_open_files_clicked",fileNames[0]);
+    settings.setValue("work_dir",QFileInfo(fileNames[0]).absolutePath());
+
     for(auto s : fileNames)
     {
         image_list << s;
@@ -102,11 +110,11 @@ void MainWindow::on_open_files_clicked()
 void MainWindow::on_open_labels_clicked()
 {
     QStringList fileNames = QFileDialog::getOpenFileNames(
-        this,"Select NIFTI images",settings.value("on_open_labels_clicked").toString(),"NIFTI files (*nii.gz);;All files (*)"
+        this,"Select NIFTI images",settings.value("work_dir").toString(),"NIFTI files (*nii.gz);;All files (*)"
     );
     if (fileNames.isEmpty())
         return;
-    settings.setValue("on_open_labels_clicked",fileNames[0]);
+    settings.setValue("work_dir",QFileInfo(fileNames[0]).absolutePath());
     auto index = ui->list2->currentRow();
     for(int i = 0;i < fileNames.size() && index < label_list.size();++i,++index)
         label_list[index] = fileNames[i];
@@ -154,21 +162,27 @@ void MainWindow::on_train_from_scratch_clicked()
 }
 void MainWindow::on_load_network_clicked()
 {
-    QString file = QFileDialog::getOpenFileName(this,"Open network file",settings.value("on_load_network_clicked").toString(),"Network files (*net.gz);;All files (*)");
-    if(file.isEmpty() || !load_from_file(train.model,file.toStdString().c_str()))
+    QString fileName = QFileDialog::getOpenFileName(this,"Open network file",
+                                                settings.value("work_dir").toString() + "/" +
+                                                settings.value("work_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
+    if(fileName.isEmpty() || !load_from_file(train.model,fileName.toStdString().c_str()))
         return;
-
     ui->feature_string->setText(train.model->feature_string.c_str());
     QMessageBox::information(this,"","Loaded");
-    settings.setValue("on_load_network_clicked",file);
+    settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
+    settings.setValue("work_file",QFileInfo(fileName.remove(".net.gz")).fileName());
+
 }
 void MainWindow::on_save_network_clicked()
 {
-    QString file = QFileDialog::getSaveFileName(this,"Save network file",settings.value("on_save_network_clicked").toString(),"Network files (*net.gz);;All files (*)");
-    if(!file.isEmpty() && save_to_file(train.model,file.toStdString().c_str()))
+    QString fileName = QFileDialog::getSaveFileName(this,"Save network file",
+                                                settings.value("work_dir").toString() + "/" +
+                                                settings.value("work_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
+    if(!fileName.isEmpty() && save_to_file(train.model,fileName.toStdString().c_str()))
     {
         QMessageBox::information(this,"","Network Saved");
-        settings.setValue("on_save_network_clicked",file);
+        settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
+        settings.setValue("work_file",QFileInfo(fileName.remove(".net.gz")).fileName());
     }
 
 }
@@ -189,8 +203,6 @@ void MainWindow::on_start_training_clicked()
     if(train.running)
     {
         train.pause = !train.pause;
-        ui->start_training->setText(train.pause ? "Resume":"Pause");
-        ui->train_prog->setEnabled(!train.pause);
         return;
     }
     if(!ready_to_train)
@@ -248,51 +260,23 @@ void MainWindow::on_end_training_clicked()
     train.stop();
 }
 
-void MainWindow::training()
+void MainWindow::plot_error()
 {
-    console.show_output();
-    ui->batch_size->setEnabled(!train.running || train.pause);
-    ui->epoch->setEnabled(!train.running || train.pause);
-    ui->learning_rate->setEnabled(!train.running || train.pause);
-
-    ui->open_files->setEnabled(!train.running);
-    ui->clear->setEnabled(!train.running);
-    ui->open_labels->setEnabled(!train.running);
-    ui->autofill->setEnabled(!train.running);
-    ui->load_network->setEnabled(!train.running);
-    ui->train_from_scratch->setEnabled(!train.running);
-    ui->gpu->setEnabled(!train.running);
-    ui->feature_string->setEnabled(!train.running);
-    ui->save_error->setEnabled(train.cur_epoch);
-    ui->training->setEnabled(train.running);
-
-    if(!train.running)
-        ui->training->movie()->stop();
-    else
+    if(train.cur_epoch > 1)
     {
-        if(train.pause)
-            ui->training->movie()->stop();
-        else
-            ui->training->movie()->start();
-    }
-    ui->train_prog->setValue(train.cur_epoch+1);
-    ui->train_prog->setFormat(QString( "epoch: %1/%2 error: %3" ).arg(train.cur_epoch).arg(ui->train_prog->maximum()).arg(train.cur_epoch ? std::to_string(train.error[train.cur_epoch-1]).c_str():"pending"));
-    ui->statusbar->showMessage(train.status.c_str());
-    ui->end_training->setEnabled(train.running);
-
-    if(train.cur_epoch > 1 && train.cur_epoch >= error_view_epoch)
-    {
-        auto x_scale = std::min<float>(5.0f,float(ui->error_x_size->value())/float(train.cur_epoch+1));
+        size_t x_size = ui->error_x_size->value();
+        size_t y_size = ui->error_y_size->value();
+        auto x_scale = std::min<float>(5.0f,float(x_size)/float(train.cur_epoch+1));
         size_t s = std::min<int>(train.cur_epoch,train.error.size());
         size_t s2 = std::min<int>(train.cur_epoch,train.test_error.size());
-        size_t s3 = std::min<int>(loaded_error1.size(),(ui->error_x_size->value()-10)/x_scale);
-        size_t s4 = std::min<int>(loaded_error2.size(),(ui->error_x_size->value()-10)/x_scale);
+        size_t s3 = std::min<int>(loaded_error1.size(),float(x_size)/x_scale);
+        size_t s4 = std::min<int>(loaded_error2.size(),float(x_size)/x_scale);
 
-        QImage image(ui->error_x_size->value(),ui->error_y_size->value(),QImage::Format_RGB32);
+        QImage image(x_size+10,y_size+10,QImage::Format_RGB32);
         QPainter painter(&image);
         painter.fillRect(image.rect(), Qt::white);
         painter.setPen(QPen(Qt::black, 2));
-        painter.drawRect(QRectF(5, 5, image.width() - 10, image.height() - 10));
+        painter.drawRect(QRectF(5, 5, x_size,y_size));
 
         std::vector<float> y_value(train.error.begin(),train.error.begin()+s);
         if(s2)
@@ -314,16 +298,22 @@ void MainWindow::training()
 
         QVector<QPointF> p1,p2,p3,p4;
         for(size_t i = 0;i < y_value1.size();++i)
-            p1 << QPointF(i*x_scale+5,y_value1[i]+5);
+            p1 << QPointF(float(i)*x_scale+5,y_value1[i]+5);
+
         for(size_t i = 0;i < y_value2.size();++i)
-            p2 << QPointF(i*x_scale+5,y_value2[i]+5);
+            p2 << QPointF(float(i)*x_scale+5,y_value2[i]+5);
         for(size_t i = 0;i < y_value3.size();++i)
-            p3 << QPointF(i*x_scale+5,y_value3[i]+5);
+            p3 << QPointF(float(i)*x_scale+5,y_value3[i]+5);
         for(size_t i = 0;i < y_value4.size();++i)
-            p4 << QPointF(i*x_scale+5,y_value4[i]+5);
+            p4 << QPointF(float(i)*x_scale+5,y_value4[i]+5);
 
         if(!p1.empty())
+        {
+            painter.setPen(QPen(Qt::black, 2));
             painter.drawPolyline(p1);
+            painter.setPen(QPen(Qt::black, 1));
+            painter.drawLine(5,p1.back().y(),p1.back().x(),p1.back().y());
+        }
         if(!p3.empty())
         {
             painter.setPen(QPen(Qt::black, 1));
@@ -333,6 +323,8 @@ void MainWindow::training()
         {
             painter.setPen(QPen(Qt::red, 2));
             painter.drawPolyline(p2);
+            painter.setPen(QPen(Qt::red, 1));
+            painter.drawLine(5,p2.back().y(),p2.back().x(),p2.back().y());
         }
         if(!p4.empty())
         {
@@ -343,15 +335,56 @@ void MainWindow::training()
         error_scene << image;
     }
 
+}
 
+void MainWindow::training()
+{
     if(!train.running)
-    {
         timer->stop();
-        if(!train.error_msg.empty())
-            QMessageBox::critical(this,"Error",train.error_msg.c_str());
-        ui->start_training->setText("Start");
-        ui->train_prog->setValue(0);
+
+    console.show_output();
+
+    if(!train.error_msg.empty())
+    {
+        QMessageBox::critical(this,"Error",train.error_msg.c_str());
+        train.error_msg.clear();
     }
+
+    ui->start_training->setText(train.running ? (train.pause ? "Resume":"Pause") : "Start");
+    ui->batch_size->setEnabled(!train.running || train.pause);
+    ui->epoch->setEnabled(!train.running || train.pause);
+    ui->learning_rate->setEnabled(!train.running || train.pause);
+
+    ui->open_files->setEnabled(!train.running);
+    ui->clear->setEnabled(!train.running);
+    ui->open_labels->setEnabled(!train.running);
+    ui->autofill->setEnabled(!train.running);
+    ui->load_network->setEnabled(!train.running);
+    ui->train_from_scratch->setEnabled(!train.running);
+    ui->gpu->setEnabled(!train.running);
+    ui->feature_string->setEnabled(!train.running);
+    ui->save_error->setEnabled(!train.error.empty());
+    ui->training->setEnabled(train.running);
+
+    if(!train.running || train.pause)
+        ui->training->movie()->stop();
+    else
+        ui->training->movie()->start();
+
+    if(train.running)
+    {
+        ui->train_prog->setEnabled(!train.pause);
+        ui->train_prog->setValue(train.cur_epoch+1);
+        ui->train_prog->setFormat(QString( "epoch: %1/%2 error: %3" ).arg(train.cur_epoch).arg(ui->train_prog->maximum()).arg(train.cur_epoch ? std::to_string(train.error[train.cur_epoch-1]).c_str():"pending"));
+    }
+    else
+        ui->train_prog->setValue(0);
+
+    ui->statusbar->showMessage(train.status.c_str());
+    ui->end_training->setEnabled(train.running);
+
+    if(train.cur_epoch >= error_view_epoch)
+        plot_error();
 }
 
 
