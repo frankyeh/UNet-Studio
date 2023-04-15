@@ -71,6 +71,7 @@ private:
 public:
     train_unet train;
     evaluate_unet evaluate;
+    QString train_name,eval_name;
     QTimer *timer,*eval_timer;
 public:
     MainWindow(QWidget *parent = nullptr);

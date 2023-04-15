@@ -345,11 +345,6 @@ void load_image_and_label(const OptionTableWidget& options,
     bool apply_perlin_noise = apply("perlin_noise");
     if(apply_self_replication || apply_perlin_noise)
     {
-        if(apply("dropout"))
-        {
-            image_out = 0;
-            label = 0;
-        }
         if(apply_self_replication)
         {
             tipl::image<3> background(template_shape);
@@ -365,7 +360,7 @@ void load_image_and_label(const OptionTableWidget& options,
             for(size_t i = 0;i < image_out.size();++i)
                 image_out[i] += background[i]/(0.1f+image_out[i]);
         }
-
+        else
         if(apply_perlin_noise)
         {
             std::vector<int> p(512);
@@ -395,9 +390,9 @@ void load_image_and_label(const OptionTableWidget& options,
                 background[pos] = v-std::floor(v);
             });
 
-            tipl::normalize(background,options.get<float>("perlin_noise_mag"));
-            for(size_t i = 0;i < image_out.size();++i)
-                image_out[i] += background[i]/(0.1f+image_out[i]);
+            tipl::normalize(background,1.0f);
+            image_out.swap(background);
+            label = 0;
         }
     }
 
@@ -632,20 +627,20 @@ void train_unet::train(void)
                     sum_error += loss.item().toFloat();
                     loss.backward();
                     tensor_ready[data_index] = false;
-                    if(b+1 == param.batch_size ||
-                       (    param.from_scratch &&
-                            (b+1)%int(std::pow(2,std::floor(std::log2(cur_epoch/2+1)))) == 0) )
+
+                }
+
+                {
+                    optimizer->step();
+                    optimizer->zero_grad();
+                    model->total_training_count += param.batch_size;
+                    tipl::out() << "epoch:" << cur_epoch << " error:" << (error[cur_epoch] = sum_error/float(param.batch_size)) << std::endl;
+                    if(param.learning_rate != optimizer->defaults().get_lr())
                     {
-                        optimizer->step();
-                        optimizer->zero_grad();
-                        if(param.learning_rate != optimizer->defaults().get_lr())
-                        {
-                            tipl::out() << "set learning rate to " << param.learning_rate << std::endl;
-                            optimizer->defaults().set_lr(param.learning_rate);
-                        }
+                        tipl::out() << "set learning rate to " << param.learning_rate << std::endl;
+                        optimizer->defaults().set_lr(param.learning_rate);
                     }
                 }
-                tipl::out() << "epoch:" << cur_epoch << " error:" << (error[cur_epoch] = sum_error/float(param.batch_size)) << std::endl;
                 if(!test_in_tensor.empty())
                 {
                     torch::NoGradGuard no_grad;
@@ -659,7 +654,6 @@ void train_unet::train(void)
                     model->set_requires_grad(true);
                     model->set_bn_tracking_running_stats(true);
                     model->train();
-
                 }
             }
         }

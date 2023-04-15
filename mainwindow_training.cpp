@@ -2,6 +2,7 @@
 #include "./ui_mainwindow.h"
 #include "optiontablewidget.hpp"
 #include <QFileDialog>
+#include <QInputDialog>
 #include <QSettings>
 #include <QMessageBox>
 #include <QMovie>
@@ -21,7 +22,6 @@ void MainWindow::on_actionOpen_Training_triggered()
     image_list = ini.value("image",image_list).toStringList();
     label_list = ini.value("label",label_list).toStringList();
     update_list();
-    ui->feature_string->setText(ini.value("feature_string",ui->feature_string->text()).toString());
     ui->epoch->setValue(ini.value("epoch",ui->epoch->value()).toInt());
     ui->batch_size->setValue(ini.value("batch_size",ui->batch_size->value()).toInt());
     ui->learning_rate->setValue(ini.value("learning_rate",ui->learning_rate->value()).toFloat());
@@ -44,7 +44,6 @@ void MainWindow::on_actionSave_Training_triggered()
     QSettings ini(fileName,QSettings::IniFormat);
     ini.setValue("image",image_list);
     ini.setValue("label",label_list);
-    ini.setValue("feature_string",ui->feature_string->text());
     ini.setValue("epoch",ui->epoch->value());
     ini.setValue("batch_size",ui->batch_size->value());
     ini.setValue("learning_rate",ui->learning_rate->value());
@@ -87,6 +86,7 @@ void MainWindow::update_list(void)
         ui->output_info->setText(QString("dim: %1 type: %2").arg(out_count).arg(is_label?"label":"scalar"));
         ui->label_slider->setMaximum(out_count-1);
     }
+    on_list1_currentRowChanged(ui->list1->currentRow());
 }
 
 void MainWindow::on_open_files_clicked()
@@ -156,9 +156,13 @@ void MainWindow::on_clear_clicked()
 
 void MainWindow::on_train_from_scratch_clicked()
 {
+    auto feature = QInputDialog::getText(this,"","Please Specify Network Structure",QLineEdit::Normal,"8x8+16x16+32x32+64x64+128x128");
+    if(feature.isEmpty())
+        return;
     torch::manual_seed(0);
-    train.model = UNet3d(1,out_count,ui->feature_string->text().toStdString());
-    QMessageBox::information(this,"","A new network loaded");
+    train.model = UNet3d(1,out_count,feature.toStdString());
+    ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
+    ui->batch_size->setValue(1);
 }
 void MainWindow::on_load_network_clicked()
 {
@@ -167,22 +171,25 @@ void MainWindow::on_load_network_clicked()
                                                 settings.value("work_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
     if(fileName.isEmpty() || !load_from_file(train.model,fileName.toStdString().c_str()))
         return;
-    ui->feature_string->setText(train.model->feature_string.c_str());
-    QMessageBox::information(this,"","Loaded");
+
     settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
-    settings.setValue("work_file",QFileInfo(fileName.remove(".net.gz")).fileName());
+    settings.setValue("work_file",train_name = QFileInfo(fileName.remove(".net.gz")).fileName());
+
+    ui->batch_size->setValue(std::pow(4,std::log10(train.model->total_training_count)));
+    ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
+
 
 }
 void MainWindow::on_save_network_clicked()
 {
     QString fileName = QFileDialog::getSaveFileName(this,"Save network file",
                                                 settings.value("work_dir").toString() + "/" +
-                                                settings.value("work_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
+                                                train_name + ".net.gz","Network files (*net.gz);;All files (*)");
     if(!fileName.isEmpty() && save_to_file(train.model,fileName.toStdString().c_str()))
     {
         QMessageBox::information(this,"","Network Saved");
         settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
-        settings.setValue("work_file",QFileInfo(fileName.remove(".net.gz")).fileName());
+        settings.setValue("work_file",train_name = QFileInfo(fileName.remove(".net.gz")).fileName());
     }
 
 }
@@ -193,7 +200,6 @@ void MainWindow::on_start_training_clicked()
     torch::manual_seed(0);
     at::globalContext().setDeterministicCuDNN(true);
     qputenv("CUDNN_DETERMINISTIC", "1");
-    bool from_scratch = false;
 
     train.param.epoch = ui->epoch->value();
     train.param.batch_size = ui->batch_size->value();
@@ -212,26 +218,25 @@ void MainWindow::on_start_training_clicked()
     }
     if(train.model->feature_string.empty())
     {
-        train.model = UNet3d(1,out_count,ui->feature_string->text().toStdString());
-        from_scratch = true;
+        on_train_from_scratch_clicked();
+        if(train.model->feature_string.empty())
+            return;
     }
-    else
-    if(out_count != train.model->out_count || ui->feature_string->text().toStdString() != train.model->feature_string)
+
+    if(out_count != train.model->out_count)
     {
         tipl::out() << "copy pretrained model" << std::endl;
-        auto new_model = UNet3d(1,out_count,ui->feature_string->text().toStdString());
+        auto new_model = UNet3d(1,out_count,train.model->feature_string);
         new_model->copy_from(*train.model.get(),torch::kCPU);
         train.model = new_model;
-        from_scratch = true;
     }
+
     //tipl::out() << show_structure(train.model);
 
     train.param.dim = tipl::shape<3>(option->get<int>("dim_x"),
                                      option->get<int>("dim_y"),
                                      option->get<int>("dim_z"));
     train.param.device = ui->gpu->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->gpu->currentIndex()-1):torch::Device(torch::kCPU);
-    train.param.from_scratch = from_scratch;
-
     train.param.image_file_name.clear();
     train.param.label_file_name.clear();
     for(size_t i = 0;i < image_list.size();++i)
@@ -350,6 +355,7 @@ void MainWindow::training()
         train.error_msg.clear();
     }
 
+    ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
     ui->start_training->setText(train.running ? (train.pause ? "Resume":"Pause") : "Start");
     ui->batch_size->setEnabled(!train.running || train.pause);
     ui->epoch->setEnabled(!train.running || train.pause);
@@ -362,7 +368,6 @@ void MainWindow::training()
     ui->load_network->setEnabled(!train.running);
     ui->train_from_scratch->setEnabled(!train.running);
     ui->gpu->setEnabled(!train.running);
-    ui->feature_string->setEnabled(!train.running);
     ui->save_error->setEnabled(!train.error.empty());
     ui->training->setEnabled(train.running);
 
@@ -394,7 +399,9 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
 {
     if(ui->list2->currentRow() != currentRow)
         ui->list2->setCurrentRow(currentRow);
-    auto pos_index = ui->pos->value();
+    auto pos_index = float(ui->pos->value())/float(ui->pos->maximum());
+    if(pos_index == 0.0f)
+        pos_index = 0.5f;
     if(currentRow >= 0 && currentRow < image_list.size())
     {
         tipl::vector<3> vs;
@@ -406,6 +413,7 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
                                                                  option->get<int>("dim_z")),time(0));
         if(!I2.empty())
             fuzzy_labels(I2,get_label_count(I2,out_count));
+        v2c1.set_range(0,tipl::max_value_mt(I1));
         ui->pos->setMaximum(I1.shape()[ui->view_dim->currentIndex()]-1);
     }
     else
@@ -414,7 +422,8 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         I2.clear();
         ui->pos->setMaximum(0);
     }
-    ui->pos->setValue(pos_index);
+    ui->pos->setValue(pos_index*float(ui->pos->maximum()));
+
     on_pos_valueChanged(ui->pos->value());
 }
 

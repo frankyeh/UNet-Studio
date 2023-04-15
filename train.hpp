@@ -8,10 +8,9 @@
 struct TrainParam{
     std::vector<std::string> image_file_name,test_image_file_name;
     std::vector<std::string> label_file_name,test_label_file_name;
-    int batch_size = 6;
-    int epoch = 1000;
-    bool from_scratch = true;
-    float learning_rate = 0.01f;
+    int batch_size = 1;
+    int epoch = 10000;
+    float learning_rate = 0.001f;
     tipl::shape<3> dim;
     torch::Device device = torch::kCPU;
 };

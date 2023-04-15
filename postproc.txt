@@ -1,1 +1,11 @@
-Background/  Test/test_button/button/0/test
+Volume/Remove Fragments/remove_fragments/button/0/remove background using summed probability
+Volume/├Threshold/remove_fragments_threshold/float:0.0:1.0:0.1:2/0.5/threshold for removing the background on summed image
+Volume/└Smoothing/remove_fragments_smoothing/int:1:5:1/1/number of smoothing applied
+Volume/Convert to 3D/convert_to_3d/button/0/convert 4D volume to 3D
+Values/Normalize/normalize_volume/button/0/normalize each volume to [0 1]
+Values/Gaussian Smoothing/gaussian_smoothing/button/0/apply Gaussian smoothing
+Values/Probability/cal_prob/button/0/calculate probability
+Values/Soft Max/soft_max/button/0/calculate soft max
+Values/└Smoothing/soft_max_smoothing/int:1:5:1/1/number of smoothing applied
+Values/Binarize/binarize/button/0/binarize the values
+Values/└Threshold/binarize_threshold/float:0.0:1.0:0.1:2/0.5/threshold for threshold value to 0 and 1

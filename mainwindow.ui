@@ -191,27 +191,6 @@
               <number>2</number>
              </property>
              <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_16">
-               <property name="topMargin">
-                <number>0</number>
-               </property>
-               <item>
-                <widget class="QLabel" name="label">
-                 <property name="text">
-                  <string>Structure</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLineEdit" name="feature_string">
-                 <property name="text">
-                  <string>8x8+16x16+32x32+64x64+128x128</string>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-             <item>
               <layout class="QHBoxLayout" name="horizontalLayout_3">
                <property name="spacing">
                 <number>0</number>
@@ -272,6 +251,13 @@
                 </spacer>
                </item>
               </layout>
+             </item>
+             <item>
+              <widget class="QLabel" name="train_network_info">
+               <property name="text">
+                <string/>
+               </property>
+              </widget>
              </item>
             </layout>
            </widget>
@@ -886,13 +872,6 @@
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_12">
              <item>
-              <widget class="QLabel" name="evaluate_network">
-               <property name="text">
-                <string/>
-               </property>
-              </widget>
-             </item>
-             <item>
               <layout class="QHBoxLayout" name="horizontalLayout_11">
                <property name="spacing">
                 <number>0</number>
@@ -900,7 +879,7 @@
                <item>
                 <widget class="QPushButton" name="eval_from_train">
                  <property name="text">
-                  <string>From Train</string>
+                  <string>Copy From Train</string>
                  </property>
                 </widget>
                </item>
@@ -915,7 +894,30 @@
                  </property>
                 </widget>
                </item>
+               <item>
+                <spacer name="horizontalSpacer_7">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
               </layout>
+             </item>
+             <item>
+              <widget class="QLabel" name="evaluate_network">
+               <property name="text">
+                <string/>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
              </item>
             </layout>
            </widget>
@@ -926,6 +928,9 @@
              <string>Step 3: Evaluate</string>
             </property>
             <layout class="QFormLayout" name="formLayout_2">
+             <property name="verticalSpacing">
+              <number>6</number>
+             </property>
              <item row="0" column="1">
               <widget class="QComboBox" name="evaluate_device"/>
              </item>
@@ -1187,6 +1192,52 @@
    </property>
   </action>
  </widget>
+ <tabstops>
+  <tabstop>open_files</tabstop>
+  <tabstop>clear</tabstop>
+  <tabstop>show_advanced</tabstop>
+  <tabstop>list1</tabstop>
+  <tabstop>open_labels</tabstop>
+  <tabstop>autofill</tabstop>
+  <tabstop>list2</tabstop>
+  <tabstop>train_from_scratch</tabstop>
+  <tabstop>load_network</tabstop>
+  <tabstop>save_network</tabstop>
+  <tabstop>tabWidget</tabstop>
+  <tabstop>batch_size</tabstop>
+  <tabstop>epoch</tabstop>
+  <tabstop>learning_rate</tabstop>
+  <tabstop>gpu</tabstop>
+  <tabstop>start_training</tabstop>
+  <tabstop>end_training</tabstop>
+  <tabstop>view1</tabstop>
+  <tabstop>view2</tabstop>
+  <tabstop>view_dim</tabstop>
+  <tabstop>pos</tabstop>
+  <tabstop>label_slider</tabstop>
+  <tabstop>error_view</tabstop>
+  <tabstop>open_error</tabstop>
+  <tabstop>save_error</tabstop>
+  <tabstop>clear_error</tabstop>
+  <tabstop>show_transform</tabstop>
+  <tabstop>open_evale_image</tabstop>
+  <tabstop>evaluate_clear</tabstop>
+  <tabstop>evaluate_list</tabstop>
+  <tabstop>eval_from_train</tabstop>
+  <tabstop>eval_from_file</tabstop>
+  <tabstop>evaluate_device</tabstop>
+  <tabstop>evaluate</tabstop>
+  <tabstop>save_evale_image</tabstop>
+  <tabstop>evaluate_list2</tabstop>
+  <tabstop>eval_view1</tabstop>
+  <tabstop>eval_view2</tabstop>
+  <tabstop>eval_pos</tabstop>
+  <tabstop>eval_view_dim</tabstop>
+  <tabstop>eval_label_slider</tabstop>
+  <tabstop>console</tabstop>
+  <tabstop>error_y_size</tabstop>
+  <tabstop>error_x_size</tabstop>
+ </tabstops>
  <resources>
   <include location="icons.qrc"/>
  </resources>

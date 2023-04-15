@@ -34,6 +34,12 @@ private:
 public:
     size_t cur_output = 0;
     std::vector<tipl::image<3> > evaluate_output;
+    void clear(void)
+    {
+        stop();
+        cur_output = 0;
+        evaluate_output.clear();
+    }
 public:
     UNet3d model;
 public:

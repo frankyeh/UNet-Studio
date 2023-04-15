@@ -17,6 +17,7 @@ public:
     int out_count = 1;
     std::string feature_string;
     int kernel_size = 3;
+    size_t total_training_count = 0;
     std::deque<torch::nn::Sequential> encoding,decoding,up;
     std::vector<torch::nn::BatchNorm3d> bn_layers;
     torch::nn::Sequential output;
@@ -35,6 +36,15 @@ public:
             features_up.back()[0] *= 2; // due to input concatenation
         }
         return std::make_pair(features_down,features_up);
+    }
+    std::string get_info(void) const
+    {
+        std::ostringstream out;
+        out << "structure: " << feature_string << std::endl;
+        out << "input: " << in_count << std::endl;
+        out << "output: " << out_count << std::endl;
+        out << "total training: " << total_training_count << std::endl;
+        return out.str();
     }
 public:
     UNet3dImpl(void){}
@@ -89,39 +99,6 @@ public:
     {
         for (auto& p : parameters())
             p.set_requires_grad(req);
-    }
-    size_t size(void)
-    {
-        size_t sum = 0;
-        auto features = parse_feature_string();
-        std::vector<std::vector<int> > features_down(std::move(features.first));
-        std::vector<std::vector<int> > features_up(std::move(features.second));
-
-        for(int level=0; level< features_down.size(); level++)
-        {
-            int in = 0;
-            for(auto out: features_down[level])
-            {
-                if(in)
-                    sum += in*out*27 + out*3;
-                in = out;
-            }
-        }
-        for(int level=features_down.size()-2; level>=0; level--)
-        {
-            sum += features_down[level].back()*features_up[level+1].back()*27 +
-                   features_down[level].back()*3;
-
-            int in = 0;
-            for(auto out: features_up[level])
-            {
-                if(in)
-                    sum += in*out*27 + out*3;
-                in = out;
-            }
-        }
-        sum += features_up[0].back()*out_count + out_count;
-        return sum;
     }
 
     torch::Tensor forward(torch::Tensor inputTensor)

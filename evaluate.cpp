@@ -81,7 +81,7 @@ void evaluate_unet::evaluate(const EvaluateParam& param)
 void evaluate_unet::output(void)
 {
     evaluate_output = std::vector<tipl::image<3> >(evaluate_image.size());
-    output_thread.reset(new std::thread([=](){
+    output_thread.reset(new std::thread([this](){
         try{
             for (cur_output = 0;cur_output < evaluate_image.size() && !aborted; cur_output++)
             {

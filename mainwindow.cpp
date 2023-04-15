@@ -54,14 +54,14 @@ MainWindow::MainWindow(QWidget *parent)
     ui->gpu->addItems(device_list);
     ui->evaluate_device->addItems(device_list);
     ui->gpu->setCurrentIndex(torch::cuda::is_available() ? 1:0);
-    ui->evaluate_device->setCurrentIndex(torch::cuda::is_available() ? 1:0);
+    ui->evaluate_device->setCurrentIndex(ui->evaluate_device->count()-1);
 
     timer = new QTimer(this);
-    timer->setInterval(1000);
+    timer->setInterval(1500);
     connect(timer, SIGNAL(timeout()), this, SLOT(training()));
 
     eval_timer = new QTimer(this);
-    eval_timer->setInterval(1000);
+    eval_timer->setInterval(1500);
     connect(eval_timer, SIGNAL(timeout()), this, SLOT(evaluating()));
 }
 
