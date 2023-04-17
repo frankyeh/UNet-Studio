@@ -5,11 +5,11 @@ on:
       tag:
         description: 'Tag'
         required: true
-        default: '2023.04.01'
+        default: '2023.04.17'
       release_name:
         description: 'Release Name'
         required: true
-        default: '2022.04.01 "Sun" Release'
+        default: '2022.04.17 "Sun" Release'
 jobs:
   windows_build:
     runs-on: windows-2019
