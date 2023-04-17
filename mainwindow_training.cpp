@@ -169,9 +169,14 @@ void MainWindow::on_load_network_clicked()
     QString fileName = QFileDialog::getOpenFileName(this,"Open network file",
                                                 settings.value("work_dir").toString() + "/" +
                                                 settings.value("work_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
-    if(fileName.isEmpty() || !load_from_file(train.model,fileName.toStdString().c_str()))
+    if(fileName.isEmpty())
         return;
 
+    if(!load_from_file(train.model,fileName.toStdString().c_str()))
+    {
+        QMessageBox::critical(this,"Error","Invalid file format");
+        return;
+    }
     settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
     settings.setValue("work_file",train_name = QFileInfo(fileName.remove(".net.gz")).fileName());
 
@@ -433,18 +438,61 @@ void MainWindow::on_list2_currentRowChanged(int currentRow)
         ui->list1->setCurrentRow(currentRow);
 }
 
+void label_on_images(QImage& I,const tipl::image<3>& I2,int slice_pos,int cur_label_index,int out_count)
+{
+    float display_ratio = float(I.width())/float(I2.width());
+    tipl::shape<3> dim(I2.width(),I2.height(),I2.depth()/out_count);
+    std::vector<tipl::image<2,char> > region_masks(out_count);
+    std::vector<tipl::rgb> colors(out_count);
+    tipl::par_for(out_count,[&](size_t i)
+    {
+        auto slice = I2.alias(dim.size()*i,dim).slice_at(slice_pos);
+        tipl::image<2,char> mask(slice.shape());
+        for(size_t pos = 0;pos < slice.size();++pos)
+            mask[pos] = (slice[pos] == 1.0f ? 1:0);
+        colors[i] = tipl::rgb::generate(i+10);
+        region_masks[i] = std::move(mask);
+    });
 
-void MainWindow::on_pos_valueChanged(int value)
+    {
+        QPainter painter(&I);
+        painter.setCompositionMode(QPainter::CompositionMode_DestinationOver);
+        painter.drawImage(0,0,tipl::qt::draw_regions(region_masks,colors,
+                                                     false, // roi_fill_region
+                                                     true, // roi_draw_edge
+                                                     1, // roi_edge_width
+                                                     cur_label_index,display_ratio));
+    }
+}
+
+void MainWindow::on_pos_valueChanged(int slice_pos)
 {
     if(I1.empty())
         return ;
-    train_scene1 << (QImage() << v2c1[tipl::volume2slice_scaled(I1,ui->view_dim->currentIndex(),value,2.0f)]);
+
+    auto d = ui->view_dim->currentIndex();
+    auto sizes = tipl::space2slice<tipl::vector<2,int> >(d,I1.shape());
+    float display_ratio = std::min<float>((ui->view1->width()-10)/sizes[0],(ui->view1->height()-10)/sizes[1]);
+    if(display_ratio < 1.0f)
+        display_ratio = 1.0f;
+
+
+    QImage train_image;
+    train_image << v2c1[tipl::volume2slice_scaled(I1,d,slice_pos,display_ratio)];
+
     if(I2.size() == I1.size()*out_count)
+    {
+        if(d == 2 && is_label)
+            label_on_images(train_image,I2,slice_pos,ui->label_slider->value(),out_count);
+
         train_scene2 << (QImage() << v2c2[tipl::volume2slice_scaled(
                             I2.alias(I1.size()*ui->label_slider->value(),I1.shape()),
-                            ui->view_dim->currentIndex(),value,2.0f)]);
+                            ui->view_dim->currentIndex(),slice_pos,display_ratio)]).mirrored(d,d!=2);
+    }
     else
         train_scene2 << QImage();
+    train_scene1 << train_image.mirrored(d,d!=2);
+
 }
 
 

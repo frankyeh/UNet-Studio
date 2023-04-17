@@ -15,7 +15,8 @@ public:
     std::vector<tipl::image<3> > evaluate_image,evaluate_result;
     std::vector<tipl::shape<3> > evaluate_image_shape;
     std::vector<tipl::vector<3> > evaluate_image_vs;
-    std::vector<tipl::matrix<4,4> > evaluate_image_trans;
+    std::vector<tipl::matrix<4,4> > evaluate_image_trans2mni;
+    std::vector<tipl::transformation_matrix<float> > evaluate_image_trans;
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;
     void read_file(const EvaluateParam& param);
@@ -34,6 +35,7 @@ private:
 public:
     size_t cur_output = 0;
     std::vector<tipl::image<3> > evaluate_output;
+    std::vector<char> is_label;
     void clear(void)
     {
         stop();

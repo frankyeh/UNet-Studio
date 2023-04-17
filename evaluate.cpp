@@ -11,7 +11,8 @@ void evaluate_unet::read_file(const EvaluateParam& param)
     evaluate_result  = std::vector<tipl::image<3> >(param.image_file_name.size());
     evaluate_image_shape = std::vector<tipl::shape<3> >(param.image_file_name.size());
     evaluate_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
-    evaluate_image_trans = std::vector<tipl::matrix<4,4> >(param.image_file_name.size());
+    evaluate_image_trans2mni = std::vector<tipl::matrix<4,4> >(param.image_file_name.size());
+    evaluate_image_trans = std::vector<tipl::transformation_matrix<float> >(param.image_file_name.size());
     data_ready = std::vector<bool> (param.image_file_name.size());
     read_file_thread.reset(new std::thread([=]()
     {
@@ -27,14 +28,33 @@ void evaluate_unet::read_file(const EvaluateParam& param)
                     if(aborted)
                         return;
                 }
-                tipl::vector<3> vs;
-                if(tipl::io::gz_nifti::load_from_file(param.image_file_name[i].c_str(),evaluate_image[i],evaluate_image_vs[i],evaluate_image_trans[i]))
+                if(tipl::io::gz_nifti::load_from_file(param.image_file_name[i].c_str(),evaluate_image[i],evaluate_image_vs[i],evaluate_image_trans2mni[i]))
                 {
                     tipl::normalize(evaluate_image[i]);
-                    evaluate_image_shape[i] = evaluate_image[i].shape();
-                    tipl::image<3> new_sized_image(unet_inputsize(evaluate_image[i].shape()));
-                    tipl::draw(evaluate_image[i],new_sized_image,tipl::vector<3,int>(0,0,0));
-                    new_sized_image.swap(evaluate_image[i]);
+                    auto inputsize = unet_inputsize(evaluate_image_shape[i] = evaluate_image[i].shape());
+
+                    if(evaluate_image_vs[i] == model->voxel_size)
+                    {
+                        if(inputsize != evaluate_image_shape[i])
+                        {
+                            tipl::image<3> new_sized_image(inputsize);
+                            tipl::draw(evaluate_image[i],new_sized_image,tipl::vector<3,int>(0,0,0));
+                            new_sized_image.swap(evaluate_image[i]);
+                        }
+                    }
+                    else
+                    {
+                        tipl::image<3> new_sized_image(inputsize);
+                        evaluate_image_trans[i] =
+                                tipl::transformation_matrix<float>(
+                                    tipl::affine_transform<float>(),
+                                    evaluate_image_shape[i],
+                                    evaluate_image_vs[i],
+                                    inputsize,model->voxel_size);
+                        tipl::resample_mt(evaluate_image[i],new_sized_image,evaluate_image_trans[i]);
+                        new_sized_image.swap(evaluate_image[i]);
+                    }
+
                 }
                 data_ready[i] = true;
                 i += thread_count;
@@ -81,6 +101,7 @@ void evaluate_unet::evaluate(const EvaluateParam& param)
 void evaluate_unet::output(void)
 {
     evaluate_output = std::vector<tipl::image<3> >(evaluate_image.size());
+    is_label = std::vector<char>(evaluate_image.size());
     output_thread.reset(new std::thread([this](){
         try{
             for (cur_output = 0;cur_output < evaluate_image.size() && !aborted; cur_output++)
@@ -101,12 +122,26 @@ void evaluate_unet::output(void)
                 evaluate_output[cur_output].resize(evaluate_image_shape[cur_output].multiply(tipl::shape<3>::z,model->out_count));
                 tipl::shape<3> dim_in(evaluate_image[cur_output].shape());
                 tipl::shape<3> dim_out(evaluate_image_shape[cur_output]);
-                tipl::par_for(model->out_count,[&](int i)
+                if(evaluate_image_vs[cur_output] == model->voxel_size)
                 {
-                    auto from = evaluate_result[cur_output].alias(dim_in.size()*i,dim_in);
-                    auto to = evaluate_output[cur_output].alias(dim_out.size()*i,dim_out);
-                    tipl::draw(from,to,tipl::vector<3,int>(0,0,0));
-                });
+                    tipl::par_for(model->out_count,[&](int i)
+                    {
+                        auto from = evaluate_result[cur_output].alias(dim_in.size()*i,dim_in);
+                        auto to = evaluate_output[cur_output].alias(dim_out.size()*i,dim_out);
+                        tipl::draw(from,to,tipl::vector<3,int>(0,0,0));
+                    });
+                }
+                else
+                {
+                    tipl::par_for(model->out_count,[&](int i)
+                    {
+                        auto from = evaluate_result[cur_output].alias(dim_in.size()*i,dim_in);
+                        auto to = evaluate_output[cur_output].alias(dim_out.size()*i,dim_out);
+                        auto T = evaluate_image_trans[cur_output];
+                        T.inverse();
+                        tipl::resample_mt(from,to,T);
+                    });
+                }
                 evaluate_image[cur_output] = tipl::image<3>();
                 evaluate_result[cur_output] = tipl::image<3>();
             }

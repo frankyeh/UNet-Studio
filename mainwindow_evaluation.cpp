@@ -51,8 +51,13 @@ void MainWindow::on_eval_from_file_clicked()
 {
     QString fileName = QFileDialog::getOpenFileName(this,"Open Network File",                                                settings.value("work_dir").toString() + "/" +
                                                     settings.value("work_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
-    if(fileName.isEmpty() || !load_from_file(evaluate.model,fileName.toStdString().c_str()))
+    if(fileName.isEmpty())
         return;
+    if(!load_from_file(evaluate.model,fileName.toStdString().c_str()))
+    {
+        QMessageBox::critical(this,"Error","Invalid file format");
+        return;
+    }
     QMessageBox::information(this,"","Loaded");
     settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
     settings.setValue("work_file",eval_name = QFileInfo(fileName.remove(".net.gz")).fileName());
@@ -161,23 +166,31 @@ void MainWindow::on_evaluate_list2_currentRowChanged(int currentRow)
         ui->evaluate_list->setCurrentRow(currentRow);
 }
 
-void MainWindow::on_eval_pos_valueChanged(int value)
+void label_on_images(QImage& I,const tipl::image<3>& I2,int slice_pos,int cur_label_index,int out_count);
+void MainWindow::on_eval_pos_valueChanged(int slice_pos)
 {
     auto currentRow = ui->evaluate_list->currentRow();
     if(eval_I1.empty() || currentRow < 0)
         return;
+    float display_ratio = 2.0f;
+    auto d = ui->eval_view_dim->currentIndex();
 
-    eval_scene1 << (QImage() << eval_v2c1[tipl::volume2slice_scaled(eval_I1,ui->eval_view_dim->currentIndex(),value,2.0f)]);
+    QImage evaluate_image;
+    evaluate_image << eval_v2c1[tipl::volume2slice_scaled(eval_I1,ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
 
     if(currentRow < evaluate.cur_output)
     {
         auto eval_output_count = evaluate.evaluate_output[currentRow].depth()/
                                               evaluate.evaluate_image_shape[currentRow][2];
+        if(d == 2 && evaluate.is_label[currentRow] && eval_output_count > 1)
+            label_on_images(evaluate_image,evaluate.evaluate_output[currentRow],slice_pos,
+                            ui->eval_label_slider->value(),eval_output_count);
+
         ui->eval_label_slider->setMaximum(eval_output_count-1);
         eval_scene2 << (QImage() << eval_v2c2[tipl::volume2slice_scaled(
                            evaluate.evaluate_output[currentRow].alias(
                                eval_I1.size()*ui->eval_label_slider->value(),eval_I1.shape()),
-                           ui->eval_view_dim->currentIndex(),value,2.0f)]);
+                           ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)]).mirrored(d,d!=2);
         ui->save_evale_image->setEnabled(true);
     }
     else
@@ -185,7 +198,7 @@ void MainWindow::on_eval_pos_valueChanged(int value)
         eval_scene2 << QImage();
         ui->save_evale_image->setEnabled(false);
     }
-
+    eval_scene1 << evaluate_image.mirrored(d,d!=2);
 }
 void MainWindow::on_save_evale_image_clicked()
 {
@@ -202,7 +215,7 @@ void MainWindow::on_save_evale_image_clicked()
                                                     evaluate.evaluate_image_shape[currentRow][1],
                                                     evaluate.evaluate_image_shape[currentRow][2])),
                                          evaluate.evaluate_image_vs[currentRow],
-                                         evaluate.evaluate_image_trans[currentRow]))
+                                         evaluate.evaluate_image_trans2mni[currentRow]))
         QMessageBox::critical(this,"Error","Cannot save file");
     }
     else
@@ -216,11 +229,24 @@ void MainWindow::on_save_evale_image_clicked()
                                                     evaluate.evaluate_output[currentRow].depth()/
                                                     evaluate.evaluate_image_shape[currentRow][2])),
                                          evaluate.evaluate_image_vs[currentRow],
-                                         evaluate.evaluate_image_trans[currentRow]))
+                                         evaluate.evaluate_image_trans2mni[currentRow]))
         QMessageBox::critical(this,"Error","Cannot save file");
     }
 }
 
+template<typename T,typename U>
+void reduce_mt(const T& in,U& out,size_t gap = 0)
+{
+    if(gap == 0)
+        gap = out.size();
+    tipl::par_for(out.size(),[&](size_t j)
+    {
+        auto v = out[j];
+        for(size_t pos = j;pos < in.size();pos += gap)
+            v += in[pos];
+        out[j] = v;
+    });
+}
 
 
 void MainWindow::runAction(QString command)
@@ -230,15 +256,16 @@ void MainWindow::runAction(QString command)
         return;
     auto this_image = evaluate.evaluate_output[cur_index].alias();
     auto dim = evaluate.evaluate_image_shape[cur_index];
+    auto& cur_is_label = evaluate.is_label[cur_index];
     auto eval_out_count = this_image.depth()/dim[2];
     if(this_image.empty())
         return;
     tipl::out() << "run " << command.toStdString();
-    if(command == "remove_fragments")
+    if(command == "remove_background")
     {
 
         tipl::image<3> sum_image(dim);
-        tipl::sum_mt(this_image,sum_image);
+        reduce_mt(this_image,sum_image);
 
         for(size_t i = 0;i < postproc->get<float>("remove_fragments_smoothing");++i)
             tipl::filter::gaussian(sum_image);
@@ -256,6 +283,20 @@ void MainWindow::runAction(QString command)
                     I[pos] = 0;
         });
     }
+    if(command == "defragment")
+    {
+        tipl::par_for(eval_out_count,[&](size_t label)
+        {
+            auto I = this_image.alias(dim.size()*label,dim);
+            tipl::image<3,char> mask(I.shape());
+            for(size_t i = 0;i < I.size();++i)
+                mask[i] = (I[i] > 0.5f ? 1:0);
+            tipl::morphology::defragment(mask);
+            for(size_t i = 0;i < I.size();++i)
+                if(!mask[i])
+                    I[i] = 0;
+        });
+    }
     if(command =="normalize_volume")
     {
         tipl::par_for(eval_out_count,[&](size_t label)
@@ -263,6 +304,7 @@ void MainWindow::runAction(QString command)
             auto I = this_image.alias(dim.size()*label,dim);
             tipl::normalize(I);
         });
+        cur_is_label = false;
     }
     if(command =="gaussian_smoothing")
     {
@@ -271,11 +313,22 @@ void MainWindow::runAction(QString command)
             auto I = this_image.alias(dim.size()*label,dim);
             tipl::filter::gaussian(I);
         });
+        cur_is_label = false;
     }
+    if(command =="anisotropic_smoothing")
+    {
+        tipl::par_for(eval_out_count,[&](size_t label)
+        {
+            auto I = this_image.alias(dim.size()*label,dim);
+            tipl::filter::anisotropic_diffusion(I);
+        });
+        cur_is_label = false;
+    }
+
     if(command =="cal_prob")
     {
         tipl::image<3> sum_image(dim);
-        tipl::sum_mt(this_image,sum_image);
+        reduce_mt(this_image,sum_image);
 
         tipl::par_for(eval_out_count,[&](size_t label)
         {
@@ -284,9 +337,11 @@ void MainWindow::runAction(QString command)
                 if(sum_image[pos] != 0.0f)
                     I[pos] /= sum_image[pos];
         });
+        cur_is_label = false;
     }
     if(command =="soft_max")
     {
+        float soft_max_prob = postproc->get<float>("soft_max_prob");
         tipl::par_for(dim.size(),[&](size_t pos)
         {
             float m = 0.0f;
@@ -295,10 +350,11 @@ void MainWindow::runAction(QString command)
                     m = this_image[i];
             if(m == 0.0f)
                 return;
-
+            m *= soft_max_prob;
             for(size_t i = pos;i < this_image.size();i += dim.size())
                 this_image[i] = (this_image[i] >= m ? 1.0f:0.0f);
         });
+        cur_is_label = true;
     }
     if(command =="convert_to_3d")
     {
@@ -313,6 +369,7 @@ void MainWindow::runAction(QString command)
                 }
         });
         I.swap(evaluate.evaluate_output[cur_index]);
+        cur_is_label = true;
     }
     on_eval_pos_valueChanged(ui->eval_pos->value());
     /*

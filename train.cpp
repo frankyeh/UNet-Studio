@@ -485,7 +485,6 @@ void train_unet::read_file(void)
                 }
             }
         }
-
         //prepare test data
         {
             tipl::progress prog("read test data");
@@ -524,6 +523,8 @@ void train_unet::read_file(void)
             aborted = true;
             return;
         }
+        model->voxel_size = image_vs[0];
+
         tipl::par_for(thread_count,[&](size_t thread)
         {
             size_t seed = thread;

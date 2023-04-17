@@ -17,7 +17,9 @@ public:
     int out_count = 1;
     std::string feature_string;
     int kernel_size = 3;
-    size_t total_training_count = 0;
+public:
+    uint32_t total_training_count = 0;
+    tipl::vector<3> voxel_size = {1.0f,1.0f,1.0f};
     std::deque<torch::nn::Sequential> encoding,decoding,up;
     std::vector<torch::nn::BatchNorm3d> bn_layers;
     torch::nn::Sequential output;
@@ -43,6 +45,7 @@ public:
         out << "structure: " << feature_string << std::endl;
         out << "input: " << in_count << std::endl;
         out << "output: " << out_count << std::endl;
+        out << "resolution: " << voxel_size << std::endl;
         out << "total training: " << total_training_count << std::endl;
         return out.str();
     }

@@ -11,11 +11,12 @@ bool load_from_file(UNet3d& model,const char* file_name)
     if(!mat.load_from_file(file_name))
         return false;
     std::string feature_string;
-    std::vector<int> param({1,1,0});
+    std::vector<int> param({1,1});
     if(!mat.read("param",param) || !mat.read("feature_string",feature_string))
         return false;
     model = UNet3d(param[0],param[1],feature_string);
-    model->total_training_count = param[2];
+    mat.read("total_training_count",model->total_training_count);
+    mat.read("voxel_size",model->voxel_size);
     model->train();
     int id = 0;
     for(auto& tensor : model->parameters())
@@ -35,7 +36,9 @@ bool save_to_file(UNet3d& model,const char* file_name)
     if(!mat)
         return false;
     mat.write("feature_string",model->feature_string);
-    mat.write("param",{model->in_count,model->out_count,int(model->total_training_count)});
+    mat.write("total_training_count",model->total_training_count);
+    mat.write("voxel_size",model->voxel_size);
+    mat.write("param",{model->in_count,model->out_count});
     int id = 0;
     for(auto tensor : model->parameters())
     {
