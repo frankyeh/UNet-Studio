@@ -61,15 +61,6 @@ jobs:
         filename: unet_studio_win_update.zip
         exclusions: .git
         path: unet_studio_win
-    - name: Packaging PyTorch DLL
-      run: |
-        cp libtorch/lib/*.dll unet_studio_win
-    - name: Zip Release (Full)
-      uses: TheDoctor0/zip-release@0.6.0
-      with:
-        filename: unet_studio_win_full.zip
-        exclusions: .git
-        path: unet_studio_win            
     - name: Create Release
       uses: ncipollo/release-action@v1.8.9
       with:
