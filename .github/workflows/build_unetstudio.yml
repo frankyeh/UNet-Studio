@@ -57,7 +57,7 @@ jobs:
     - name: Zip Release (Update)
       uses: TheDoctor0/zip-release@0.6.0
       with:
-        filename: unet_studio_win_update.zip
+        filename: unet_studio_win.zip
         exclusions: .git
         path: unet_studio_win
     - name: Create Release
