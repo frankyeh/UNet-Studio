@@ -17,7 +17,7 @@ jobs:
     - uses: actions/checkout@v2.5.0
     - name: Install Cuda
       run: |    
-        install_cuda.bat
+        ./install_cuda.bat
     - name: Install libtorch
       run: |
         curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
