@@ -5,11 +5,11 @@ on:
       tag:
         description: 'Tag'
         required: true
-        default: '2023.04.01'
+        default: '2023.04.17'
       release_name:
         description: 'Release Name'
         required: true
-        default: '2022.04.01 "Sun" Release'
+        default: '2022.04.17 "Sun" Release'
 jobs:
   windows_build:
     runs-on: windows-2019
@@ -23,23 +23,11 @@ jobs:
         del install_zlib.bat
         del "C:/Program Files/zlib/lib/zlib.lib"
         del "C:/Program Files/zlib/bin/zlib.dll"
-    - name: Restore libtorch from cache
-      uses: actions/cache@v2
-      id: cache-libtorch
-      with:
-        path: libtorch
-        key: libtorch-windows-${{ runner.os }}-cu117
     - name: Download libtorch
-      if: steps.cache-libtorch.outputs.cache-hit != 'true'
       run: |
         curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
         mkdir libtorch
         tar -xf "libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip" -C libtorch --strip-components 1
-    - name: Cache libtorch
-      uses: actions/cache@v2
-      with:
-        path: libtorch
-        key: libtorch-windows-${{ runner.os }}-cu117
     - name: Install Qt
       uses: jurplel/install-qt-action@v2
       with:
@@ -64,15 +52,22 @@ jobs:
         mkdir unet_studio_win
         move build\unet_studio.exe unet_studio_win
         windeployqt --no-translations --no-system-d3d-compiler --compiler-runtime --no-opengl-sw unet_studio_win\unet_studio.exe
-        move build\*.dll unet_studio_win
         del *.zip
-    - name: Zip Release
+    - name: Zip Release (Update)
       uses: TheDoctor0/zip-release@0.6.0
       with:
-        filename: unet_studio_win.zip
+        filename: unet_studio_win_update.zip
         exclusions: .git
         path: unet_studio_win
-            
+    - name: Packaging PyTorch DLL
+      run: |
+        cp libtorch/lib/*.dll unet_studio_win
+    - name: Zip Release (Full)
+      uses: TheDoctor0/zip-release@0.6.0
+      with:
+        filename: unet_studio_win_full.zip
+        exclusions: .git
+        path: unet_studio_win            
     - name: Create Release
       uses: ncipollo/release-action@v1.8.9
       with:
