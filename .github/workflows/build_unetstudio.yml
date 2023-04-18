@@ -17,7 +17,9 @@ jobs:
     - uses: actions/checkout@v2.5.0
     - name: Install Cuda
       run: |    
-        ./install_cuda.bat
+        curl -L -o cuda_installer.exe https://developer.download.nvidia.com/compute/cuda/11.7.0/local_installers/cuda_11.7.0_516.01_windows.exe
+        start /wait cuda_installer.exe -s
+        del cuda_installer.exe
     - name: Install libtorch
       run: |
         curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
@@ -51,7 +53,7 @@ jobs:
     - name: Packaging
       run: |
         mkdir unet_studio_win
-        move *.bat unet_studio_win
+        move install_win.bat unet_studio_win
         move build\unet_studio.exe unet_studio_win
         windeployqt --no-translations --no-system-d3d-compiler --compiler-runtime --no-opengl-sw unet_studio_win\unet_studio.exe
         del *.zip
@@ -61,15 +63,6 @@ jobs:
         filename: unet_studio_win_update.zip
         exclusions: .git
         path: unet_studio_win
-    - name: Packaging PyTorch DLL
-      run: |
-        cp libtorch/lib/*.dll unet_studio_win
-    - name: Zip Release (Full)
-      uses: TheDoctor0/zip-release@0.6.0
-      with:
-        filename: unet_studio_win_full.zip
-        exclusions: .git
-        path: unet_studio_win            
     - name: Create Release
       uses: ncipollo/release-action@v1.8.9
       with:
