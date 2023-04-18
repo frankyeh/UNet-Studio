@@ -16,10 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2.5.0
     - name: Install Cuda
-      run: |    
-        curl -L -o cuda_installer.exe https://developer.download.nvidia.com/compute/cuda/11.7.0/local_installers/cuda_11.7.0_516.01_windows.exe
-        start /wait cuda_installer.exe -s
-        del cuda_installer.exe
+      uses: Jimver/cuda-toolkit@v0.2.5
     - name: Install libtorch
       run: |
         curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
