@@ -37,6 +37,7 @@ void evaluate_unet::read_file(const EvaluateParam& param)
                     {
                         if(inputsize != evaluate_image_shape[i])
                         {
+                            tipl::out() << std::filesystem::path(param.image_file_name[i]).filename().string() << " has a different dimension. padding/cropping applied";
                             tipl::image<3> new_sized_image(inputsize);
                             tipl::draw(evaluate_image[i],new_sized_image,tipl::vector<3,int>(0,0,0));
                             new_sized_image.swap(evaluate_image[i]);
@@ -44,14 +45,13 @@ void evaluate_unet::read_file(const EvaluateParam& param)
                     }
                     else
                     {
+                        tipl::out() << std::filesystem::path(param.image_file_name[i]).filename().string() << " has a resolution of " << evaluate_image_vs[i] << ". regriding applied";
                         tipl::image<3> new_sized_image(inputsize);
-                        evaluate_image_trans[i] =
-                                tipl::transformation_matrix<float>(
-                                    tipl::affine_transform<float>(),
-                                    evaluate_image_shape[i],
-                                    evaluate_image_vs[i],
-                                    inputsize,model->voxel_size);
-                        tipl::resample_mt(evaluate_image[i],new_sized_image,evaluate_image_trans[i]);
+                        tipl::resample_mt(evaluate_image[i],new_sized_image,
+                            evaluate_image_trans[i] =
+                                tipl::transformation_matrix<float>(tipl::affine_transform<float>(),
+                                    evaluate_image_shape[i],evaluate_image_vs[i],
+                                    inputsize,model->voxel_size));
                         new_sized_image.swap(evaluate_image[i]);
                     }
 
