@@ -40,6 +40,7 @@ jobs:
     - name: Install TIPL
       run: |
         git clone https://github.com/frankyeh/TIPL.git
+        git clone https://github.com/frankyeh/UNet-Studio-Network.git
     - name: Build UNet Studio
       run: |
         for /f "usebackq delims=#" %%a in (`"%programfiles(x86)%\Microsoft Visual Studio\Installer\vswhere" -latest -property installationPath`) do call "%%a\Common7\Tools\VsDevCmd.bat" -arch=x64
@@ -53,6 +54,7 @@ jobs:
         move install_win.bat unet_studio_win
         move build\unet_studio.exe unet_studio_win
         windeployqt --no-translations --no-system-d3d-compiler --compiler-runtime --no-opengl-sw unet_studio_win\unet_studio.exe
+        move UNet-Studio-Network dsi_studio_win\network
         del *.zip
     - name: Zip Release (Update)
       uses: TheDoctor0/zip-release@0.6.0
