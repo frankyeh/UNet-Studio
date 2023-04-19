@@ -9,6 +9,13 @@
 
 extern QSettings settings;
 
+void MainWindow::on_advance_eval_clicked()
+{
+    if(ui->postproc_widget->isVisible())
+        ui->postproc_widget->hide();
+    else
+        ui->postproc_widget->show();
+}
 
 void MainWindow::update_evaluate_list(void)
 {
@@ -58,11 +65,26 @@ void MainWindow::on_eval_from_file_clicked()
         QMessageBox::critical(this,"Error","Invalid file format");
         return;
     }
-    QMessageBox::information(this,"","Loaded");
     settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
     settings.setValue("work_file",eval_name = QFileInfo(fileName.remove(".net.gz")).fileName());
     ui->evaluate_network->setText(QString("name: %1\n").arg(eval_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
+    ui->eval_networks->setCurrentIndex(0);
+}
+
+void MainWindow::on_eval_networks_currentIndexChanged(int index)
+{
+    if(index > 0)
+    {
+        QString fileName =  QCoreApplication::applicationDirPath() + "/network/" + ui->eval_networks->currentText() + ".net.gz";
+        if(!load_from_file(evaluate.model,fileName.toStdString().c_str()))
+        {
+            QMessageBox::critical(this,"Error","Failed to load network");
+            return;
+        }
+        ui->evaluate_network->setText(QString("name: %1\n").arg(ui->eval_networks->currentText()) + evaluate.model->get_info().c_str());
+        ui->evaluate->setEnabled(evaluate_list.size());
+    }
 }
 
 void MainWindow::on_evaluate_clicked()
@@ -83,11 +105,10 @@ void MainWindow::on_evaluate_clicked()
     ui->evaluate->setText("Stop");
     ui->eval_prog->setEnabled(true);
     ui->eval_prog->setMaximum(evaluate_list.size());
-    ui->eval_label_slider->setMaximum(evaluate.model->out_count-1);
-    ui->eval_label_slider->setValue(0);
     ui->evaluate_list2->clear();
     evaluate.option = eval_option;
-    evaluate.input_size_strategy = eval_option->get<int>("preproc_input_sizes");
+    evaluate.preproc_strategy = ui->preproc->currentIndex();
+    evaluate.postproc_strategy = ui->postproc->currentIndex();
     evaluate.start(param);
     eval_timer->start();
 
@@ -97,7 +118,6 @@ void MainWindow::on_evaluate_clicked()
 
 void MainWindow::evaluating()
 {
-    console.show_output();
     if(!evaluate.running)
         eval_timer->stop();
     if(!evaluate.error_msg.empty())
@@ -164,7 +184,7 @@ void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
         tipl::vector<3> vs;
         if(!tipl::io::gz_nifti::load_from_file(evaluate_list[currentRow].toStdString().c_str(),eval_I1,vs))
             return;
-        eval_v2c1.set_range(0,tipl::max_value_mt(eval_I1));
+        eval_v2c1.set_range(0,tipl::max_value_mt(eval_I1)*0.8f);
         eval_v2c2.set_range(0,1.0f);
         ui->eval_pos->setMaximum(eval_I1.shape()[ui->eval_view_dim->currentIndex()]-1);
     }
@@ -210,9 +230,10 @@ void MainWindow::on_eval_pos_valueChanged(int slice_pos)
         }
         else
         {
-            eval_v2c2.set_range(0,tipl::max_value(evaluate.label_prob[currentRow]));
+            eval_v2c2.set_range(0,evaluate.model->out_count);
         }
         ui->eval_label_slider->setMaximum(eval_output_count-1);
+        ui->eval_label_slider->setVisible(eval_output_count > 1);
         eval_scene2 << (QImage() << eval_v2c2[tipl::volume2slice_scaled(
                            evaluate.label_prob[currentRow].alias(
                                eval_I1.size()*ui->eval_label_slider->value(),eval_I1.shape()),
@@ -222,215 +243,82 @@ void MainWindow::on_eval_pos_valueChanged(int slice_pos)
     else
     {
         eval_scene2 << QImage();
+        ui->eval_label_slider->setVisible(false);
         ui->save_evale_image->setEnabled(false);
     }
     eval_scene1 << network_input.mirrored(d,d!=2);
 }
 void MainWindow::on_save_evale_image_clicked()
 {
-    QString file = QFileDialog::getSaveFileName(this,"Save Image",evaluate_list[ui->evaluate_list->currentRow()],"NIFTI files (*nii.gz);;All files (*)");
+    auto currentRow = ui->evaluate_list2->currentRow();
+    if(currentRow < 0 || currentRow >= evaluate.label_prob.size())
+        return;
+    QString file = evaluate_list[ui->evaluate_list->currentRow()].remove(".nii").remove(".gz");
+    file += ".result.nii.gz";
+    file = QFileDialog::getSaveFileName(this,"Save Image",file,"NIFTI files (*nii.gz);;All files (*)");
     if(file.isEmpty())
         return;
-    auto currentRow = ui->evaluate_list2->currentRow();
-    if(evaluate.label_prob[currentRow].depth() == evaluate.raw_image_shape[currentRow][2])
-    {
-        if(!tipl::io::gz_nifti::save_to_file(file.toStdString().c_str(),
-                                         evaluate.label_prob[currentRow].alias(0,
-                                                tipl::shape<3>(
-                                                    evaluate.raw_image_shape[currentRow][0],
-                                                    evaluate.raw_image_shape[currentRow][1],
-                                                    evaluate.raw_image_shape[currentRow][2])),
-                                         evaluate.raw_image_vs[currentRow],
-                                         evaluate.raw_image_trans2mni[currentRow]))
-        QMessageBox::critical(this,"Error","Cannot save file");
-    }
-    else
-    {
-        if(!tipl::io::gz_nifti::save_to_file(file.toStdString().c_str(),
-                                         evaluate.label_prob[currentRow].alias(0,
-                                                tipl::shape<4>(
-                                                    evaluate.raw_image_shape[currentRow][0],
-                                                    evaluate.raw_image_shape[currentRow][1],
-                                                    evaluate.raw_image_shape[currentRow][2],
-                                                    evaluate.label_prob[currentRow].depth()/
-                                                    evaluate.raw_image_shape[currentRow][2])),
-                                         evaluate.raw_image_vs[currentRow],
-                                         evaluate.raw_image_trans2mni[currentRow]))
-        QMessageBox::critical(this,"Error","Cannot save file");
-    }
-}
 
-template<typename T,typename U>
-void reduce_mt(const T& in,U& out,size_t gap = 0)
-{
-    if(gap == 0)
-        gap = out.size();
-    tipl::par_for(out.size(),[&](size_t j)
+    if(!evaluate.save_to_file(currentRow,file.toStdString().c_str()))
     {
-        auto v = out[j];
-        for(size_t pos = j;pos < in.size();pos += gap)
-            v += in[pos];
-        out[j] = v;
-    });
+        QMessageBox::critical(this,"Error","Cannot save file");
+        return;
+    }
+    if(evaluate_list.size() <= 1 ||
+       QMessageBox::question(this, "", "Save others?",QMessageBox::Yes | QMessageBox::No) == QMessageBox::No)
+        return;
+
+    tipl::progress p("saving files");
+    for(int index = 0;p(index,evaluate_list.size());++index)
+        if(index != currentRow)
+        {
+            std::string result;
+            if(tipl::match_files(evaluate_list[currentRow].toStdString(),file.toStdString(),
+                                 evaluate_list[index].toStdString(),result))
+            {
+                if(!evaluate.save_to_file(index,result.c_str()))
+                {
+                    QMessageBox::critical(this,"Error",QString("Cannot save ") + result.c_str());
+                    return;
+                }
+            }
+            else
+            {
+                QMessageBox::critical(this,"Error",QString("Cannot match file name for ") + evaluate_list[index]);
+                return;
+            }
+        }
+    if(!p.aborted())
+        QMessageBox::information(this,"","Files saved");
 }
 
 
+
+void postproc_actions(const std::string& command,
+                      float value1,float value2,
+                      tipl::image<3>& this_image,
+                      const tipl::shape<3>& dim,
+                      char& is_label);
 void MainWindow::runAction(QString command)
 {
     auto cur_index = ui->evaluate_list2->currentRow();
     if(cur_index < 0)
         return;
-    auto this_image = evaluate.label_prob[cur_index].alias();
-    auto dim = evaluate.raw_image_shape[cur_index];
-    auto& cur_is_label = evaluate.is_label[cur_index];
-    auto eval_out_count = this_image.depth()/dim[2];
-    if(this_image.empty())
-        return;
-    tipl::out() << "run " << command.toStdString();
+    float param1(0),param2(0);
     if(command == "remove_background")
     {
-
-        tipl::image<3> sum_image(dim);
-        reduce_mt(this_image,sum_image);
-
-        for(size_t i = 0;i < eval_option->get<float>("remove_fragments_smoothing");++i)
-            tipl::filter::gaussian(sum_image);
-
-        auto threshold = tipl::max_value(sum_image)*eval_option->get<float>("remove_fragments_threshold");
-        tipl::image<3> mask;
-        tipl::threshold(sum_image,mask,threshold,1,0);
-        tipl::morphology::defragment(mask);
-
-        tipl::par_for(eval_out_count,[&](size_t label)
-        {
-            auto I = this_image.alias(dim.size()*label,dim);
-            for(size_t pos = 0;pos < dim.size();++pos)
-                if(!mask[pos])
-                    I[pos] = 0;
-        });
+        param1 = eval_option->get<float>("remove_fragments_smoothing");
+        param2 = eval_option->get<float>("remove_fragments_threshold");
     }
-    if(command == "defragment")
+    if(command == "")
     {
-        tipl::par_for(eval_out_count,[&](size_t label)
-        {
-            auto I = this_image.alias(dim.size()*label,dim);
-            tipl::image<3,char> mask(I.shape());
-            for(size_t i = 0;i < I.size();++i)
-                mask[i] = (I[i] > 0.5f ? 1:0);
-            tipl::morphology::defragment(mask);
-            for(size_t i = 0;i < I.size();++i)
-                if(!mask[i])
-                    I[i] = 0;
-        });
+        param1 = eval_option->get<float>("soft_min_prob");
+        param2 = eval_option->get<float>("soft_max_prob");
     }
-    if(command =="normalize_each")
-    {
-        tipl::par_for(eval_out_count,[&](size_t label)
-        {
-            auto I = this_image.alias(dim.size()*label,dim);
-            tipl::normalize(I);
-        });
-        cur_is_label = false;
-    }
-    if(command =="gaussian_smoothing")
-    {
-        tipl::par_for(eval_out_count,[&](size_t label)
-        {
-            auto I = this_image.alias(dim.size()*label,dim);
-            tipl::filter::gaussian(I);
-        });
-        cur_is_label = false;
-    }
-    if(command =="anisotropic_smoothing")
-    {
-        tipl::par_for(eval_out_count,[&](size_t label)
-        {
-            auto I = this_image.alias(dim.size()*label,dim);
-            tipl::filter::anisotropic_diffusion(I);
-        });
-        cur_is_label = false;
-    }
-
-    if(command =="normalize_all")
-    {
-        tipl::image<3> sum_image(dim);
-        reduce_mt(this_image,sum_image);
-
-        tipl::par_for(eval_out_count,[&](size_t label)
-        {
-            auto I = this_image.alias(dim.size()*label,dim);
-            for(size_t pos = 0;pos < dim.size();++pos)
-                if(sum_image[pos] != 0.0f)
-                    I[pos] /= sum_image[pos];
-        });
-        cur_is_label = false;
-    }
-    if(command =="soft_max")
-    {
-        float soft_max_prob = eval_option->get<float>("soft_max_prob");
-        float soft_min_prob = eval_option->get<float>("soft_min_prob");
-        tipl::par_for(dim.size(),[&](size_t pos)
-        {
-            float m = 0.0f;
-            for(size_t i = pos;i < this_image.size();i += dim.size())
-                if(this_image[i] > m)
-                    m = this_image[i];
-            if(m <= soft_min_prob)
-                return;
-            m *= soft_max_prob;
-            for(size_t i = pos;i < this_image.size();i += dim.size())
-                this_image[i] = (this_image[i] >= m ? 1.0f:0.0f);
-        });
-        cur_is_label = true;
-    }
-    if(command =="convert_to_3d")
-    {
-        tipl::image<3> I(dim);
-        tipl::par_for(dim.size(),[&](size_t pos)
-        {
-            for(size_t i = pos,label = 1;i < this_image.size();i += dim.size(),++label)
-                if(this_image[i])
-                {
-                    I[pos] = label;
-                    return;
-                }
-        });
-        I.swap(evaluate.label_prob[cur_index]);
-        cur_is_label = true;
-    }
+    postproc_actions(command.toStdString(),param1,param2,
+                     evaluate.label_prob[cur_index],
+                     evaluate.raw_image_shape[cur_index],
+                     evaluate.is_label[cur_index]);
     on_eval_pos_valueChanged(ui->eval_pos->value());
-    /*
-    {
-        tipl::progress p("processing",true);
-        size_t count = 0;
-        tipl::par_for(evaluate.label_prob.size(),[&](size_t index)
-        {
-            if(!p(count,evaluate.label_prob.size()))
-                return;
-            auto dim = evaluate.raw_image_shape[index];
-            size_t out_count = evaluate.label_prob[index].depth()/dim.depth();
-            for(size_t label = 0;label < out_count;++label)
-            {
-                auto from = evaluate.label_prob[index].alias(dim.size()*label,dim);
-                tipl::image<3> smoothed_from(from);
-                tipl::filter::mean(smoothed_from);
-                tipl::filter::mean(smoothed_from);
-                tipl::image<3,char> mask(dim);
-                for(size_t i = 0;i < mask.size();++i)
-                    mask[i] = smoothed_from[i] > 0.5f ? 1:0;
-                tipl::morphology::defragment(mask);
-                tipl::morphology::dilation(mask);
-                tipl::morphology::dilation(mask);
-                for(size_t i = 0;i < mask.size();++i)
-                    if(mask[i] == 0)
-                        from[i] = 0;
-                tipl::lower_threshold(from,0.0f);
-                tipl::upper_threshold(from,1.0f);
-            }
-            ++count;
-        });
-        if(!p.aborted())
-            QMessageBox::information(this,"Done","Completed");
-    }*/
 }
 

@@ -19,50 +19,45 @@ std::vector<std::string> operations({
         "swap_xy",
         "swap_yz",
         "swap_xz"});
-bool preprocessing(tipl::image<3>& image,
+bool preproc_actions(tipl::image<3>& image,
                    tipl::vector<3>& image_vs,
                    tipl::matrix<4,4>& image_trans,
                    const tipl::shape<3>& input_dim,
                    const tipl::vector<3>& input_vs,
-                   OptionTableWidget* option,
-                   unsigned char input_size_strategy,
+                   unsigned char preproc_strategy,
                    std::string& error_msg)
 {
-
-    bool is_mni = false;
-    for(int i = 1;i <= 3;++i)
-    {
-        auto cmd = option->get<int>((std::string("preproc_operation")+std::to_string(i)).c_str());
-        if(!cmd)
-            continue;
-        if(!tipl::command<tipl::io::gz_nifti>(image,image_vs,image_trans,is_mni,operations[cmd],std::string(),error_msg))
-            return false;
-    }
-
     if(input_dim == image.shape() && image_vs == input_vs)
     {
         tipl::out() << "image resolution and dimension are the same as training data. No padding or regrinding needed.";
         return true;
     }
 
-    switch(input_size_strategy)
+    switch(preproc_strategy)
     {
-        case 0: //match resolution
+        case 0: //match voxel size
         if(image_vs != input_vs)
         {
-            tipl::out() << " image has a resolution of " << image_vs << ". regriding to " << input_vs;
-            tipl::image<3> new_sized_image(input_dim);
+            tipl::image<3> new_sized_image(unet_inputsize(tipl::shape<3>(
+                    float(image.width()*image_vs[0])/input_vs[0],
+                    float(image.height()*image_vs[1])/input_vs[1],
+                    float(image.depth()*image_vs[2])/input_vs[2])));
+            tipl::out() << " image has a resolution of " << image_vs << " with a size of " << image.shape()
+                        << ". regriding to a resolution of " << input_vs << " with a size of " << new_sized_image.shape();
             tipl::resample_mt(image,new_sized_image,
                     tipl::transformation_matrix<float>(tipl::affine_transform<float>(),
-                        input_dim,input_vs,image.shape(),image_vs));
+                        new_sized_image.shape(),input_vs,image.shape(),image_vs));
             new_sized_image.swap(image);
             return true;
         }
         case 2: //original
         {
             tipl::out() << " image has a different dimension. padding or cropping applied";
-            tipl::image<3> new_sized_image(input_dim);
-            tipl::draw(image,new_sized_image);
+            tipl::image<3> new_sized_image(unet_inputsize(image.shape()));
+            auto shift = tipl::vector<3,int>(new_sized_image.shape())-
+                         tipl::vector<3,int>(image.shape());
+            shift[2] = 0;
+            tipl::draw(image,new_sized_image,shift);
             new_sized_image.swap(image);
         }
         return true;
@@ -82,6 +77,153 @@ bool preprocessing(tipl::image<3>& image,
         return true;
     }
     return false;
+}
+
+template<typename T,typename U>
+void reduce_mt(const T& in,U& out,size_t gap = 0)
+{
+    if(gap == 0)
+        gap = out.size();
+    tipl::par_for(out.size(),[&](size_t j)
+    {
+        auto v = out[j];
+        for(size_t pos = j;pos < in.size();pos += gap)
+            v += in[pos];
+        out[j] = v;
+    });
+}
+
+void postproc_actions(const std::string& command,
+                      float param1,float param2,
+                      tipl::image<3>& this_image,
+                      const tipl::shape<3>& dim,
+                      char& is_label)
+{
+    auto this_image_frames = this_image.depth()/dim[2];
+    if(this_image.empty())
+        return;
+    tipl::out() << "run " << command;
+    if(command == "remove_background")
+    {
+        float remove_fragments_smoothing = param1;
+        float remove_fragments_threshold = param2;
+        tipl::image<3> sum_image(dim);
+        reduce_mt(this_image,sum_image);
+
+        for(size_t i = 0;i < remove_fragments_smoothing;++i)
+            tipl::filter::gaussian(sum_image);
+
+        auto threshold = tipl::max_value(sum_image)*remove_fragments_threshold;
+        tipl::image<3> mask;
+        tipl::threshold(sum_image,mask,threshold,1,0);
+        tipl::morphology::defragment(mask);
+
+        tipl::par_for(this_image_frames,[&](size_t label)
+        {
+            auto I = this_image.alias(dim.size()*label,dim);
+            for(size_t pos = 0;pos < dim.size();++pos)
+                if(!mask[pos])
+                    I[pos] = 0;
+        });
+        return;
+    }
+    if(command == "defragment")
+    {
+        tipl::par_for(this_image_frames,[&](size_t label)
+        {
+            auto I = this_image.alias(dim.size()*label,dim);
+            tipl::image<3,char> mask(I.shape());
+            for(size_t i = 0;i < I.size();++i)
+                mask[i] = (I[i] > 0.5f ? 1:0);
+            tipl::morphology::defragment(mask);
+            for(size_t i = 0;i < I.size();++i)
+                if(!mask[i])
+                    I[i] = 0;
+        });
+        return;
+    }
+    if(command == "normalize_each")
+    {
+        tipl::par_for(this_image_frames,[&](size_t label)
+        {
+            auto I = this_image.alias(dim.size()*label,dim);
+            tipl::normalize(I);
+        });
+        is_label = false;
+        return;
+    }
+    if(command == "gaussian_smoothing")
+    {
+        tipl::par_for(this_image_frames,[&](size_t label)
+        {
+            auto I = this_image.alias(dim.size()*label,dim);
+            tipl::filter::gaussian(I);
+        });
+        is_label = false;
+        return;
+    }
+    if(command =="anisotropic_smoothing")
+    {
+        tipl::par_for(this_image_frames,[&](size_t label)
+        {
+            auto I = this_image.alias(dim.size()*label,dim);
+            tipl::filter::anisotropic_diffusion(I);
+        });
+        is_label = false;
+        return;
+    }
+
+    if(command =="normalize_all")
+    {
+        tipl::image<3> sum_image(dim);
+        reduce_mt(this_image,sum_image);
+
+        tipl::par_for(this_image_frames,[&](size_t label)
+        {
+            auto I = this_image.alias(dim.size()*label,dim);
+            for(size_t pos = 0;pos < dim.size();++pos)
+                if(sum_image[pos] != 0.0f)
+                    I[pos] /= sum_image[pos];
+        });
+        is_label = false;
+        return;
+    }
+    if(command =="soft_max")
+    {
+        float soft_min_prob = param1;
+        float soft_max_prob = param2;
+        tipl::par_for(dim.size(),[&](size_t pos)
+        {
+            float m = 0.0f;
+            for(size_t i = pos;i < this_image.size();i += dim.size())
+                if(this_image[i] > m)
+                    m = this_image[i];
+            if(m <= soft_min_prob)
+                return;
+            m *= soft_max_prob;
+            for(size_t i = pos;i < this_image.size();i += dim.size())
+                this_image[i] = (this_image[i] >= m ? 1.0f:0.0f);
+        });
+        is_label = true;
+        return;
+    }
+    if(command =="convert_to_3d")
+    {
+        tipl::image<3> I(dim);
+        tipl::par_for(dim.size(),[&](size_t pos)
+        {
+            for(size_t i = pos,label = 1;i < this_image.size();i += dim.size(),++label)
+                if(this_image[i])
+                {
+                    I[pos] = label;
+                    return;
+                }
+        });
+        I.swap(this_image);
+        is_label = true;
+        return;
+    }
+    tipl::out() << "ERROR: unknown command " << command << std::endl;
 }
 void evaluate_unet::read_file(const EvaluateParam& param)
 {
@@ -116,11 +258,11 @@ void evaluate_unet::read_file(const EvaluateParam& param)
 
             raw_image_shape[i] = network_input[i].shape();
 
-            if(!preprocessing(network_input[i],
+            if(!preproc_actions(network_input[i],
                           raw_image_vs[i],
                           raw_image_trans2mni[i],
                           model->dim,model->voxel_size,
-                          option,input_size_strategy,error_msg))
+                          preproc_strategy,error_msg))
             {
                 aborted = true;
                 return;
@@ -144,7 +286,7 @@ void evaluate_unet::evaluate(const EvaluateParam& param)
                     std::this_thread::sleep_for(200ms);
                     if(aborted)
                         return;
-                    status = "preprocessing";
+                    status = "preproc_actions";
                 }
                 if(cur_input.empty())
                     continue;
@@ -167,7 +309,12 @@ void evaluate_unet::evaluate(const EvaluateParam& param)
 
     }));
 }
-
+void evaluate_unet::proc_actions(const char* cmd,float param1,float param2)
+{
+    postproc_actions(cmd,param1,param2,label_prob[cur_output],
+                 raw_image_shape[cur_output],
+                 is_label[cur_output]);
+}
 void evaluate_unet::output(const EvaluateParam& param)
 {
     label_prob = std::vector<tipl::image<3> >(param.image_file_name.size());
@@ -201,19 +348,23 @@ void evaluate_unet::output(const EvaluateParam& param)
                 {
                     auto from = network_output[cur_output].alias(dim_from.size()*i,dim_from);
                     auto to = label_prob[cur_output].alias(dim_to.size()*i,dim_to);
-                    switch(input_size_strategy)
+                    switch(preproc_strategy)
                     {
                     case 0: //match resolution
                         if(raw_image_vs[cur_output] != model->voxel_size)
                         {
                             tipl::resample_mt(from,to,
                                 tipl::transformation_matrix<float>(tipl::affine_transform<float>(),
-                                    raw_image_shape[cur_output],raw_image_vs[cur_output],
-                                    model->dim,model->voxel_size));
+                                    dim_to,raw_image_vs[cur_output],
+                                    dim_from,model->voxel_size));
                             return;
                         }
                     case 2: //original
-                        tipl::draw(from,to);
+                        {
+                            auto shift = tipl::vector<3,int>(to.shape())-tipl::vector<3,int>(from.shape());
+                            shift[2] = 0;
+                            tipl::draw(from,to,shift);
+                        }
                         return;
                     case 1: //match sizes
                     {
@@ -222,14 +373,32 @@ void evaluate_unet::output(const EvaluateParam& param)
                                                     float(raw_image_shape[cur_output].depth())*raw_image_vs[cur_output][2]/float(model->dim[2])});
                         tipl::resample_mt(from,to,
                             tipl::transformation_matrix<float>(tipl::affine_transform<float>(),
-                                raw_image_shape[cur_output],raw_image_vs[cur_output],
-                                model->dim,tipl::vector<3>(target_vs,target_vs,target_vs)));
+                                dim_to,raw_image_vs[cur_output],
+                                dim_from,tipl::vector<3>(target_vs,target_vs,target_vs)));
                         return;
                     }
 
                     }
                 });
 
+                switch(postproc_strategy)
+                {
+                    case 0: // 3d labels
+                        proc_actions("normalize_each");
+                        proc_actions("remove_background",1,0.25);
+                        proc_actions("normalize_each");
+                        proc_actions("remove_background",1,0.5);
+                        proc_actions("soft_max",0.5f,1.0f);
+                        proc_actions("convert_to_3d");
+                    break;
+                    case 1: // 4d proc maps
+                        proc_actions("normalize_each");
+                        proc_actions("remove_background",1,0.25);
+                        proc_actions("normalize_each");
+                        proc_actions("remove_background",1,0.5);
+                        proc_actions("normalize_all");
+                    break;
+                }
                 network_input[cur_output] = tipl::image<3>();
                 network_output[cur_output] = tipl::image<3>();
             }
@@ -246,6 +415,7 @@ void evaluate_unet::output(const EvaluateParam& param)
         status = "complete";
     }));
 }
+
 
 void evaluate_unet::start(const EvaluateParam& param)
 {
@@ -281,3 +451,27 @@ void evaluate_unet::stop(void)
         output_thread.reset();
     }
 }
+bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
+{
+    if(currentRow >= label_prob.size())
+        return false;
+    if(label_prob[currentRow].depth() == raw_image_shape[currentRow][2])
+        return tipl::io::gz_nifti::save_to_file(file_name,
+                                         label_prob[currentRow],
+                                         raw_image_vs[currentRow],
+                                         raw_image_trans2mni[currentRow]);
+    else
+        return tipl::io::gz_nifti::save_to_file(file_name,
+                                         label_prob[currentRow].alias(0,
+                                                tipl::shape<4>(
+                                                    raw_image_shape[currentRow][0],
+                                                    raw_image_shape[currentRow][1],
+                                                    raw_image_shape[currentRow][2],
+                                                    label_prob[currentRow].depth()/
+                                                    raw_image_shape[currentRow][2])),
+                                         raw_image_vs[currentRow],
+                                         raw_image_trans2mni[currentRow]);
+}
+
+
+

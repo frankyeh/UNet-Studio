@@ -21,6 +21,9 @@ set(PROJECT_SOURCES
         main.cpp
         train.hpp
         train.cpp
+        console.h
+        console.cpp
+        console.ui
         evaluate.hpp
         evaluate.cpp
         optiontablewidget.hpp

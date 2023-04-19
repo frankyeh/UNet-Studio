@@ -1,7 +1,3 @@
-Pre-processing/Input Sizes/preproc_input_sizes/match resolution:match sizes:original/0/strategies to handle input images
-Pre-processing/Operation 1/preproc_operation1/none:gaussian filter:smoothing filter:normalize:upsampling:downsampling:flip x:flip y:flip z:swap xy:swap yz:swap xz/3/additional operation applied
-Pre-processing/Operation 2/preproc_operation2/none:gaussian filter:smoothing filter:normalize:upsampling:downsampling:flip x:flip y:flip z:swap xy:swap yz:swap xz/0/additional operation applied
-Pre-processing/Operation 3/preproc_operation3/none:gaussian filter:smoothing filter:normalize:upsampling:downsampling:flip x:flip y:flip z:swap xy:swap yz:swap xz/0/additional operation applied
 Post-processing/Erase Background/remove_background/button/0/remove background using summed probability
 Post-processing/├Threshold/remove_fragments_threshold/float:0.0:1.0:0.1:2/0.5/threshold for removing the background on summed image
 Post-processing/└Smoothing/remove_fragments_smoothing/int:1:5:1/1/number of smoothing applied
@@ -13,6 +9,6 @@ Post-processing/Gaussian Smoothing/gaussian_smoothing/button/0/apply Gaussian sm
 Post-processing/Anisotropic Smoothing/anisotropic_smoothing/button/0/apply anisotropic smoothing
 Post-processing/Soft Max/soft_max/button/0/calculate soft max
 Post-processing/└Minimum Probability/soft_min_prob/float:0.0:1.0:0.1:2/0.5/maximum probability
-Post-processing/└Maximum Probability/soft_max_prob/float:0.2:1.0:0.1:2/0.9/maximum probability
+Post-processing/└Maximum Probability/soft_max_prob/float:0.2:1.0:0.1:2/1.0/maximum probability
 Post-processing/Binarize/binarize/button/0/binarize the values
 Post-processing/└Threshold/binarize_threshold/float:0.0:1.0:0.1:2/0.5/threshold for threshold value to 0 and 1

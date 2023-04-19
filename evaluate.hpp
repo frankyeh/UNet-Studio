@@ -14,7 +14,7 @@ class evaluate_unet{
 public:
     OptionTableWidget* option = nullptr;
 public:
-    unsigned char input_size_strategy = 0; //
+    unsigned char preproc_strategy = 0,postproc_strategy = 0; //
     std::vector<tipl::image<3> > network_input,network_output;
     std::vector<tipl::shape<3> > raw_image_shape;
     std::vector<tipl::vector<3> > raw_image_vs;
@@ -33,6 +33,7 @@ private:
     void evaluate(const EvaluateParam& param);
 private:
     std::shared_ptr<std::thread> output_thread;
+    void proc_actions(const char* cmd,float param1 = 0.0f,float param2 = 0.0f);
     void output(const EvaluateParam& param);
 public:
     size_t cur_output = 0;
@@ -53,6 +54,7 @@ public:
     }
     void start(const EvaluateParam& param);
     void stop(void);
+    bool save_to_file(size_t index,const char* file_name);
 
 };
 

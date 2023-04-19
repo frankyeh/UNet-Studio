@@ -7,7 +7,16 @@
 #include <QMessageBox>
 #include <QMovie>
 #include "TIPL/tipl.hpp"
+
 extern QSettings settings;
+
+void MainWindow::on_show_advanced_clicked()
+{
+    if(ui->option_widget->isVisible())
+        ui->option_widget->hide();
+    else
+        ui->option_widget->show();
+}
 
 void MainWindow::on_actionOpen_Training_triggered()
 {
@@ -351,8 +360,6 @@ void MainWindow::training()
 {
     if(!train.running)
         timer->stop();
-
-    console.show_output();
 
     if(!train.error_msg.empty())
     {
