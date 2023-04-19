@@ -442,7 +442,7 @@ QModelIndex TreeModel::addItem(QString root_name,QString id,QVariant title, QVar
         settings.endGroup();
     }
     else
-        std::cout << "Duplicated item name in rending option" << std::endl;
+        std::cout << "duplicated item name found: " << id.toStdString() << std::endl;
     return createIndex(root_mapping[root_name]->childCount()-1,1,name_data_mapping[id]);
 }
 

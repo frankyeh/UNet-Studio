@@ -28,6 +28,7 @@ void MainWindow::on_open_evale_image_clicked()
         return;
     evaluate_list << file;
     update_evaluate_list();
+    ui->evaluate->setEnabled(!evaluate.model->feature_string.empty());
 }
 
 
@@ -41,9 +42,8 @@ void MainWindow::on_eval_from_train_clicked()
     evaluate.model = UNet3d(train.model->in_count,train.model->out_count,train.model->feature_string);
     evaluate.model->train();
     evaluate.model->copy_from(*train.model.get(),torch::kCPU);
-    evaluate.model->total_training_count = train.model->total_training_count;
     ui->evaluate_network->setText(QString("name: %1\n").arg(eval_name = train_name) + evaluate.model->get_info().c_str());
-    ui->evaluate->setEnabled(true);
+    ui->evaluate->setEnabled(evaluate_list.size());
 }
 
 
@@ -62,8 +62,7 @@ void MainWindow::on_eval_from_file_clicked()
     settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
     settings.setValue("work_file",eval_name = QFileInfo(fileName.remove(".net.gz")).fileName());
     ui->evaluate_network->setText(QString("name: %1\n").arg(eval_name) + evaluate.model->get_info().c_str());
-    ui->evaluate->setEnabled(true);
-
+    ui->evaluate->setEnabled(evaluate_list.size());
 }
 
 void MainWindow::on_evaluate_clicked()
@@ -87,6 +86,8 @@ void MainWindow::on_evaluate_clicked()
     ui->eval_label_slider->setMaximum(evaluate.model->out_count-1);
     ui->eval_label_slider->setValue(0);
     ui->evaluate_list2->clear();
+    evaluate.option = eval_option;
+    evaluate.input_size_strategy = eval_option->get<int>("preproc_input_sizes");
     evaluate.start(param);
     eval_timer->start();
 
@@ -97,6 +98,14 @@ void MainWindow::on_evaluate_clicked()
 void MainWindow::evaluating()
 {
     console.show_output();
+    if(!evaluate.running)
+        eval_timer->stop();
+    if(!evaluate.error_msg.empty())
+    {
+        QMessageBox::critical(this,"Error",evaluate.error_msg.c_str());
+        evaluate.error_msg.clear();
+    }
+    ui->evaluate->setText(evaluate.running ? "Stop" : "Start");
     ui->open_evale_image->setEnabled(!evaluate.running);
     ui->evaluate_clear->setEnabled(!evaluate.running);
     ui->eval_from_file->setEnabled(!evaluate.running);
@@ -107,8 +116,15 @@ void MainWindow::evaluating()
         ui->evaluating->movie()->stop();
     else
         ui->evaluating->movie()->start();
-    ui->eval_prog->setValue(evaluate.cur_output);
-    ui->eval_prog->setFormat(QString("%1/%2").arg(evaluate.cur_output).arg(evaluate_list.size()));
+
+    if(train.running)
+    {
+        ui->eval_prog->setValue(evaluate.cur_output);
+        ui->eval_prog->setFormat(QString("%1/%2").arg(evaluate.cur_output).arg(evaluate_list.size()));
+    }
+    else
+        ui->eval_prog->setValue(0);
+
     while(ui->evaluate_list2->count() < evaluate.cur_output)
     {
         ui->evaluate_list2->addItem(ui->evaluate_list->item(ui->evaluate_list2->count())->text());
@@ -117,13 +133,10 @@ void MainWindow::evaluating()
         on_eval_pos_valueChanged(ui->eval_pos->value());
     }
     ui->save_evale_image->setEnabled(ui->evaluate_list2->count());
-    if(!evaluate.running)
-    {
-        eval_timer->stop();
-        if(!evaluate.error_msg.empty())
-            QMessageBox::critical(this,"Error",evaluate.error_msg.c_str());
-        ui->evaluate->setText("Start");
-    }
+
+    if(ui->tabWidget->currentIndex() == 1)
+        ui->statusbar->showMessage(evaluate.status.c_str());
+
 }
 
 
@@ -133,7 +146,10 @@ void MainWindow::on_evaluate_clear_clicked()
     evaluate_list.clear();
     ui->evaluate_list->clear();
     ui->evaluate_list2->clear();
+    ui->evaluate->setEnabled(false);
     ui->save_evale_image->setEnabled(false);
+    eval_scene1 << QImage();
+    eval_scene2 << QImage();
 }
 
 
@@ -172,23 +188,33 @@ void MainWindow::on_eval_pos_valueChanged(int slice_pos)
     auto currentRow = ui->evaluate_list->currentRow();
     if(eval_I1.empty() || currentRow < 0)
         return;
-    float display_ratio = 2.0f;
     auto d = ui->eval_view_dim->currentIndex();
 
-    QImage evaluate_image;
-    evaluate_image << eval_v2c1[tipl::volume2slice_scaled(eval_I1,ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
+    auto sizes = tipl::space2slice<tipl::vector<2,int> >(d,eval_I1.shape());
+    float display_ratio = std::min<float>((ui->eval_view1->width()-10)/sizes[0],(ui->eval_view1->height()-10)/sizes[1]);
+    if(display_ratio < 1.0f)
+        display_ratio = 1.0f;
+
+    QImage network_input;
+    network_input << eval_v2c1[tipl::volume2slice_scaled(eval_I1,ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
 
     if(currentRow < evaluate.cur_output)
     {
-        auto eval_output_count = evaluate.evaluate_output[currentRow].depth()/
-                                              evaluate.evaluate_image_shape[currentRow][2];
+        auto eval_output_count = evaluate.label_prob[currentRow].depth()/
+                                              evaluate.raw_image_shape[currentRow][2];
         if(d == 2 && evaluate.is_label[currentRow] && eval_output_count > 1)
-            label_on_images(evaluate_image,evaluate.evaluate_output[currentRow],slice_pos,
+        {
+            label_on_images(network_input,evaluate.label_prob[currentRow],slice_pos,
                             ui->eval_label_slider->value(),eval_output_count);
-
+            eval_v2c2.set_range(0,1);
+        }
+        else
+        {
+            eval_v2c2.set_range(0,tipl::max_value(evaluate.label_prob[currentRow]));
+        }
         ui->eval_label_slider->setMaximum(eval_output_count-1);
         eval_scene2 << (QImage() << eval_v2c2[tipl::volume2slice_scaled(
-                           evaluate.evaluate_output[currentRow].alias(
+                           evaluate.label_prob[currentRow].alias(
                                eval_I1.size()*ui->eval_label_slider->value(),eval_I1.shape()),
                            ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)]).mirrored(d,d!=2);
         ui->save_evale_image->setEnabled(true);
@@ -198,7 +224,7 @@ void MainWindow::on_eval_pos_valueChanged(int slice_pos)
         eval_scene2 << QImage();
         ui->save_evale_image->setEnabled(false);
     }
-    eval_scene1 << evaluate_image.mirrored(d,d!=2);
+    eval_scene1 << network_input.mirrored(d,d!=2);
 }
 void MainWindow::on_save_evale_image_clicked()
 {
@@ -206,30 +232,30 @@ void MainWindow::on_save_evale_image_clicked()
     if(file.isEmpty())
         return;
     auto currentRow = ui->evaluate_list2->currentRow();
-    if(evaluate.evaluate_output[currentRow].depth() == evaluate.evaluate_image_shape[currentRow][2])
+    if(evaluate.label_prob[currentRow].depth() == evaluate.raw_image_shape[currentRow][2])
     {
         if(!tipl::io::gz_nifti::save_to_file(file.toStdString().c_str(),
-                                         evaluate.evaluate_output[currentRow].alias(0,
+                                         evaluate.label_prob[currentRow].alias(0,
                                                 tipl::shape<3>(
-                                                    evaluate.evaluate_image_shape[currentRow][0],
-                                                    evaluate.evaluate_image_shape[currentRow][1],
-                                                    evaluate.evaluate_image_shape[currentRow][2])),
-                                         evaluate.evaluate_image_vs[currentRow],
-                                         evaluate.evaluate_image_trans2mni[currentRow]))
+                                                    evaluate.raw_image_shape[currentRow][0],
+                                                    evaluate.raw_image_shape[currentRow][1],
+                                                    evaluate.raw_image_shape[currentRow][2])),
+                                         evaluate.raw_image_vs[currentRow],
+                                         evaluate.raw_image_trans2mni[currentRow]))
         QMessageBox::critical(this,"Error","Cannot save file");
     }
     else
     {
         if(!tipl::io::gz_nifti::save_to_file(file.toStdString().c_str(),
-                                         evaluate.evaluate_output[currentRow].alias(0,
+                                         evaluate.label_prob[currentRow].alias(0,
                                                 tipl::shape<4>(
-                                                    evaluate.evaluate_image_shape[currentRow][0],
-                                                    evaluate.evaluate_image_shape[currentRow][1],
-                                                    evaluate.evaluate_image_shape[currentRow][2],
-                                                    evaluate.evaluate_output[currentRow].depth()/
-                                                    evaluate.evaluate_image_shape[currentRow][2])),
-                                         evaluate.evaluate_image_vs[currentRow],
-                                         evaluate.evaluate_image_trans2mni[currentRow]))
+                                                    evaluate.raw_image_shape[currentRow][0],
+                                                    evaluate.raw_image_shape[currentRow][1],
+                                                    evaluate.raw_image_shape[currentRow][2],
+                                                    evaluate.label_prob[currentRow].depth()/
+                                                    evaluate.raw_image_shape[currentRow][2])),
+                                         evaluate.raw_image_vs[currentRow],
+                                         evaluate.raw_image_trans2mni[currentRow]))
         QMessageBox::critical(this,"Error","Cannot save file");
     }
 }
@@ -254,8 +280,8 @@ void MainWindow::runAction(QString command)
     auto cur_index = ui->evaluate_list2->currentRow();
     if(cur_index < 0)
         return;
-    auto this_image = evaluate.evaluate_output[cur_index].alias();
-    auto dim = evaluate.evaluate_image_shape[cur_index];
+    auto this_image = evaluate.label_prob[cur_index].alias();
+    auto dim = evaluate.raw_image_shape[cur_index];
     auto& cur_is_label = evaluate.is_label[cur_index];
     auto eval_out_count = this_image.depth()/dim[2];
     if(this_image.empty())
@@ -267,10 +293,10 @@ void MainWindow::runAction(QString command)
         tipl::image<3> sum_image(dim);
         reduce_mt(this_image,sum_image);
 
-        for(size_t i = 0;i < postproc->get<float>("remove_fragments_smoothing");++i)
+        for(size_t i = 0;i < eval_option->get<float>("remove_fragments_smoothing");++i)
             tipl::filter::gaussian(sum_image);
 
-        auto threshold = tipl::max_value(sum_image)*postproc->get<float>("remove_fragments_threshold");
+        auto threshold = tipl::max_value(sum_image)*eval_option->get<float>("remove_fragments_threshold");
         tipl::image<3> mask;
         tipl::threshold(sum_image,mask,threshold,1,0);
         tipl::morphology::defragment(mask);
@@ -297,7 +323,7 @@ void MainWindow::runAction(QString command)
                     I[i] = 0;
         });
     }
-    if(command =="normalize_volume")
+    if(command =="normalize_each")
     {
         tipl::par_for(eval_out_count,[&](size_t label)
         {
@@ -325,7 +351,7 @@ void MainWindow::runAction(QString command)
         cur_is_label = false;
     }
 
-    if(command =="cal_prob")
+    if(command =="normalize_all")
     {
         tipl::image<3> sum_image(dim);
         reduce_mt(this_image,sum_image);
@@ -341,14 +367,15 @@ void MainWindow::runAction(QString command)
     }
     if(command =="soft_max")
     {
-        float soft_max_prob = postproc->get<float>("soft_max_prob");
+        float soft_max_prob = eval_option->get<float>("soft_max_prob");
+        float soft_min_prob = eval_option->get<float>("soft_min_prob");
         tipl::par_for(dim.size(),[&](size_t pos)
         {
             float m = 0.0f;
             for(size_t i = pos;i < this_image.size();i += dim.size())
                 if(this_image[i] > m)
                     m = this_image[i];
-            if(m == 0.0f)
+            if(m <= soft_min_prob)
                 return;
             m *= soft_max_prob;
             for(size_t i = pos;i < this_image.size();i += dim.size())
@@ -368,7 +395,7 @@ void MainWindow::runAction(QString command)
                     return;
                 }
         });
-        I.swap(evaluate.evaluate_output[cur_index]);
+        I.swap(evaluate.label_prob[cur_index]);
         cur_is_label = true;
     }
     on_eval_pos_valueChanged(ui->eval_pos->value());
@@ -376,15 +403,15 @@ void MainWindow::runAction(QString command)
     {
         tipl::progress p("processing",true);
         size_t count = 0;
-        tipl::par_for(evaluate.evaluate_output.size(),[&](size_t index)
+        tipl::par_for(evaluate.label_prob.size(),[&](size_t index)
         {
-            if(!p(count,evaluate.evaluate_output.size()))
+            if(!p(count,evaluate.label_prob.size()))
                 return;
-            auto dim = evaluate.evaluate_image_shape[index];
-            size_t out_count = evaluate.evaluate_output[index].depth()/dim.depth();
+            auto dim = evaluate.raw_image_shape[index];
+            size_t out_count = evaluate.label_prob[index].depth()/dim.depth();
             for(size_t label = 0;label < out_count;++label)
             {
-                auto from = evaluate.evaluate_output[index].alias(dim.size()*label,dim);
+                auto from = evaluate.label_prob[index].alias(dim.size()*label,dim);
                 tipl::image<3> smoothed_from(from);
                 tipl::filter::mean(smoothed_from);
                 tipl::filter::mean(smoothed_from);

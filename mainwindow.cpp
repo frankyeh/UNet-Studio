@@ -17,8 +17,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->setupUi(this);
     ui->option_widget_layout->addWidget(option = new OptionTableWidget(*this,ui->option_widget,":/options.txt"));
-    ui->postproc_widget_layout->addWidget(postproc = new OptionTableWidget(*this,ui->postproc_widget,":/postproc.txt"));
-    connect(postproc,SIGNAL(runAction(QString)),this,SLOT(runAction(QString)));
+    ui->postproc_widget_layout->addWidget(eval_option = new OptionTableWidget(*this,ui->postproc_widget,":/postproc.txt"));
+    connect(eval_option,SIGNAL(runAction(QString)),this,SLOT(runAction(QString)));
 
 
     ui->tabWidget->setCurrentIndex(0);

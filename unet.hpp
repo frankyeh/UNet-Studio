@@ -20,6 +20,7 @@ public:
 public:
     uint32_t total_training_count = 0;
     tipl::vector<3> voxel_size = {1.0f,1.0f,1.0f};
+    tipl::shape<3> dim = {192,224,192};
     std::deque<torch::nn::Sequential> encoding,decoding,up;
     std::vector<torch::nn::BatchNorm3d> bn_layers;
     torch::nn::Sequential output;
@@ -97,6 +98,9 @@ public:
             for(size_t size = 0;size+s <= lhs[index].numel();size += s,dest += s)
                 std::memcpy(dest,src,sizeof(float)*s);
         }
+        total_training_count = r.total_training_count;
+        voxel_size = r.voxel_size;
+        dim = r.dim;
     }
     void set_requires_grad(bool req)
     {

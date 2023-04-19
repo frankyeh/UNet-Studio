@@ -9,14 +9,16 @@ struct EvaluateParam{
     std::vector<std::string> image_file_name;
     torch::Device device = torch::kCPU;
 };
-
+class OptionTableWidget;
 class evaluate_unet{
 public:
-    std::vector<tipl::image<3> > evaluate_image,evaluate_result;
-    std::vector<tipl::shape<3> > evaluate_image_shape;
-    std::vector<tipl::vector<3> > evaluate_image_vs;
-    std::vector<tipl::matrix<4,4> > evaluate_image_trans2mni;
-    std::vector<tipl::transformation_matrix<float> > evaluate_image_trans;
+    OptionTableWidget* option = nullptr;
+public:
+    unsigned char input_size_strategy = 0; //
+    std::vector<tipl::image<3> > network_input,network_output;
+    std::vector<tipl::shape<3> > raw_image_shape;
+    std::vector<tipl::vector<3> > raw_image_vs;
+    std::vector<tipl::matrix<4,4> > raw_image_trans2mni;
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;
     void read_file(const EvaluateParam& param);
@@ -24,23 +26,23 @@ public:
 public:
     bool aborted = false;
     bool running = false;
-    std::string error_msg;
+    std::string status,error_msg;
 private:
     size_t cur_prog = 0;
     std::shared_ptr<std::thread> evaluate_thread;
     void evaluate(const EvaluateParam& param);
 private:
     std::shared_ptr<std::thread> output_thread;
-    void output(void);
+    void output(const EvaluateParam& param);
 public:
     size_t cur_output = 0;
-    std::vector<tipl::image<3> > evaluate_output;
+    std::vector<tipl::image<3> > label_prob;
     std::vector<char> is_label;
     void clear(void)
     {
         stop();
         cur_output = 0;
-        evaluate_output.clear();
+        label_prob.clear();
     }
 public:
     UNet3d model;

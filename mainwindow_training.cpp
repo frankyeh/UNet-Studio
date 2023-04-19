@@ -238,7 +238,7 @@ void MainWindow::on_start_training_clicked()
 
     //tipl::out() << show_structure(train.model);
 
-    train.param.dim = tipl::shape<3>(option->get<int>("dim_x"),
+    train.model->dim = tipl::shape<3>(option->get<int>("dim_x"),
                                      option->get<int>("dim_y"),
                                      option->get<int>("dim_z"));
     train.param.device = ui->gpu->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->gpu->currentIndex()-1):torch::Device(torch::kCPU);
@@ -360,8 +360,8 @@ void MainWindow::training()
         train.error_msg.clear();
     }
 
-    ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
     ui->start_training->setText(train.running ? (train.pause ? "Resume":"Pause") : "Start");
+    ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
     ui->batch_size->setEnabled(!train.running || train.pause);
     ui->epoch->setEnabled(!train.running || train.pause);
     ui->learning_rate->setEnabled(!train.running || train.pause);
@@ -390,11 +390,14 @@ void MainWindow::training()
     else
         ui->train_prog->setValue(0);
 
-    ui->statusbar->showMessage(train.status.c_str());
+
     ui->end_training->setEnabled(train.running);
 
     if(train.cur_epoch >= error_view_epoch)
         plot_error();
+
+    if(ui->tabWidget->currentIndex() == 0)
+        ui->statusbar->showMessage(train.status.c_str());
 }
 
 
@@ -444,7 +447,7 @@ void label_on_images(QImage& I,const tipl::image<3>& I2,int slice_pos,int cur_la
     tipl::shape<3> dim(I2.width(),I2.height(),I2.depth()/out_count);
     std::vector<tipl::image<2,char> > region_masks(out_count);
     std::vector<tipl::rgb> colors(out_count);
-    tipl::par_for(out_count,[&](size_t i)
+    for(size_t i = 0;i < out_count;++i)
     {
         auto slice = I2.alias(dim.size()*i,dim).slice_at(slice_pos);
         tipl::image<2,char> mask(slice.shape());
@@ -452,7 +455,7 @@ void label_on_images(QImage& I,const tipl::image<3>& I2,int slice_pos,int cur_la
             mask[pos] = (slice[pos] == 1.0f ? 1:0);
         colors[i] = tipl::rgb::generate(i+10);
         region_masks[i] = std::move(mask);
-    });
+    }
 
     {
         QPainter painter(&I);

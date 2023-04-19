@@ -47,7 +47,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 private:
     Ui::MainWindow *ui;
-    OptionTableWidget* option,*postproc;
+    OptionTableWidget* option,*eval_option;
 public: //training
     QGraphicsScene train_scene1,train_scene2,error_scene;
     tipl::image<3> I1,I2;

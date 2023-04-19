@@ -543,7 +543,7 @@ void train_unet::read_file(void)
                     continue;
                 in_data[thread] = image[read_id];
                 out_data[thread] = label[read_id];
-                load_image_and_label(*option,in_data[thread],out_data[thread],image_vs[read_id],param.dim,seed);
+                load_image_and_label(*option,in_data[thread],out_data[thread],image_vs[read_id],model->dim,seed);
                 if(model->out_count > 1)
                     fuzzy_labels(out_data[thread],label_count[read_id]);
                 data_ready[thread] = true;
@@ -576,9 +576,9 @@ void train_unet::prepare_tensor(void)
                             return;
                     }
                     in_tensor[thread] = torch::from_blob(&in_data[data_index][0],
-                        {1,model->in_count,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(param.device);
+                        {1,model->in_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device);
                     out_tensor[thread] = torch::from_blob(&out_data[data_index][0],
-                        {1,model->out_count,int(param.dim[2]),int(param.dim[1]),int(param.dim[0])}).to(param.device);
+                        {1,model->out_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device);
                     tensor_ready[thread] = true;
                     data_ready[data_index] = false;
                     i += thread_count;
@@ -604,6 +604,13 @@ void train_unet::train(void)
     optimizer.reset(new torch::optim::Adam(model->parameters(), torch::optim::AdamOptions(param.learning_rate)));
     cur_epoch = 0;
     train_thread.reset(new std::thread([=](){
+        struct exist_guard
+        {
+            bool& running;
+            exist_guard(bool& running_):running(running_){}
+            ~exist_guard() { running = false; }
+        } guard(running);
+
         try{
             size_t cur_data_index = 0;
             for (; cur_epoch < param.epoch && !aborted; cur_epoch++)
@@ -615,10 +622,7 @@ void train_unet::train(void)
                     while(!tensor_ready[data_index] || pause)
                     {
                         if(aborted)
-                        {
-                            running = false;
                             return;
-                        }
                         status = "tensor allocation";
                         using namespace std::chrono_literals;
                         std::this_thread::sleep_for(100ms);
@@ -668,7 +672,6 @@ void train_unet::train(void)
         tipl::out() << error_msg << std::endl;
         pause = aborted = true;
         status = "complete";
-        running = false;
     }));
 }
 void train_unet::start(void)

@@ -11,7 +11,6 @@ struct TrainParam{
     int batch_size = 1;
     int epoch = 10000;
     float learning_rate = 0.001f;
-    tipl::shape<3> dim;
     torch::Device device = torch::kCPU;
 };
 
@@ -32,11 +31,10 @@ void load_image_and_label(const OptionTableWidget& options,
                           const tipl::vector<3>& image_vs,
                           const tipl::shape<3>& template_shape,
                           size_t random_seed);
-
 class train_unet{
 public:
     TrainParam param;
-    OptionTableWidget* option;
+    OptionTableWidget* option = nullptr;
 public:
     bool aborted = false;
     bool pause = false;
