@@ -222,16 +222,13 @@ void MainWindow::on_eval_pos_valueChanged(int slice_pos)
     {
         auto eval_output_count = evaluate.label_prob[currentRow].depth()/
                                               evaluate.raw_image_shape[currentRow][2];
+        eval_v2c2.set_range(0,1);
+        if(evaluate.is_label[currentRow] && eval_output_count == 1)
+            eval_v2c2.set_range(0,evaluate.model->out_count);
         if(d == 2 && evaluate.is_label[currentRow] && eval_output_count > 1)
-        {
             label_on_images(network_input,evaluate.label_prob[currentRow],slice_pos,
                             ui->eval_label_slider->value(),eval_output_count);
-            eval_v2c2.set_range(0,1);
-        }
-        else
-        {
-            eval_v2c2.set_range(0,evaluate.model->out_count);
-        }
+
         ui->eval_label_slider->setMaximum(eval_output_count-1);
         ui->eval_label_slider->setVisible(eval_output_count > 1);
         eval_scene2 << (QImage() << eval_v2c2[tipl::volume2slice_scaled(
