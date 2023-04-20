@@ -15,7 +15,7 @@ find_package(ZLIB REQUIRED)
 find_package(CUDA REQUIRED)
 find_package(Torch)
 
-set(PROJECT_SOURCES
+set(UNET_STUDIO_SOURCES
         unet.cpp
         unet.hpp
         main.cpp
@@ -35,10 +35,10 @@ set(PROJECT_SOURCES
         mainwindow.ui
 )
 
-set(UNet_STUDIO_CUDA
+set(UNET_STUDIO_CUDA
         cuda.cu)
 
-set(UNet_STUDIO_RESOURCES icons.qrc)
+set(UNET_STUDIO_RESOURCES icons.qrc)
 
 if(WIN32)
     set(UNET_STUDIO_EXEC
@@ -50,17 +50,18 @@ if(APPLE)
         MACOSX_BUNDLE)
 endif()
 
-qt_add_executable(unet_studio MANUAL_FINALIZATION ${PROJECT_SOURCES} ${UNet_STUDIO_CUDA} ${UNet_STUDIO_RESOURCES})
 
-target_link_libraries(unet_studio PUBLIC Qt6::Widgets ZLIB::ZLIB ${CUDA_LIBRARIES} ${TORCH_LIBRARIES})
-target_include_directories(unet_studio PUBLIC ${TIPL_DIR})
+add_executable(unet_studio ${UNET_STUDIO_EXEC} ${UNET_STUDIO_SOURCES} ${UNET_STUDIO_CUDA} ${UNET_STUDIO_RESOURCES})
 set_target_properties(unet_studio PROPERTIES
-    MACOSX_BUNDLE_GUI_IDENTIFIER unet_studio.labsolver.org
+    MACOSX_BUNDLE_GUI_IDENTIFIER unet-studio.labsolver.org
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
-)
+    LINK_FLAGS "/ICON:unet-studio.ico")
+
+target_link_libraries(unet_studio PUBLIC Qt6::Widgets ZLIB::ZLIB ${CUDA_LIBRARIES} ${TORCH_LIBRARIES})
+target_include_directories(unet_studio PUBLIC ${TIPL_DIR})
 
 string(REPLACE "--Werror" "" CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS})
 string(REPLACE "cross-execution-space-call" "" CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS})
@@ -73,5 +74,4 @@ else()
     set_property(TARGET unet_studio PROPERTY CUDA_ARCHITECTURES "50;52;53;60;61;62;70;72;75;80;86")
 endif()
 
-qt_finalize_executable(unet_studio)
 
