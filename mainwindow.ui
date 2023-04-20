@@ -13,6 +13,10 @@
   <property name="windowTitle">
    <string>UNet Studio</string>
   </property>
+  <property name="windowIcon">
+   <iconset resource="icons.qrc">
+    <normaloff>:/icons/unet-studio.ico</normaloff>:/icons/unet-studio.ico</iconset>
+  </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <item>
