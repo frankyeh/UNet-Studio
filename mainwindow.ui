@@ -190,7 +190,7 @@
                </item>
                <item>
                 <property name="text">
-                 <string>none</string>
+                 <string>direct  output</string>
                 </property>
                </item>
               </widget>
