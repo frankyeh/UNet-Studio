@@ -33,6 +33,7 @@ void MainWindow::on_open_evale_image_clicked()
     QStringList file = QFileDialog::getOpenFileNames(this,"Open Image",settings.value("work_dir").toString(),"NIFTI files (*nii.gz);;All files (*)");
     if(file.isEmpty())
         return;
+    settings.setValue("work_dir",QFileInfo(file[0]).absolutePath());
     evaluate_list << file;
     update_evaluate_list();
     ui->evaluate->setEnabled(!evaluate.model->feature_string.empty());
