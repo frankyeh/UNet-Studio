@@ -93,8 +93,6 @@ void MainWindow::on_evaluate_clicked()
     if(evaluate.running)
     {
         evaluate.stop();
-        eval_timer->stop();
-        ui->evaluate->setText("Start");
         return;
     }
     EvaluateParam param;
@@ -132,6 +130,7 @@ void MainWindow::evaluating()
     ui->eval_from_train->setEnabled(!evaluate.running);
     ui->evaluate_device->setEnabled(!evaluate.running);
     ui->evaluating->setEnabled(evaluate.running);
+
     if(!evaluate.running)
         ui->evaluating->movie()->stop();
     else
