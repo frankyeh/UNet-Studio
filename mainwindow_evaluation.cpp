@@ -304,13 +304,17 @@ void MainWindow::runAction(QString command)
     float param1(0),param2(0);
     if(command == "remove_background")
     {
-        param1 = eval_option->get<float>("remove_fragments_smoothing");
-        param2 = eval_option->get<float>("remove_fragments_threshold");
+        param1 = eval_option->get<float>("remove_background_threshold");
+        param2 = eval_option->get<float>("remove_background_smoothing");
     }
-    if(command == "")
+    if(command == "soft_max")
     {
         param1 = eval_option->get<float>("soft_min_prob");
         param2 = eval_option->get<float>("soft_max_prob");
+    }
+    if(command == "defragment")
+    {
+        param1 = eval_option->get<float>("defragment_threshold");
     }
     postproc_actions(command.toStdString(),param1,param2,
                      evaluate.label_prob[cur_index],

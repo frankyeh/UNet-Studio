@@ -105,15 +105,15 @@ void postproc_actions(const std::string& command,
     tipl::out() << "run " << command;
     if(command == "remove_background")
     {
-        float remove_fragments_smoothing = param1;
-        float remove_fragments_threshold = param2;
+        float remove_background_threshold = param1;
+        float remove_background_smoothing = param2;
         tipl::image<3> sum_image(dim);
         reduce_mt(this_image,sum_image);
 
-        for(size_t i = 0;i < remove_fragments_smoothing;++i)
+        for(size_t i = 0;i < remove_background_smoothing;++i)
             tipl::filter::gaussian(sum_image);
 
-        auto threshold = tipl::max_value(sum_image)*remove_fragments_threshold;
+        auto threshold = tipl::max_value(sum_image)*remove_background_threshold;
         tipl::image<3> mask;
         tipl::threshold(sum_image,mask,threshold,1,0);
         tipl::morphology::defragment(mask);
@@ -129,12 +129,13 @@ void postproc_actions(const std::string& command,
     }
     if(command == "defragment")
     {
+        float defragment_threshold = param1;
         tipl::par_for(this_image_frames,[&](size_t label)
         {
             auto I = this_image.alias(dim.size()*label,dim);
             tipl::image<3,char> mask(I.shape());
             for(size_t i = 0;i < I.size();++i)
-                mask[i] = (I[i] > 0.5f ? 1:0);
+                mask[i] = (I[i] > defragment_threshold ? 1:0);
             tipl::morphology::defragment(mask);
             for(size_t i = 0;i < I.size();++i)
                 if(!mask[i])
@@ -385,18 +386,18 @@ void evaluate_unet::output(const EvaluateParam& param)
                 {
                     case 0: // 3d labels
                         proc_actions("normalize_each");
-                        proc_actions("remove_background",1,0.25);
+                        proc_actions("remove_background",0.25,0);
                         proc_actions("normalize_each");
-                        proc_actions("remove_background",1,0.5);
+                        proc_actions("remove_background",0.5,0);
                         proc_actions("normalize_each");
                         proc_actions("soft_max",0.5f,1.0f);
                         proc_actions("convert_to_3d");
                     break;
                     case 1: // 4d proc maps
                         proc_actions("normalize_each");
-                        proc_actions("remove_background",1,0.25);
+                        proc_actions("remove_background",0.25,0);
                         proc_actions("normalize_each");
-                        proc_actions("remove_background",1,0.5);
+                        proc_actions("remove_background",0.5,0);
                         proc_actions("normalize_all");
                     break;
                 }

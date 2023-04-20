@@ -1,7 +1,8 @@
 Post-processing/Erase Background/remove_background/button/0/remove background using summed probability
-Post-processing/├Threshold/remove_fragments_threshold/float:0.0:1.0:0.1:2/0.5/threshold for removing the background on summed image
-Post-processing/└Smoothing/remove_fragments_smoothing/int:1:5:1/1/number of smoothing applied
+Post-processing/├Threshold/remove_background_threshold/float:0.0:1.0:0.1:2/0.5/threshold for removing the background on summed image
+Post-processing/└Smoothing/remove_background_smoothing/int:1:5:1/1/number of smoothing applied
 Post-processing/Defragment/defragment/button/0/remove fragments
+Post-processing/└Threshold/defragment_threshold/float:0.0:1.0:0.1:2/0.25/threshold for removing fragments
 Post-processing/4D to 3D/convert_to_3d/button/0/convert 4D volume to 3D
 Post-processing/Normalize Each/normalize_each/button/0/normalize each volume
 Post-processing/Normalize All/normalize_all/button/0/normalize volume by sum of all images

@@ -74,6 +74,7 @@ MainWindow::MainWindow(QWidget *parent)
     eval_timer = new QTimer(this);
     eval_timer->setInterval(1500);
     connect(eval_timer, SIGNAL(timeout()), this, SLOT(evaluating()));
+
 }
 
 MainWindow::~MainWindow()
@@ -95,11 +96,5 @@ void MainWindow::on_actionConsole_triggered()
     con->setAttribute(Qt::WA_DeleteOnClose);
     con->showNormal();
 }
-
-
-
-
-
-
 
 

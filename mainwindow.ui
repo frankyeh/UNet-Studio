@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>UNet Studio</string>
+   <string>UNet Studio (Pre Release)</string>
   </property>
   <property name="windowIcon">
    <iconset resource="icons.qrc">
