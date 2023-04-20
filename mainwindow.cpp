@@ -55,7 +55,7 @@ MainWindow::MainWindow(QWidget *parent)
         ui->gpu->addItems(device_list);
         ui->evaluate_device->addItems(device_list);
         ui->gpu->setCurrentIndex(torch::cuda::is_available() ? 1:0);
-        ui->evaluate_device->setCurrentIndex(0);
+        ui->evaluate_device->setCurrentIndex(ui->evaluate_device->count()-1);
     }
     // populate networks
     {

@@ -200,7 +200,11 @@ void postproc_actions(const std::string& command,
                 if(this_image[i] > m)
                     m = this_image[i];
             if(m <= soft_min_prob)
+            {
+                for(size_t i = pos;i < this_image.size();i += dim.size())
+                    this_image[i] = 0.0f;
                 return;
+            }
             m *= soft_max_prob;
             for(size_t i = pos;i < this_image.size();i += dim.size())
                 this_image[i] = (this_image[i] >= m ? 1.0f:0.0f);

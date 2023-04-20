@@ -448,30 +448,52 @@ void MainWindow::on_list2_currentRowChanged(int currentRow)
         ui->list1->setCurrentRow(currentRow);
 }
 
-void label_on_images(QImage& I,const tipl::image<3>& I2,int slice_pos,int cur_label_index,int out_count)
+void label_on_images(QImage& I,
+                     const tipl::image<3>& I2,
+                     const tipl::shape<3>& dim,
+                     int slice_pos,
+                     int cur_label_index,
+                     int out_count)
 {
     float display_ratio = float(I.width())/float(I2.width());
-    tipl::shape<3> dim(I2.width(),I2.height(),I2.depth()/out_count);
     std::vector<tipl::image<2,char> > region_masks(out_count);
+    if(I2.depth() != dim.depth())
+    {
+        tipl::par_for(out_count,[&](size_t i)
+        {
+            auto slice = I2.alias(dim.size()*i,dim).slice_at(slice_pos);
+            tipl::image<2,char> mask(slice.shape());
+            for(size_t pos = 0;pos < slice.size();++pos)
+                mask[pos] = (slice[pos] == 1.0f ? 1:0);
+
+            region_masks[i] = std::move(mask);
+        });
+    }
+    else
+    {
+        for(auto& mask : region_masks)
+            mask.resize(tipl::shape<2>(I2.width(),I2.height()));
+        size_t base = slice_pos*I2.plane_size();
+        for(size_t pos = 0;pos < I2.plane_size();++pos,++base)
+        {
+            int id = I2[base];
+            if(id && id <= out_count)
+                region_masks[id-1][pos] = 1;
+        }
+    }
+
     std::vector<tipl::rgb> colors(out_count);
     for(size_t i = 0;i < out_count;++i)
-    {
-        auto slice = I2.alias(dim.size()*i,dim).slice_at(slice_pos);
-        tipl::image<2,char> mask(slice.shape());
-        for(size_t pos = 0;pos < slice.size();++pos)
-            mask[pos] = (slice[pos] == 1.0f ? 1:0);
-        colors[i] = tipl::rgb::generate(i+10);
-        region_masks[i] = std::move(mask);
-    }
+        colors[i] = tipl::rgb(111,111,255);
 
     {
         QPainter painter(&I);
-        painter.setCompositionMode(QPainter::CompositionMode_DestinationOver);
+        painter.setCompositionMode(QPainter::CompositionMode_Screen);
         painter.drawImage(0,0,tipl::qt::draw_regions(region_masks,colors,
                                                      false, // roi_fill_region
                                                      true, // roi_draw_edge
-                                                     1, // roi_edge_width
-                                                     cur_label_index,display_ratio));
+                                                     std::max<int>(1,display_ratio/5), // roi_edge_width
+                                                     -1,display_ratio));
     }
 }
 
@@ -493,7 +515,7 @@ void MainWindow::on_pos_valueChanged(int slice_pos)
     if(I2.size() == I1.size()*out_count)
     {
         if(d == 2 && is_label)
-            label_on_images(train_image,I2,slice_pos,ui->label_slider->value(),out_count);
+            label_on_images(train_image,I2,I1.shape(),slice_pos,ui->label_slider->value(),out_count);
 
         train_scene2 << (QImage() << v2c2[tipl::volume2slice_scaled(
                             I2.alias(I1.size()*ui->label_slider->value(),I1.shape()),
