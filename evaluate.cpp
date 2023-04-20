@@ -388,6 +388,7 @@ void evaluate_unet::output(const EvaluateParam& param)
                         proc_actions("remove_background",1,0.25);
                         proc_actions("normalize_each");
                         proc_actions("remove_background",1,0.5);
+                        proc_actions("normalize_each");
                         proc_actions("soft_max",0.5f,1.0f);
                         proc_actions("convert_to_3d");
                     break;
