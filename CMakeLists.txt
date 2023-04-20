@@ -42,7 +42,8 @@ set(UNet_STUDIO_RESOURCES icons.qrc)
 
 if(WIN32)
     set(UNET_STUDIO_EXEC
-        WIN32)
+        WIN32
+        unet_studio.rc)
 endif()
 if(APPLE)
     set(UNET_STUDIO_EXEC
