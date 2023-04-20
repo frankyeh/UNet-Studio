@@ -461,6 +461,30 @@ bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
 {
     if(currentRow >= label_prob.size())
         return false;
+    if(is_label[currentRow])
+    {
+        tipl::image<3,unsigned char> label(label_prob[currentRow]);
+
+        if(label_prob[currentRow].depth() == raw_image_shape[currentRow][2])
+            return tipl::io::gz_nifti::save_to_file(file_name,
+                                             label,
+                                             raw_image_vs[currentRow],
+                                             raw_image_trans2mni[currentRow]);
+        else
+            return tipl::io::gz_nifti::save_to_file(file_name,
+                                             label.alias(0,
+                                                    tipl::shape<4>(
+                                                        raw_image_shape[currentRow][0],
+                                                        raw_image_shape[currentRow][1],
+                                                        raw_image_shape[currentRow][2],
+                                                        label_prob[currentRow].depth()/
+                                                        raw_image_shape[currentRow][2])),
+                                             raw_image_vs[currentRow],
+                                             raw_image_trans2mni[currentRow]);
+
+    }
+
+
     if(label_prob[currentRow].depth() == raw_image_shape[currentRow][2])
         return tipl::io::gz_nifti::save_to_file(file_name,
                                          label_prob[currentRow],
