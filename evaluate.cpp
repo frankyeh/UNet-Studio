@@ -268,6 +268,8 @@ void evaluate_unet::read_file(void)
                 aborted = true;
                 return;
             }
+            tipl::lower_threshold(network_input[i],0.0f);
+            tipl::normalize(network_input[i],1.0f);
             data_ready[i] = true;
         }
     }));
