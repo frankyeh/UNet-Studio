@@ -324,9 +324,11 @@ void MainWindow::runAction(QString command)
         param2 = eval_option->get<float>("soft_max_prob");
     }
     if(command == "defragment")
-    {
         param1 = eval_option->get<float>("defragment_threshold");
-    }
+    if(command == "upper_threshold")
+        param1 = eval_option->get<float>("upper_threshold_threshold");
+    if(command == "lower_threshold")
+        param1 = eval_option->get<float>("lower_threshold_threshold");
     postproc_actions(command.toStdString(),param1,param2,
                      evaluate.label_prob[cur_index],
                      evaluate.raw_image_shape[cur_index],
