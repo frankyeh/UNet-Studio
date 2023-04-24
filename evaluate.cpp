@@ -125,6 +125,29 @@ void postproc_actions(const std::string& command,
         });
         return;
     }
+    if(command == "upper_threshold")
+    {
+        float upper_threshold_threshold = param1;
+        tipl::par_for(this_image_frames,[&](size_t label)
+        {
+            auto I = this_image.alias(dim.size()*label,dim);
+            tipl::upper_threshold(I,upper_threshold_threshold);
+        });
+        is_label = false;
+        return;
+    }
+    if(command == "lower_threshold")
+    {
+        float lower_threshold_threshold = param1;
+        tipl::par_for(this_image_frames,[&](size_t label)
+        {
+            auto I = this_image.alias(dim.size()*label,dim);
+            tipl::lower_threshold(I,lower_threshold_threshold);
+        });
+        is_label = false;
+        return;
+    }
+
     if(command == "defragment")
     {
         float defragment_threshold = param1;
@@ -387,19 +410,19 @@ void evaluate_unet::output(void)
                 switch(postproc_strategy)
                 {
                     case 0: // 3d labels
+                        proc_actions("upper_threshold",1.0f);
+                        proc_actions("lower_threshold",0.0f);
                         proc_actions("normalize_each");
-                        proc_actions("remove_background",param.prob_threshold*0.5f,0);
-                        proc_actions("normalize_each");
-                        proc_actions("remove_background",param.prob_threshold,0);
-                        proc_actions("normalize_each");
+                        proc_actions("remove_background",param.prob_threshold*0.5f,1);
+                        proc_actions("remove_background",param.prob_threshold,1);
                         proc_actions("soft_max",0.5f,1.0f);
                         proc_actions("convert_to_3d");
                     break;
                     case 1: // 4d proc maps
-                        proc_actions("normalize_each");
-                        proc_actions("remove_background",param.prob_threshold*0.5f,0);
-                        proc_actions("normalize_each");
-                        proc_actions("remove_background",param.prob_threshold,0);
+                        proc_actions("upper_threshold",1.0f);
+                        proc_actions("lower_threshold",0.0f);
+                        proc_actions("remove_background",param.prob_threshold*0.5f,1);
+                        proc_actions("remove_background",param.prob_threshold,1);
                         proc_actions("normalize_all");
                     break;
                 }
