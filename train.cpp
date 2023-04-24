@@ -293,37 +293,48 @@ void load_image_and_label(const OptionTableWidget& options,
 
 
     tipl::image<3> image_out(template_shape);
-
-    if(apply("downsample"))
     {
-        tipl::image<3> reduced_image(image.shape());
-        tipl::vector<3> dd(range(options.get<float>("downsample_ratio"),1.0f),
-                           range(options.get<float>("downsample_ratio"),1.0f),
-                           range(options.get<float>("downsample_ratio"),1.0f));
-        tipl::vector<3> new_vs(image_vs[0]/dd[0],image_vs[1]/dd[1],image_vs[2]/dd[2]);
-        tipl::affine_transform<float> image_arg;
-        image_arg.scaling[0] = 1.0f/dd[0];
-        image_arg.scaling[1] = 1.0f/dd[1];
-        image_arg.scaling[2] = 1.0f/dd[2];
-        tipl::resample_mt(image,reduced_image,
-            tipl::transformation_matrix<float>(image_arg,image.shape(),new_vs,image.shape(),image_vs));
-        image_arg = transform;
-        image_arg.scaling[0] *= dd[0];
-        image_arg.scaling[1] *= dd[1];
-        image_arg.scaling[2] *= dd[2];
-        tipl::compose_displacement_with_affine(reduced_image,image_out,
-            tipl::transformation_matrix<float>(image_arg,template_shape,template_vs,image.shape(),new_vs),displaced);
+        bool downsample_x = apply("downsample_x");
+        bool downsample_y = apply("downsample_y");
+        bool downsample_z = apply("downsample_z");
+        if(downsample_x || downsample_y || downsample_z)
+        {
+            tipl::image<3> reduced_image(image.shape());
+            tipl::vector<3> dd(downsample_x ? range(options.get<float>("downsample_x_ratio"),1.0f) : 1.0f,
+                               downsample_y ? range(options.get<float>("downsample_y_ratio"),1.0f) : 1.0f,
+                               downsample_z ? range(options.get<float>("downsample_z_ratio"),1.0f) : 1.0f);
+            tipl::vector<3> new_vs(image_vs[0]/dd[0],image_vs[1]/dd[1],image_vs[2]/dd[2]);
+            tipl::affine_transform<float> image_arg;
+            image_arg.scaling[0] = 1.0f/dd[0];
+            image_arg.scaling[1] = 1.0f/dd[1];
+            image_arg.scaling[2] = 1.0f/dd[2];
+            tipl::resample_mt(image,reduced_image,
+                tipl::transformation_matrix<float>(image_arg,image.shape(),new_vs,image.shape(),image_vs));
+            image_arg = transform;
+            image_arg.scaling[0] *= dd[0];
+            image_arg.scaling[1] *= dd[1];
+            image_arg.scaling[2] *= dd[2];
+            tipl::compose_displacement_with_affine(reduced_image,image_out,
+                tipl::transformation_matrix<float>(image_arg,template_shape,template_vs,image.shape(),new_vs),displaced);
+        }
+        else
+            tipl::compose_displacement_with_affine(image,image_out,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs),displaced);
     }
-    else
-        tipl::compose_displacement_with_affine(image,image_out,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs),displaced);
 
+    tipl::lower_threshold(image_out,0.0f);
+    tipl::normalize(image_out,1.0f);
+
+
+    if(apply("invert_signal"))
+    {
+        for(size_t i = 0;i < image_out.size();++i)
+            image_out[i] = 1.0f-image_out[i];
+    }
     if(apply("pow_signal"))
     {
-        tipl::lower_threshold(image,0.0f);
-        tipl::normalize(image,1.0f);
         float exp = range(1.0f/options.get<float>("pow_signal_exp"),options.get<float>("pow_signal_exp"));
-        for(size_t i = 0;i < image.size();++i)
-            image[i] = std::pow(image[i],exp);
+        for(size_t i = 0;i < image_out.size();++i)
+            image_out[i] = std::pow(image_out[i],exp);
     }
 
     if(apply("ring"))
