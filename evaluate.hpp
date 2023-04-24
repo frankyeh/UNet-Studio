@@ -8,6 +8,7 @@
 struct EvaluateParam{
     std::vector<std::string> image_file_name;
     torch::Device device = torch::kCPU;
+    float prob_threshold = 0.5f;
 };
 class OptionTableWidget;
 class evaluate_unet{

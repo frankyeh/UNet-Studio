@@ -386,18 +386,18 @@ void evaluate_unet::output(void)
                 {
                     case 0: // 3d labels
                         proc_actions("normalize_each");
-                        proc_actions("remove_background",0.25,0);
+                        proc_actions("remove_background",param.prob_threshold*0.5f,0);
                         proc_actions("normalize_each");
-                        proc_actions("remove_background",0.5,0);
+                        proc_actions("remove_background",param.prob_threshold,0);
                         proc_actions("normalize_each");
                         proc_actions("soft_max",0.5f,1.0f);
                         proc_actions("convert_to_3d");
                     break;
                     case 1: // 4d proc maps
                         proc_actions("normalize_each");
-                        proc_actions("remove_background",0.25,0);
+                        proc_actions("remove_background",param.prob_threshold*0.5f,0);
                         proc_actions("normalize_each");
-                        proc_actions("remove_background",0.5,0);
+                        proc_actions("remove_background",param.prob_threshold,0);
                         proc_actions("normalize_all");
                     break;
                 }

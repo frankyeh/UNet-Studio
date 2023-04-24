@@ -100,6 +100,7 @@ void MainWindow::on_evaluate_clicked()
     }
     evaluate.param.device = ui->evaluate_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->evaluate_device->currentIndex()-1):torch::Device(torch::kCPU);
     evaluate.param.image_file_name.clear();
+    evaluate.param.prob_threshold = ui->postproc_prob_threshold->value();
     for(auto s : evaluate_list)
         evaluate.param.image_file_name.push_back(s.toStdString());
 
