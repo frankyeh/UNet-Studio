@@ -85,19 +85,25 @@ public:
                    torch::nn::Conv3d(torch::nn::Conv3dOptions(features_up[0].back(), out_count, 1)));
         register_module("output",output);
     }
-    void copy_from(UNet3dImpl& r,torch::Device device)
+    void copy_from(UNet3dImpl& r)
     {
+        set_requires_grad(false);
         auto rhs = r.parameters();
         auto lhs = parameters();
         for(size_t index = 0;index < rhs.size();++index)
         {
-            auto data = rhs[index].to(device);
-            float* dest = lhs[index].data_ptr<float>();
-            const float* src = data.data_ptr<float>();
-            size_t s = std::min<size_t>(rhs[index].numel(),lhs[index].numel());
-            for(size_t size = 0;size+s <= lhs[index].numel();size += s,dest += s)
-                std::memcpy(dest,src,sizeof(float)*s);
+            if(lhs[index].sizes() == rhs[index].sizes())
+                lhs[index].copy_(rhs[index].to(lhs[index].device()));
+            else
+            {
+                if(rhs[index].numel() > lhs[index].numel())
+                    lhs[index].copy_(rhs[index].reshape({rhs[index].numel()}).slice(0,0,lhs[index].numel()).reshape(lhs[index].sizes()).to(lhs[index].device()));
+                else
+                    lhs[index].reshape({lhs[index].numel()}).index_put_({torch::indexing::Slice(0,int(rhs[index].numel()))},
+                                       rhs[index].to(lhs[index].device()).reshape({rhs[index].numel()}));
+            }
         }
+
         total_training_count = r.total_training_count;
         voxel_size = r.voxel_size;
         dim = r.dim;

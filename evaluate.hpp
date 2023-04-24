@@ -13,15 +13,16 @@ class OptionTableWidget;
 class evaluate_unet{
 public:
     OptionTableWidget* option = nullptr;
+    EvaluateParam param;
 public:
     unsigned char preproc_strategy = 0,postproc_strategy = 0; //
     std::vector<tipl::image<3> > network_input,network_output;
     std::vector<tipl::shape<3> > raw_image_shape;
     std::vector<tipl::vector<3> > raw_image_vs;
-    std::vector<tipl::matrix<4,4> > raw_image_trans2mni;
+    std::vector<std::vector<char> > raw_image_flip_swap;
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;
-    void read_file(const EvaluateParam& param);
+    void read_file(void);
     void get_result(size_t index);
 public:
     bool aborted = false;
@@ -30,11 +31,11 @@ public:
 private:
     size_t cur_prog = 0;
     std::shared_ptr<std::thread> evaluate_thread;
-    void evaluate(const EvaluateParam& param);
+    void evaluate(void);
 private:
     std::shared_ptr<std::thread> output_thread;
     void proc_actions(const char* cmd,float param1 = 0.0f,float param2 = 0.0f);
-    void output(const EvaluateParam& param);
+    void output(void);
 public:
     size_t cur_output = 0;
     std::vector<tipl::image<3> > label_prob;
@@ -52,7 +53,7 @@ public:
     {
         stop();
     }
-    void start(const EvaluateParam& param);
+    void start(void);
     void stop(void);
     bool save_to_file(size_t index,const char* file_name);
 

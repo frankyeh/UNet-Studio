@@ -514,8 +514,13 @@ void train_unet::read_file(void)
                 test_out_tensor.push_back(torch::from_blob(&new_label[0],
                     {1,model->out_count,int(new_image.shape()[2]),int(new_image.shape()[1]),int(new_image.shape()[0])}).to(param.device));
             }
-            if(!test_in_tensor.empty())
-                test_error.resize(param.epoch);
+
+        }
+        if(test_in_tensor.empty())
+        {
+            error_msg = "no testing image";
+            aborted = true;
+            return;
         }
         if(image.empty())
         {
@@ -601,8 +606,15 @@ void train_unet::prepare_tensor(void)
 void train_unet::train(void)
 {
     error = std::vector<float>(param.epoch);
+    test_error = std::vector<float>(param.epoch);
+
     optimizer.reset(new torch::optim::Adam(model->parameters(), torch::optim::AdamOptions(param.learning_rate)));
     cur_epoch = 0;
+
+    output_model = UNet3d(1,model->out_count,model->feature_string);
+    output_model->to(param.device);
+    output_model->copy_from(*model);
+
     train_thread.reset(new std::thread([=](){
         struct exist_guard
         {
@@ -613,8 +625,41 @@ void train_unet::train(void)
 
         try{
             size_t cur_data_index = 0;
-            for (; cur_epoch < param.epoch && !aborted; cur_epoch++)
+            size_t best_epoch = 0;
+
+            while(test_in_tensor.empty() || pause)
             {
+                if(aborted)
+                    return;
+                status = "tensor allocation";
+                using namespace std::chrono_literals;
+                std::this_thread::sleep_for(100ms);
+            }
+
+            for (; cur_epoch < param.epoch && !aborted;cur_epoch++)
+            {
+                if(!test_in_tensor.empty())
+                {
+                    torch::NoGradGuard no_grad;
+                    model->set_requires_grad(false);
+                    model->set_bn_tracking_running_stats(false);
+                    model->eval();
+                    float sum_error = 0.0f;
+                    for(size_t i = 0;i < test_in_tensor.size();++i)
+                        sum_error += torch::mse_loss(model->forward(test_in_tensor[i]),test_out_tensor[i]).item().toFloat();
+                    tipl::out() << "epoch:" << cur_epoch << " test error:" << (test_error[cur_epoch] = sum_error/float(test_in_tensor.size())) << std::endl;
+
+                    if(test_error[best_epoch] <= test_error[cur_epoch])
+                        best_epoch = cur_epoch;
+
+                    if(param.output == 0 || best_epoch == cur_epoch)
+                        output_model->copy_from(*model);
+
+                    model->set_requires_grad(true);
+                    model->set_bn_tracking_running_stats(true);
+                    model->train();
+                }
+
                 float sum_error = 0.0f;
                 for(size_t b = 0;b < param.batch_size && !aborted;++b,++cur_data_index)
                 {
@@ -632,7 +677,6 @@ void train_unet::train(void)
                     sum_error += loss.item().toFloat();
                     loss.backward();
                     tensor_ready[data_index] = false;
-
                 }
 
                 {
@@ -646,20 +690,7 @@ void train_unet::train(void)
                         optimizer->defaults().set_lr(param.learning_rate);
                     }
                 }
-                if(!test_in_tensor.empty())
-                {
-                    torch::NoGradGuard no_grad;
-                    model->set_requires_grad(false);
-                    model->set_bn_tracking_running_stats(false);
-                    model->eval();
-                    float sum_error = 0.0f;
-                    for(size_t i = 0;i < test_in_tensor.size();++i)
-                        sum_error += torch::mse_loss(model->forward(test_in_tensor[i]),test_out_tensor[i]).item().toFloat();
-                    tipl::out() << "epoch:" << cur_epoch << " test error:" << (test_error[cur_epoch] = sum_error/float(test_in_tensor.size())) << std::endl;
-                    model->set_requires_grad(true);
-                    model->set_bn_tracking_running_stats(true);
-                    model->train();
-                }
+
             }
         }
         catch(const c10::Error& error)
@@ -671,6 +702,7 @@ void train_unet::train(void)
         }
         tipl::out() << error_msg << std::endl;
         pause = aborted = true;
+        model->copy_from(*output_model);
         status = "complete";
     }));
 }
@@ -679,6 +711,8 @@ void train_unet::start(void)
     stop();
     status = "initializing";
     model->to(param.device);
+    model->set_requires_grad(true);
+    model->set_bn_tracking_running_stats(true);
     model->train();
     pause = aborted = false;
     running = true;

@@ -189,7 +189,6 @@ void MainWindow::on_load_network_clicked()
     settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
     settings.setValue("work_file",train_name = QFileInfo(fileName.remove(".net.gz")).fileName());
 
-    ui->batch_size->setValue(std::pow(4,std::log10(train.model->total_training_count)));
     ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
 
 
@@ -199,7 +198,7 @@ void MainWindow::on_save_network_clicked()
     QString fileName = QFileDialog::getSaveFileName(this,"Save network file",
                                                 settings.value("work_dir").toString() + "/" +
                                                 train_name + ".net.gz","Network files (*net.gz);;All files (*)");
-    if(!fileName.isEmpty() && save_to_file(train.model,fileName.toStdString().c_str()))
+    if(!fileName.isEmpty() && save_to_file(train.output_model,fileName.toStdString().c_str()))
     {
         QMessageBox::information(this,"","Network Saved");
         settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
@@ -215,10 +214,9 @@ void MainWindow::on_start_training_clicked()
     at::globalContext().setDeterministicCuDNN(true);
     qputenv("CUDNN_DETERMINISTIC", "1");
 
-    train.param.epoch = ui->epoch->value();
     train.param.batch_size = ui->batch_size->value();
     train.param.learning_rate = ui->learning_rate->value();
-
+    train.param.output = ui->training_output->currentIndex();
     train.option = option;
     if(train.running)
     {
@@ -241,7 +239,7 @@ void MainWindow::on_start_training_clicked()
     {
         tipl::out() << "copy pretrained model" << std::endl;
         auto new_model = UNet3d(1,out_count,train.model->feature_string);
-        new_model->copy_from(*train.model.get(),torch::kCPU);
+        new_model->copy_from(*train.model.get());
         train.model = new_model;
     }
 
@@ -251,6 +249,7 @@ void MainWindow::on_start_training_clicked()
                                      option->get<int>("dim_y"),
                                      option->get<int>("dim_z"));
     train.param.device = ui->gpu->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->gpu->currentIndex()-1):torch::Device(torch::kCPU);
+    train.param.epoch = ui->epoch->value();
     train.param.image_file_name.clear();
     train.param.label_file_name.clear();
     for(size_t i = 0;i < image_list.size();++i)
@@ -272,12 +271,15 @@ void MainWindow::on_start_training_clicked()
     ui->start_training->setText(train.pause ? "Resume":"Pause");
     error_view_epoch = 0;
     error_scene << QImage();
+
+    ui->eval_from_train->setEnabled(true);
 }
 
 void MainWindow::on_end_training_clicked()
 {
     train.stop();
 }
+
 
 void MainWindow::plot_error()
 {
@@ -370,9 +372,10 @@ void MainWindow::training()
     ui->start_training->setText(train.running ? (train.pause ? "Resume":"Pause") : "Start");
     ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
     ui->batch_size->setEnabled(!train.running || train.pause);
-    ui->epoch->setEnabled(!train.running || train.pause);
     ui->learning_rate->setEnabled(!train.running || train.pause);
+    ui->training_output->setEnabled(!train.running || train.pause);
 
+    ui->epoch->setEnabled(!train.running);
     ui->open_files->setEnabled(!train.running);
     ui->clear->setEnabled(!train.running);
     ui->open_labels->setEnabled(!train.running);

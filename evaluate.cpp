@@ -21,7 +21,6 @@ std::vector<std::string> operations({
         "swap_xz"});
 bool preproc_actions(tipl::image<3>& image,
                    tipl::vector<3>& image_vs,
-                   tipl::matrix<4,4>& image_trans,
                    const tipl::shape<3>& input_dim,
                    const tipl::vector<3>& input_vs,
                    unsigned char preproc_strategy,
@@ -42,8 +41,7 @@ bool preproc_actions(tipl::image<3>& image,
                     float(image.width()*image_vs[0])/input_vs[0],
                     float(image.height()*image_vs[1])/input_vs[1],
                     float(image.depth()*image_vs[2])/input_vs[2])));
-            tipl::out() << " image has a resolution of " << image_vs << " with a size of " << image.shape()
-                        << ". regriding to a resolution of " << input_vs << " with a size of " << new_sized_image.shape();
+            tipl::out() << "regriding to a resolution of " << input_vs << " with a size of " << new_sized_image.shape();
             tipl::resample_mt(image,new_sized_image,
                     tipl::transformation_matrix<float>(tipl::affine_transform<float>(),
                         new_sized_image.shape(),input_vs,image.shape(),image_vs));
@@ -52,7 +50,7 @@ bool preproc_actions(tipl::image<3>& image,
         }
         case 2: //original
         {
-            tipl::out() << " image has a different dimension. padding or cropping applied";
+            tipl::out() << "image has a different dimension. padding or cropping applied";
             tipl::image<3> new_sized_image(unet_inputsize(image.shape()));
             auto shift = tipl::vector<3,int>(new_sized_image.shape())-
                          tipl::vector<3,int>(image.shape());
@@ -63,7 +61,7 @@ bool preproc_actions(tipl::image<3>& image,
         return true;
         case 1: //match sizes
         {
-            tipl::out() << " image has a dimension of " << image.shape() << ". regriding applied";
+            tipl::out() << "regriding applied.";
             float target_vs = std::min({float(image.width())*image_vs[0]/float(input_dim[0]),
                                         float(image.height())*image_vs[1]/float(input_dim[1]),
                                         float(image.depth())*image_vs[2]/float(input_dim[2])});
@@ -230,12 +228,12 @@ void postproc_actions(const std::string& command,
     }
     tipl::out() << "ERROR: unknown command " << command << std::endl;
 }
-void evaluate_unet::read_file(const EvaluateParam& param)
+void evaluate_unet::read_file(void)
 {
     network_input = std::vector<tipl::image<3> >(param.image_file_name.size());
     raw_image_shape = std::vector<tipl::shape<3> >(param.image_file_name.size());
     raw_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
-    raw_image_trans2mni = std::vector<tipl::matrix<4,4> >(param.image_file_name.size());
+    raw_image_flip_swap = std::vector<std::vector<char> >(param.image_file_name.size());
     data_ready = std::vector<bool> (param.image_file_name.size());
     read_file_thread.reset(new std::thread([=]()
     {
@@ -250,22 +248,20 @@ void evaluate_unet::read_file(const EvaluateParam& param)
                 status = "evaluating";
             }
             tipl::out() << "reading " << param.image_file_name[i] << std::endl;
-            if(!tipl::io::gz_nifti::load_from_file(param.image_file_name[i].c_str(),
-                                                  network_input[i],
-                                                  raw_image_vs[i],
-                                                  raw_image_trans2mni[i]))
+            tipl::io::gz_nifti in;
+            if(!in.load_from_file(param.image_file_name[i]))
             {
-                error_msg = "cannot open file ";
-                error_msg = param.image_file_name[i];
+                error_msg = in.error_msg;
                 aborted = true;
                 return;
             }
-
+            in >> network_input[i];
+            in.get_voxel_size(raw_image_vs[i]);
+            raw_image_flip_swap[i] = in.flip_swap_seq;
             raw_image_shape[i] = network_input[i].shape();
-
+            tipl::out() << "dim: " << network_input[i].shape() << " vs:" << raw_image_vs[i] << std::endl;
             if(!preproc_actions(network_input[i],
                           raw_image_vs[i],
-                          raw_image_trans2mni[i],
                           model->dim,model->voxel_size,
                           preproc_strategy,error_msg))
             {
@@ -277,7 +273,7 @@ void evaluate_unet::read_file(const EvaluateParam& param)
     }));
 }
 
-void evaluate_unet::evaluate(const EvaluateParam& param)
+void evaluate_unet::evaluate(void)
 {
     network_output  = std::vector<tipl::image<3> >(param.image_file_name.size());
     evaluate_thread.reset(new std::thread([=](){
@@ -320,7 +316,7 @@ void evaluate_unet::proc_actions(const char* cmd,float param1,float param2)
                  raw_image_shape[cur_output],
                  is_label[cur_output]);
 }
-void evaluate_unet::output(const EvaluateParam& param)
+void evaluate_unet::output(void)
 {
     label_prob = std::vector<tipl::image<3> >(param.image_file_name.size());
     is_label = std::vector<char>(param.image_file_name.size());
@@ -423,7 +419,7 @@ void evaluate_unet::output(const EvaluateParam& param)
 }
 
 
-void evaluate_unet::start(const EvaluateParam& param)
+void evaluate_unet::start(void)
 {
     status = "initiating";
     stop();
@@ -434,9 +430,9 @@ void evaluate_unet::start(const EvaluateParam& param)
     aborted = false;
     running = true;
     error_msg.clear();
-    read_file(param);
-    evaluate(param);
-    output(param);
+    read_file();
+    evaluate();
+    output();
 }
 void evaluate_unet::stop(void)
 {
@@ -461,46 +457,43 @@ bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
 {
     if(currentRow >= label_prob.size())
         return false;
+    tipl::out() << "reader header information from " << param.image_file_name[currentRow];
+    tipl::io::gz_nifti in;
+    if(!in.load_from_file(param.image_file_name[currentRow]))
+    {
+        error_msg = in.error_msg;
+        return false;
+    }
+    tipl::out() << "save " << file_name;
+    in.flip_swap_seq = raw_image_flip_swap[currentRow];
     if(is_label[currentRow])
     {
         tipl::image<3,unsigned char> label(label_prob[currentRow]);
+        in.apply_flip_swap_seq(label,true);
 
         if(label_prob[currentRow].depth() == raw_image_shape[currentRow][2])
-            return tipl::io::gz_nifti::save_to_file(file_name,
-                                             label,
-                                             raw_image_vs[currentRow],
-                                             raw_image_trans2mni[currentRow]);
+            in.load_from_image(label);
         else
-            return tipl::io::gz_nifti::save_to_file(file_name,
-                                             label.alias(0,
-                                                    tipl::shape<4>(
-                                                        raw_image_shape[currentRow][0],
-                                                        raw_image_shape[currentRow][1],
-                                                        raw_image_shape[currentRow][2],
-                                                        label_prob[currentRow].depth()/
-                                                        raw_image_shape[currentRow][2])),
-                                             raw_image_vs[currentRow],
-                                             raw_image_trans2mni[currentRow]);
-
+            in.load_from_image(label.alias(0,tipl::shape<4>(
+                          raw_image_shape[currentRow][0],
+                          raw_image_shape[currentRow][1],
+                          raw_image_shape[currentRow][2],
+                          label_prob[currentRow].depth()/raw_image_shape[currentRow][2])));
+        return in.save_to_file(file_name);
     }
 
+    tipl::image<3> prob(label_prob[currentRow]);
+    in.apply_flip_swap_seq(prob,true);
 
     if(label_prob[currentRow].depth() == raw_image_shape[currentRow][2])
-        return tipl::io::gz_nifti::save_to_file(file_name,
-                                         label_prob[currentRow],
-                                         raw_image_vs[currentRow],
-                                         raw_image_trans2mni[currentRow]);
+        in.load_from_image(prob);
     else
-        return tipl::io::gz_nifti::save_to_file(file_name,
-                                         label_prob[currentRow].alias(0,
-                                                tipl::shape<4>(
-                                                    raw_image_shape[currentRow][0],
-                                                    raw_image_shape[currentRow][1],
-                                                    raw_image_shape[currentRow][2],
-                                                    label_prob[currentRow].depth()/
-                                                    raw_image_shape[currentRow][2])),
-                                         raw_image_vs[currentRow],
-                                         raw_image_trans2mni[currentRow]);
+        in.load_from_image(prob.alias(0,tipl::shape<4>(
+                          raw_image_shape[currentRow][0],
+                          raw_image_shape[currentRow][1],
+                          raw_image_shape[currentRow][2],
+                          label_prob[currentRow].depth()/raw_image_shape[currentRow][2])));
+    return in.save_to_file(file_name);
 }
 
 

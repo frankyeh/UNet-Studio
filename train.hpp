@@ -11,6 +11,7 @@ struct TrainParam{
     int batch_size = 1;
     int epoch = 10000;
     float learning_rate = 0.001f;
+    int output = 0;
     torch::Device device = torch::kCPU;
 };
 
@@ -59,7 +60,7 @@ public:
     size_t cur_epoch = 0;
     std::vector<float> error,test_error;
 public:
-    UNet3d model,test_model;
+    UNet3d model,output_model;
     ~train_unet(void)
     {
         stop();

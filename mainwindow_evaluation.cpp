@@ -42,14 +42,16 @@ void MainWindow::on_open_evale_image_clicked()
 
 void MainWindow::on_eval_from_train_clicked()
 {
-    if(train.model->feature_string.empty())
+    if(train.output_model->feature_string.empty())
     {
         QMessageBox::critical(this,"Error","No trained network");
         return;
     }
-    evaluate.model = UNet3d(train.model->in_count,train.model->out_count,train.model->feature_string);
-    evaluate.model->train();
-    evaluate.model->copy_from(*train.model.get(),torch::kCPU);
+    evaluate.model = UNet3d(train.output_model->in_count,train.output_model->out_count,train.output_model->feature_string);
+    evaluate.model->set_requires_grad(false);
+    evaluate.model->set_bn_tracking_running_stats(false);
+    evaluate.model->eval();
+    evaluate.model->copy_from(*train.output_model);
     ui->evaluate_network->setText(QString("name: %1\n").arg(eval_name = train_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
 }
@@ -96,10 +98,10 @@ void MainWindow::on_evaluate_clicked()
         evaluate.stop();
         return;
     }
-    EvaluateParam param;
-    param.device = ui->evaluate_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->evaluate_device->currentIndex()-1):torch::Device(torch::kCPU);
+    evaluate.param.device = ui->evaluate_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->evaluate_device->currentIndex()-1):torch::Device(torch::kCPU);
+    evaluate.param.image_file_name.clear();
     for(auto s : evaluate_list)
-        param.image_file_name.push_back(s.toStdString());
+        evaluate.param.image_file_name.push_back(s.toStdString());
 
     ui->evaluate->setText("Stop");
     ui->eval_prog->setEnabled(true);
@@ -108,7 +110,7 @@ void MainWindow::on_evaluate_clicked()
     evaluate.option = eval_option;
     evaluate.preproc_strategy = ui->preproc->currentIndex();
     evaluate.postproc_strategy = ui->postproc->currentIndex();
-    evaluate.start(param);
+    evaluate.start();
     eval_timer->start();
 
 }
@@ -128,7 +130,6 @@ void MainWindow::evaluating()
     ui->open_evale_image->setEnabled(!evaluate.running);
     ui->evaluate_clear->setEnabled(!evaluate.running);
     ui->eval_from_file->setEnabled(!evaluate.running);
-    ui->eval_from_train->setEnabled(!evaluate.running);
     ui->evaluate_device->setEnabled(!evaluate.running);
     ui->evaluating->setEnabled(evaluate.running);
 
