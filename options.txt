@@ -41,5 +41,6 @@ Lesion/Cropout Count/cropout_count/int:1:10:1/3/maximum number of cropouts
 Lesion/├Minimum Size/cropout_size_min/float:0.0:1.0:0.05:2/0.05/minimum size of cropout in proportion to image width
 Lesion/└Maximum Size/cropout_size_max/float:0.0:1.0:0.05:2/0.2/maximum size of cropout in proportion to image width
 Background/Self Replication/self_replication/Off:20%:40%:60%:80%:On/5/Add background
-Background/└Magnitude/self_replication_mag/float:0.0:1.0:0.1:2/0.02/The magnitude of background images
+Background/└Magnitude/self_replication_mag/float:0.0:1.0:0.1:2/0.05/The magnitude of background images
 Background/Perline Noise/perlin_noise/Off:20%:40%:60%:80%:On/1/Add Perlin noise
+Background/└Magnitude/perlin_noise_mag/float:0.0:1.0:0.1:2/0.05/The magnitude of background images

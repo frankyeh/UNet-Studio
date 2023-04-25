@@ -6,6 +6,7 @@
 #include <QMessageBox>
 #include <QMovie>
 #include "TIPL/tipl.hpp"
+#include "console.h"
 
 extern QSettings settings;
 
@@ -120,6 +121,7 @@ void MainWindow::on_evaluate_clicked()
 
 void MainWindow::evaluating()
 {
+    console.show_output();
     if(!evaluate.running)
         eval_timer->stop();
     if(!evaluate.error_msg.empty())
@@ -313,10 +315,10 @@ void MainWindow::runAction(QString command)
     if(cur_index < 0)
         return;
     float param1(0),param2(0);
-    if(command == "remove_background")
+    if(command == "erase_background")
     {
-        param1 = eval_option->get<float>("remove_background_threshold");
-        param2 = eval_option->get<float>("remove_background_smoothing");
+        param1 = eval_option->get<float>("erase_background_threshold");
+        param2 = eval_option->get<float>("erase_background_smoothing");
     }
     if(command == "soft_max")
     {
@@ -329,6 +331,8 @@ void MainWindow::runAction(QString command)
         param1 = eval_option->get<float>("upper_threshold_threshold");
     if(command == "lower_threshold")
         param1 = eval_option->get<float>("lower_threshold_threshold");
+    if(command == "minus")
+        param1 = eval_option->get<float>("minus_value");
     postproc_actions(command.toStdString(),param1,param2,
                      evaluate.label_prob[cur_index],
                      evaluate.raw_image_shape[cur_index],

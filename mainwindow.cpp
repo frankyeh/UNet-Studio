@@ -80,7 +80,6 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    console.log_window = nullptr;
     settings.setValue("eval_network",ui->eval_networks->currentText());
     delete ui;
 }

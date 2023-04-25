@@ -352,11 +352,9 @@ void load_image_and_label(const OptionTableWidget& options,
     tipl::normalize(image_out);
     tipl::lower_threshold(image_out,0.0f);
 
-    bool apply_self_replication = apply("self_replication");
-    bool apply_perlin_noise = apply("perlin_noise");
-    if(apply_self_replication || apply_perlin_noise)
+
     {
-        if(apply_self_replication)
+        if(apply("self_replication"))
         {
             tipl::image<3> background(template_shape);
             {
@@ -371,8 +369,8 @@ void load_image_and_label(const OptionTableWidget& options,
             for(size_t i = 0;i < image_out.size();++i)
                 image_out[i] += background[i]/(0.1f+image_out[i]);
         }
-        else
-        if(apply_perlin_noise)
+
+        if(apply("perlin_noise"))
         {
             std::vector<int> p(512);
             for(size_t i = 0;i < p.size();i++)
@@ -401,9 +399,9 @@ void load_image_and_label(const OptionTableWidget& options,
                 background[pos] = v-std::floor(v);
             });
 
-            tipl::normalize(background,1.0f);
-            image_out.swap(background);
-            label = 0;
+            tipl::normalize(background,options.get<float>("perlin_noise_mag"));
+            for(size_t i = 0;i < image_out.size();++i)
+                image_out[i] += background[i]/(0.1f+image_out[i]);
         }
     }
 

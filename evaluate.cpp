@@ -101,27 +101,26 @@ void postproc_actions(const std::string& command,
     if(this_image.empty())
         return;
     tipl::out() << "run " << command;
-    if(command == "remove_background")
+    if(command == "erase_background")
     {
-        float remove_background_threshold = param1;
-        float remove_background_smoothing = param2;
+        float erase_background_threshold = param1;
+        float erase_background_smoothing = param2;
         tipl::image<3> sum_image(dim);
         reduce_mt(this_image,sum_image);
 
-        for(size_t i = 0;i < remove_background_smoothing;++i)
-            tipl::filter::gaussian(sum_image);
-
-        auto threshold = tipl::max_value(sum_image)*remove_background_threshold;
+        auto threshold = tipl::max_value(sum_image)*erase_background_threshold;
         tipl::image<3> mask;
         tipl::threshold(sum_image,mask,threshold,1,0);
         tipl::morphology::defragment(mask);
+
+        for(size_t i = 0;i < erase_background_smoothing;++i)
+            tipl::filter::gaussian(mask);
 
         tipl::par_for(this_image_frames,[&](size_t label)
         {
             auto I = this_image.alias(dim.size()*label,dim);
             for(size_t pos = 0;pos < dim.size();++pos)
-                if(!mask[pos])
-                    I[pos] = 0;
+                I[pos] *= mask[pos];
         });
         return;
     }
@@ -143,6 +142,18 @@ void postproc_actions(const std::string& command,
         {
             auto I = this_image.alias(dim.size()*label,dim);
             tipl::lower_threshold(I,lower_threshold_threshold);
+        });
+        is_label = false;
+        return;
+    }
+    if(command == "minus")
+    {
+        float minus_value = param1;
+        tipl::par_for(this_image_frames,[&](size_t label)
+        {
+            auto I = this_image.alias(dim.size()*label,dim);
+            for(size_t i = 0;i < I.size();++i)
+                I[i] -= minus_value;
         });
         is_label = false;
         return;
@@ -413,17 +424,20 @@ void evaluate_unet::output(void)
                         proc_actions("upper_threshold",1.0f);
                         proc_actions("lower_threshold",0.0f);
                         proc_actions("normalize_each");
-                        proc_actions("remove_background",param.prob_threshold*0.5f,1);
-                        proc_actions("remove_background",param.prob_threshold,1);
+                        proc_actions("erase_background",param.prob_threshold*0.5f,1);
+                        proc_actions("erase_background",param.prob_threshold,1);
                         proc_actions("soft_max",0.5f,1.0f);
                         proc_actions("convert_to_3d");
                     break;
                     case 1: // 4d proc maps
                         proc_actions("upper_threshold",1.0f);
                         proc_actions("lower_threshold",0.0f);
-                        proc_actions("remove_background",param.prob_threshold*0.5f,1);
-                        proc_actions("remove_background",param.prob_threshold,1);
-                        proc_actions("normalize_all");
+                        proc_actions("normalize_each");
+                        proc_actions("minus",param.prob_threshold);
+                        proc_actions("lower_threshold",0.0f);
+                        proc_actions("normalize_each");
+                        proc_actions("erase_background",param.prob_threshold,1);
+                        proc_actions("normalize_each");
                     break;
                 }
                 network_input[cur_output] = tipl::image<3>();

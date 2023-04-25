@@ -7,7 +7,7 @@
 #include <QMessageBox>
 #include <QMovie>
 #include "TIPL/tipl.hpp"
-
+#include "console.h"
 extern QSettings settings;
 
 void MainWindow::on_show_advanced_clicked()
@@ -360,6 +360,7 @@ void MainWindow::plot_error()
 
 void MainWindow::training()
 {
+    console.show_output();
     if(!train.running)
         timer->stop();
 
