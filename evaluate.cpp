@@ -449,8 +449,6 @@ void evaluate_unet::start(void)
     status = "initiating";
     stop();
     model->to(param.device);
-    model->set_requires_grad(false);
-    model->set_bn_tracking_running_stats(false);
     model->eval();
     aborted = false;
     running = true;
