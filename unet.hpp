@@ -87,20 +87,22 @@ public:
     }
     void copy_from(UNet3dImpl& r)
     {
+        torch::NoGradGuard no_grad;
         set_requires_grad(false);
         auto rhs = r.parameters();
         auto lhs = parameters();
         for(size_t index = 0;index < rhs.size();++index)
         {
             if(lhs[index].sizes() == rhs[index].sizes())
-                lhs[index].copy_(rhs[index].to(lhs[index].device()));
+                lhs[index].copy_(rhs[index]);
             else
             {
+                auto new_rhs = rhs[index].to(lhs[index].device());
                 if(rhs[index].numel() > lhs[index].numel())
-                    lhs[index].copy_(rhs[index].reshape({rhs[index].numel()}).slice(0,0,lhs[index].numel()).reshape(lhs[index].sizes()).to(lhs[index].device()));
+                    lhs[index].copy_(new_rhs.reshape({rhs[index].numel()}).slice(0,0,lhs[index].numel()).reshape(lhs[index].sizes()));
                 else
                     lhs[index].reshape({lhs[index].numel()}).index_put_({torch::indexing::Slice(0,int(rhs[index].numel()))},
-                                       rhs[index].to(lhs[index].device()).reshape({rhs[index].numel()}));
+                                       new_rhs.reshape({rhs[index].numel()}));
             }
         }
 
@@ -132,6 +134,12 @@ public:
     {
         for(auto bn : bn_layers)
             bn->options.track_running_stats(stat);
+    }
+    virtual void train(bool on = true) override
+    {
+        set_requires_grad(on);
+        set_bn_tracking_running_stats(on);
+        torch::nn::Module::train(on);
     }
 private:
     torch::nn::Sequential ConvBlock(const std::vector<int>& rhs,torch::nn::Sequential s = torch::nn::Sequential())
