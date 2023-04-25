@@ -652,9 +652,6 @@ void train_unet::train(void)
             {
                 if(!test_in_tensor.empty())
                 {
-                    torch::NoGradGuard no_grad;
-                    model->set_requires_grad(false);
-                    model->set_bn_tracking_running_stats(false);
                     model->eval();
                     float sum_error = 0.0f;
                     for(size_t i = 0;i < test_in_tensor.size();++i)
@@ -667,8 +664,6 @@ void train_unet::train(void)
                     if(param.output == 0 || best_epoch == cur_epoch)
                         output_model->copy_from(*model);
 
-                    model->set_requires_grad(true);
-                    model->set_bn_tracking_running_stats(true);
                     model->train();
                 }
 
@@ -723,8 +718,6 @@ void train_unet::start(void)
     stop();
     status = "initializing";
     model->to(param.device);
-    model->set_requires_grad(true);
-    model->set_bn_tracking_running_stats(true);
     model->train();
     pause = aborted = false;
     running = true;
