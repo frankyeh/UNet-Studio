@@ -94,8 +94,7 @@ void MainWindow::on_error_y_size_valueChanged(int arg1){plot_error();}
 
 void MainWindow::on_actionConsole_triggered()
 {
-    auto* con= new Console(this);
-    con->setAttribute(Qt::WA_DeleteOnClose);
+    static auto* con = new Console(this);
     con->showNormal();
 }
 
