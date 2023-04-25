@@ -618,8 +618,6 @@ void train_unet::train(void)
 {
     error = std::vector<float>(param.epoch);
     test_error = std::vector<float>(param.epoch);
-
-    optimizer.reset(new torch::optim::Adam(model->parameters(), torch::optim::AdamOptions(param.learning_rate)));
     cur_epoch = 0;
 
     output_model = UNet3d(1,model->out_count,model->feature_string);
@@ -635,8 +633,11 @@ void train_unet::train(void)
         } guard(running);
 
         try{
+
             size_t cur_data_index = 0;
             size_t best_epoch = 0;
+
+            optimizer.reset(new torch::optim::Adam(model->parameters(), torch::optim::AdamOptions(param.learning_rate)));
 
             while(test_in_tensor.empty() || pause)
             {
