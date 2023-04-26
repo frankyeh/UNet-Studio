@@ -26,7 +26,7 @@ bool get_label_info(const std::string& label_name,int& out_count,bool& is_label)
             out_count = (is_label ? tipl::max_value(labels) : 1);
     }
 
-    if(out_count > 255)
+    if(out_count > 128)
     {
         out_count = 1;
         is_label = false;
@@ -216,7 +216,9 @@ float perlin_noise(float x, float y, float z,const std::vector<int>& p)
 void load_image_and_label(const OptionTableWidget& options,
                           tipl::image<3>& image,
                           tipl::image<3>& label,
+                          bool is_label,
                           const tipl::vector<3>& image_vs,
+                          const tipl::vector<3>& template_vs,
                           const tipl::shape<3>& template_shape,
                           size_t random_seed)
 {
@@ -235,10 +237,6 @@ void load_image_and_label(const OptionTableWidget& options,
     };
     auto random_location = [&range](const tipl::shape<3>& sp,float from,float to)
                     {return tipl::vector<3,int>((sp[0]-1)*range(from,to),(sp[1]-1)*range(from,to),(sp[2]-1)*range(from,to));};
-
-    tipl::vector<3> template_vs(1.0f,1.0f,1.0f);
-    if(image_vs[0] < 1.0f)
-        template_vs[2] = template_vs[1] = template_vs[0] = image.width()*image_vs[0]/template_shape[0];
 
     auto resolution = range(options.get<float>("scaling_down"),options.get<float>("scaling_up"));
     tipl::affine_transform<float> transform = {
@@ -287,7 +285,10 @@ void load_image_and_label(const OptionTableWidget& options,
     if(!label.empty())
     {
         tipl::image<3> label_out(template_shape);
-        tipl::compose_displacement_with_affine<tipl::nearest>(label,label_out,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs),displaced);
+        if(is_label)
+            tipl::compose_displacement_with_affine<tipl::nearest>(label,label_out,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs),displaced);
+        else
+            tipl::compose_displacement_with_affine(label,label_out,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs),displaced);
         label_out.swap(label);
     }
 
@@ -353,6 +354,7 @@ void load_image_and_label(const OptionTableWidget& options,
     tipl::lower_threshold(image_out,0.0f);
 
 
+    if(!label.empty())
     {
         if(apply("self_replication"))
         {
@@ -366,8 +368,13 @@ void load_image_and_label(const OptionTableWidget& options,
                 tipl::resample_mt(image,background,tipl::transformation_matrix<float>(arg,template_shape,template_vs,image.shape(),image_vs));
             }
             tipl::normalize(background,options.get<float>("self_replication_mag"));
+
+            if(!is_label)
+                image_out += background;
+            else
             for(size_t i = 0;i < image_out.size();++i)
-                image_out[i] += background[i]/(0.1f+image_out[i]);
+                if(!label[i])
+                    image_out[i] += background[i];
         }
 
         if(apply("perlin_noise"))
@@ -400,8 +407,12 @@ void load_image_and_label(const OptionTableWidget& options,
             });
 
             tipl::normalize(background,options.get<float>("perlin_noise_mag"));
+            if(!is_label)
+                image_out += background;
+            else
             for(size_t i = 0;i < image_out.size();++i)
-                image_out[i] += background[i]/(0.1f+image_out[i]);
+                if(!label[i])
+                    image_out[i] += background[i];
         }
     }
 
@@ -438,6 +449,8 @@ tipl::shape<3> unet_inputsize(const tipl::shape<3>& s);
 
 void fuzzy_labels(tipl::image<3>& label,const std::vector<size_t>& label_count)
 {
+    if(label_count.size() <= 1)
+        return;
     auto original_label = label;
     size_t sum = tipl::sum(label_count);
     tipl::expand_label_to_dimension(label,label_count.size());
@@ -482,16 +495,19 @@ void train_unet::read_file(void)
                                          param.label_file_name[read_id],
                                          new_image,new_label,new_vs))
                     continue;
-                label_count.push_back(model->out_count > 1 ? get_label_count(new_label,model->out_count) : std::vector<size_t>(model->out_count));
+                label_count.push_back(param.is_label ? get_label_count(new_label,model->out_count) : std::vector<size_t>(model->out_count));
                 image.push_back(std::move(new_image));
                 label.push_back(std::move(new_label));
                 image_vs.push_back(new_vs);
-                if(model->out_count > 1)
+                if(param.is_label)
                 {
                     std::ostringstream out;
                     std::copy(label_count.back().begin(),label_count.back().end(),std::ostream_iterator<float>(out," "));
                     tipl::out() << "label count: " << out.str();
                 }
+                else
+                    tipl::normalize(label.back());
+
             }
         }
         //prepare test data
@@ -518,6 +534,8 @@ void train_unet::read_file(void)
                 }
                 if(model->out_count > 1)
                     tipl::expand_label_to_dimension(new_label,model->out_count);
+                if(!param.is_label)
+                    tipl::normalize(new_label);
                 test_in_tensor.push_back(torch::from_blob(&new_image[0],
                     {1,model->in_count,int(new_image.shape()[2]),int(new_image.shape()[1]),int(new_image.shape()[0])}).to(param.device));
                 test_out_tensor.push_back(torch::from_blob(&new_label[0],
@@ -557,7 +575,7 @@ void train_unet::read_file(void)
                     continue;
                 in_data[thread] = image[read_id];
                 out_data[thread] = label[read_id];
-                load_image_and_label(*option,in_data[thread],out_data[thread],image_vs[read_id],model->dim,seed);
+                load_image_and_label(*option,in_data[thread],out_data[thread],param.is_label,image_vs[read_id],model->voxel_size,model->dim,seed);
                 if(model->out_count > 1)
                     fuzzy_labels(out_data[thread],label_count[read_id]);
                 data_ready[thread] = true;
@@ -659,7 +677,7 @@ void train_unet::train(void)
                     if(test_error[best_epoch] <= test_error[cur_epoch])
                         best_epoch = cur_epoch;
 
-                    if(param.output == 0 || best_epoch == cur_epoch)
+                    if(param.output_model_type == 0 || best_epoch == cur_epoch)
                         output_model->copy_from(*model);
 
                     model->train();
