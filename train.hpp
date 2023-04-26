@@ -11,7 +11,8 @@ struct TrainParam{
     int batch_size = 1;
     int epoch = 10000;
     float learning_rate = 0.001f;
-    int output = 0;
+    int output_model_type = 0;
+    bool is_label = true;
     torch::Device device = torch::kCPU;
 };
 
@@ -29,7 +30,9 @@ class OptionTableWidget;
 void load_image_and_label(const OptionTableWidget& options,
                           tipl::image<3>& image,
                           tipl::image<3>& label,
+                          bool is_label,
                           const tipl::vector<3>& image_vs,
+                          const tipl::vector<3>& template_vs,
                           const tipl::shape<3>& template_shape,
                           size_t random_seed);
 class train_unet{
