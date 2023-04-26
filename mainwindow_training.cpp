@@ -26,7 +26,6 @@ void MainWindow::on_actionOpen_Training_triggered()
     );
     if (fileName.isEmpty())
         return;
-
     QSettings ini(fileName,QSettings::IniFormat);
     image_list = ini.value("image",image_list).toStringList();
     label_list = ini.value("label",label_list).toStringList();
@@ -66,6 +65,22 @@ void MainWindow::on_actionSave_Training_triggered()
 
 void MainWindow::update_list(void)
 {
+    if(!label_list.empty() &&
+       QFileInfo(label_list[0]).exists())
+    {
+         if(get_label_info(label_list[0].toStdString(),out_count,is_label))
+         {
+             ui->output_info->setText(QString("dim: %1 type: %2").arg(out_count).arg(is_label?"label":"scalar"));
+             ui->label_slider->setMaximum(out_count-1);
+         }
+         else
+         {
+             QMessageBox::critical(this,"Error",QString("%1 is not a valid label image").arg(QFileInfo(label_list[0]).fileName()));
+             label_list[0].clear();
+         }
+    }
+
+
     auto index = ui->list1->currentRow();
     ui->list1->clear();
     ui->list2->clear();
@@ -84,17 +99,6 @@ void MainWindow::update_list(void)
     else
         ui->list1->setCurrentRow(0);
 
-    if(ui->list2->currentRow() == 0 && !label_list[0].isEmpty())
-    {
-        if(!get_label_info(label_list[0].toStdString(),out_count,is_label))
-        {
-            QMessageBox::critical(this,"Error",QString("%1 is not a valid label image").arg(QFileInfo(label_list[0]).fileName()));
-            label_list[0] = QString();
-            return;
-        }
-        ui->output_info->setText(QString("dim: %1 type: %2").arg(out_count).arg(is_label?"label":"scalar"));
-        ui->label_slider->setMaximum(out_count-1);
-    }
     on_list1_currentRowChanged(ui->list1->currentRow());
 }
 
@@ -127,7 +131,6 @@ void MainWindow::on_open_labels_clicked()
     auto index = ui->list2->currentRow();
     for(int i = 0;i < fileNames.size() && index < label_list.size();++i,++index)
         label_list[index] = fileNames[i];
-
     update_list();
 
 }
@@ -216,7 +219,7 @@ void MainWindow::on_start_training_clicked()
 
     train.param.batch_size = ui->batch_size->value();
     train.param.learning_rate = ui->learning_rate->value();
-    train.param.output = ui->training_output->currentIndex();
+    train.param.output_model_type = ui->training_output->currentIndex();
     train.option = option;
     if(train.running)
     {
@@ -252,6 +255,7 @@ void MainWindow::on_start_training_clicked()
     train.param.epoch = ui->epoch->value();
     train.param.image_file_name.clear();
     train.param.label_file_name.clear();
+    train.param.is_label = is_label;
     for(size_t i = 0;i < image_list.size();++i)
     {
         train.param.image_file_name.push_back(image_list[i].toStdString());
@@ -427,11 +431,16 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),I1,I2,vs))
             I2.clear();
         if(ui->show_transform->isChecked())
-            load_image_and_label(*option,I1,I2,vs,tipl::shape<3>(option->get<int>("dim_x"),
+            load_image_and_label(*option,I1,I2,is_label,vs,vs,tipl::shape<3>(option->get<int>("dim_x"),
                                                                  option->get<int>("dim_y"),
                                                                  option->get<int>("dim_z")),time(0));
         if(!I2.empty())
-            fuzzy_labels(I2,get_label_count(I2,out_count));
+        {
+            if(is_label && out_count != 1)
+                fuzzy_labels(I2,get_label_count(I2,out_count));
+            if(!is_label)
+                tipl::normalize(I2);
+        }
         v2c1.set_range(0,tipl::max_value_mt(I1));
         ui->pos->setMaximum(I1.shape()[ui->view_dim->currentIndex()]-1);
     }
