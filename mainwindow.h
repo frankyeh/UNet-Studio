@@ -32,7 +32,6 @@ public:
     void update_evaluate_list(void);
 public:
     QStringList image_list,label_list;
-    bool ready_to_train = false;
     void update_list(void);
 public: //evalute
     QGraphicsScene eval_scene1,eval_scene2;
@@ -46,6 +45,7 @@ public:
     evaluate_unet evaluate;
     QString train_name,eval_name;
     QTimer *timer,*eval_timer;
+    void has_network(void);
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
@@ -54,46 +54,52 @@ private slots:
     void training(void);
     void evaluating(void);
     void on_pos_valueChanged(int value);
-    void on_open_files_clicked();
-    void on_open_labels_clicked();
+
     void on_list1_currentRowChanged(int currentRow);
-    void on_open_evale_image_clicked();
+    void on_action_evaluate_open_images_triggered();
     void on_eval_pos_valueChanged(int value);
     void on_evaluate_clicked();
     void on_eval_view_dim_currentIndexChanged(int index);
     void on_view_dim_currentIndexChanged(int index);
     void on_label_slider_valueChanged(int value);
     void on_eval_label_slider_valueChanged(int value);
-    void on_end_training_clicked();
-    void on_start_training_clicked();
-    void on_clear_clicked();
+    void on_train_stop_clicked();
+    void on_train_start_clicked();
+    void on_action_train_clear_all_triggered();
 
     void on_evaluate_list_currentRowChanged(int currentRow);
-    void on_eval_from_train_clicked();
-    void on_eval_from_file_clicked();
-    void on_train_from_scratch_clicked();
-    void on_load_network_clicked();
-    void on_save_network_clicked();
-    void on_evaluate_clear_clicked();
+    void on_action_evaluate_copy_trained_network_triggered();
+    void on_action_evaluate_open_network_triggered();
+    void on_action_evaluate_clear_all_triggered();
     void on_list2_currentRowChanged(int currentRow);
-    void on_autofill_clicked();
+    void on_action_train_auto_match_label_files_triggered();
     void on_show_transform_clicked();
 
     void on_evaluate_list2_currentRowChanged(int currentRow);
-    void on_save_evale_image_clicked();
+    void on_action_evaluate_save_results_triggered();
     void on_error_x_size_valueChanged(int arg1);
     void on_error_y_size_valueChanged(int arg1);
     void on_save_error_clicked();
     void on_open_error_clicked();
     void on_clear_error_clicked();
-    void on_actionSave_Training_triggered();
-    void on_actionOpen_Training_triggered();
+
+
 
     void plot_error();
-    void runAction(QString);
+    void run_action(QString);
     void on_actionConsole_triggered();
-    void on_eval_networks_currentIndexChanged(int index);
-    void on_advance_eval_clicked();
-    void on_show_advanced_clicked();
+    void on_evaluate_builtin_networks_currentIndexChanged(int index);
+    void on_action_evaluate_option_triggered();
+    void on_action_train_options_triggered();
+
+    // training
+
+    void on_action_save_training_setting_triggered();
+    void on_action_open_training_setting_triggered();
+    void on_action_train_open_files_triggered();
+    void on_action_train_open_labels_triggered();
+    void on_action_train_new_network_triggered();
+    void on_action_train_open_network_triggered();
+    void on_action_train_save_network_triggered();
 };
 #endif // MAINWINDOW_H

@@ -18,13 +18,13 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     ui->option_widget_layout->addWidget(option = new OptionTableWidget(*this,ui->option_widget,":/options.txt"));
     ui->postproc_widget_layout->addWidget(eval_option = new OptionTableWidget(*this,ui->postproc_widget,":/postproc.txt"));
-    connect(eval_option,SIGNAL(runAction(QString)),this,SLOT(runAction(QString)));
+    connect(eval_option,SIGNAL(run_action(QString)),this,SLOT(run_action(QString)));
     ui->postproc_widget->hide();
     ui->option_widget->hide();
 
     ui->tabWidget->setCurrentIndex(0);
-    ui->training->setMovie(new QMovie(":/icons/icons/processing.gif"));
-    ui->evaluating->setMovie(new QMovie(":/icons/icons/processing.gif"));
+    ui->training_gif->setMovie(new QMovie(":/icons/icons/processing.gif"));
+    ui->evaluate_gif->setMovie(new QMovie(":/icons/icons/processing.gif"));
     ui->eval_label_slider->setVisible(false);
     ui->view1->setScene(&train_scene1);
     ui->view2->setScene(&train_scene2);
@@ -52,20 +52,20 @@ MainWindow::MainWindow(QWidget *parent)
                 device_list << gpu_names[i].c_str();
         }
 
-        ui->gpu->addItems(device_list);
+        ui->train_device->addItems(device_list);
         ui->evaluate_device->addItems(device_list);
-        ui->gpu->setCurrentIndex(torch::cuda::is_available() ? 1:0);
+        ui->train_device->setCurrentIndex(torch::cuda::is_available() ? 1:0);
         ui->evaluate_device->setCurrentIndex(ui->evaluate_device->count()-1);
     }
     // populate networks
     {
-        ui->eval_networks->addItem("select or open...");
+        ui->evaluate_builtin_networks->addItem("select or open...");
         QDir dir(QCoreApplication::applicationDirPath() + "/network");
         dir.setNameFilters(QStringList() << "*.net.gz");
         QFileInfoList files = dir.entryInfoList(QDir::Files);
         for (const QFileInfo& fileInfo : files)
-            ui->eval_networks->addItem(fileInfo.fileName().remove(".net.gz"));
-        ui->eval_networks->setCurrentText(settings.value("eval_network").toString());
+            ui->evaluate_builtin_networks->addItem(fileInfo.fileName().remove(".net.gz"));
+        ui->evaluate_builtin_networks->setCurrentText(settings.value("eval_network").toString());
     }
 
     timer = new QTimer(this);
@@ -80,7 +80,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    settings.setValue("eval_network",ui->eval_networks->currentText());
+    settings.setValue("eval_network",ui->evaluate_builtin_networks->currentText());
     delete ui;
 }
 
@@ -96,5 +96,4 @@ void MainWindow::on_actionConsole_triggered()
     static auto* con = new Console(this);
     con->showNormal();
 }
-
 

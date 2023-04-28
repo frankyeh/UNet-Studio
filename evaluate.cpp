@@ -108,9 +108,8 @@ void postproc_actions(const std::string& command,
         tipl::image<3> sum_image(dim);
         reduce_mt(this_image,sum_image);
 
-        auto threshold = tipl::max_value(sum_image)*erase_background_threshold;
         tipl::image<3> mask;
-        tipl::threshold(sum_image,mask,threshold,1,0);
+        tipl::threshold(sum_image,mask,erase_background_threshold,1,0);
         tipl::morphology::defragment(mask);
 
         for(size_t i = 0;i < erase_background_smoothing;++i)

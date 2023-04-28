@@ -10,7 +10,7 @@
 #include "console.h"
 extern QSettings settings;
 
-void MainWindow::on_show_advanced_clicked()
+void MainWindow::on_action_train_options_triggered()
 {
     if(ui->option_widget->isVisible())
         ui->option_widget->hide();
@@ -18,7 +18,7 @@ void MainWindow::on_show_advanced_clicked()
         ui->option_widget->show();
 }
 
-void MainWindow::on_actionOpen_Training_triggered()
+void MainWindow::on_action_open_training_setting_triggered()
 {
     QString fileName = QFileDialog::getOpenFileName(
         this,"Open Training Setting",settings.value("work_dir").toString() + "/" +
@@ -40,7 +40,7 @@ void MainWindow::on_actionOpen_Training_triggered()
 
 }
 
-void MainWindow::on_actionSave_Training_triggered()
+void MainWindow::on_action_save_training_setting_triggered()
 {
     QString fileName = QFileDialog::getSaveFileName(
         this,"Save Training Setting",settings.value("work_dir").toString() + "/" +
@@ -84,7 +84,7 @@ void MainWindow::update_list(void)
     auto index = ui->list1->currentRow();
     ui->list1->clear();
     ui->list2->clear();
-    ready_to_train = false;
+    bool ready_to_train = false;
     for(size_t i = 0;i < image_list.size();++i)
     {
         if(!QFileInfo(label_list[i]).exists())
@@ -92,8 +92,10 @@ void MainWindow::update_list(void)
         ui->list1->addItem(QFileInfo(image_list[i]).fileName());
         ui->list2->addItem(label_list[i].isEmpty() ? QString("(to be assigned)") : QFileInfo(label_list[i]).fileName());
         ready_to_train = true;
-        ui->start_training->setEnabled(true);
+
     }
+    ui->train_start->setEnabled(ready_to_train);
+
     if(index >=0 && index < ui->list1->count())
         ui->list1->setCurrentRow(index);
     else
@@ -102,7 +104,7 @@ void MainWindow::update_list(void)
     on_list1_currentRowChanged(ui->list1->currentRow());
 }
 
-void MainWindow::on_open_files_clicked()
+void MainWindow::on_action_train_open_files_triggered()
 {
     QStringList fileNames = QFileDialog::getOpenFileNames(
         this,"Select NIFTI images",settings.value("work_dir").toString(),"NIFTI files (*nii.gz);;All files (*)"
@@ -117,10 +119,13 @@ void MainWindow::on_open_files_clicked()
         label_list << QString();
     }
     update_list();
-    ui->open_labels->setEnabled(true);
+
+    ui->action_train_open_labels->setEnabled(true);
+    ui->train_open_labels->setEnabled(true);
+
 }
 
-void MainWindow::on_open_labels_clicked()
+void MainWindow::on_action_train_open_labels_triggered()
 {
     QStringList fileNames = QFileDialog::getOpenFileNames(
         this,"Select NIFTI images",settings.value("work_dir").toString(),"NIFTI files (*nii.gz);;All files (*)"
@@ -136,7 +141,7 @@ void MainWindow::on_open_labels_clicked()
 }
 
 
-void MainWindow::on_autofill_clicked()
+void MainWindow::on_action_train_auto_match_label_files_triggered()
 {
     if(ui->list2->currentRow() == -1)
         return;
@@ -156,17 +161,24 @@ void MainWindow::on_autofill_clicked()
     update_list();
 }
 
-void MainWindow::on_clear_clicked()
+void MainWindow::on_action_train_clear_all_triggered()
 {
     image_list.clear();
     label_list.clear();
     ui->list1->clear();
-    ui->open_labels->setEnabled(false);
-    ui->start_training->setEnabled(false);
+    ui->action_train_open_labels->setEnabled(false);
+    ui->train_open_labels->setEnabled(false);
+    ui->train_start->setEnabled(false);
     update_list();
 }
 
-void MainWindow::on_train_from_scratch_clicked()
+void MainWindow::has_network(void)
+{
+    ui->action_evaluate_copy_trained_network->setEnabled(true);
+    ui->action_train_save_network->setEnabled(true);
+    ui->train_save_network->setEnabled(true);
+}
+void MainWindow::on_action_train_new_network_triggered()
 {
     auto feature = QInputDialog::getText(this,"","Please Specify Network Structure",QLineEdit::Normal,"8x8+16x16+32x32+64x64+128x128");
     if(feature.isEmpty())
@@ -175,8 +187,10 @@ void MainWindow::on_train_from_scratch_clicked()
     train.model = UNet3d(1,out_count,feature.toStdString());
     ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
     ui->batch_size->setValue(1);
+    has_network();
+
 }
-void MainWindow::on_load_network_clicked()
+void MainWindow::on_action_train_open_network_triggered()
 {
     QString fileName = QFileDialog::getOpenFileName(this,"Open network file",
                                                 settings.value("work_dir").toString() + "/" +
@@ -194,9 +208,9 @@ void MainWindow::on_load_network_clicked()
 
     ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
 
-
+    has_network();
 }
-void MainWindow::on_save_network_clicked()
+void MainWindow::on_action_train_save_network_triggered()
 {
     QString fileName = QFileDialog::getSaveFileName(this,"Save network file",
                                                 settings.value("work_dir").toString() + "/" +
@@ -210,7 +224,7 @@ void MainWindow::on_save_network_clicked()
 
 }
 #include <ATen/Context.h>
-void MainWindow::on_start_training_clicked()
+void MainWindow::on_train_start_clicked()
 {
     tipl::progress p("initiate training");
     torch::manual_seed(0);
@@ -226,14 +240,9 @@ void MainWindow::on_start_training_clicked()
         train.pause = !train.pause;
         return;
     }
-    if(!ready_to_train)
-    {
-        QMessageBox::critical(this,"Error","Please specify training image and/or labels");
-        return;
-    }
     if(train.model->feature_string.empty())
     {
-        on_train_from_scratch_clicked();
+        on_action_train_new_network_triggered();
         if(train.model->feature_string.empty())
             return;
     }
@@ -251,7 +260,7 @@ void MainWindow::on_start_training_clicked()
     train.model->dim = tipl::shape<3>(option->get<int>("dim_x"),
                                      option->get<int>("dim_y"),
                                      option->get<int>("dim_z"));
-    train.param.device = ui->gpu->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->gpu->currentIndex()-1):torch::Device(torch::kCPU);
+    train.param.device = ui->train_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->train_device->currentIndex()-1):torch::Device(torch::kCPU);
     train.param.epoch = ui->epoch->value();
     train.param.image_file_name.clear();
     train.param.label_file_name.clear();
@@ -272,14 +281,14 @@ void MainWindow::on_start_training_clicked()
     ui->train_prog->setMaximum(ui->epoch->value());
     ui->train_prog->setValue(1);
     timer->start();
-    ui->start_training->setText(train.pause ? "Resume":"Pause");
+    ui->train_start->setText(train.pause ? "Resume":"Pause");
     error_view_epoch = 0;
     error_scene << QImage();
 
-    ui->eval_from_train->setEnabled(true);
+    has_network();
 }
 
-void MainWindow::on_end_training_clicked()
+void MainWindow::on_train_stop_clicked()
 {
     train.stop();
 }
@@ -374,27 +383,34 @@ void MainWindow::training()
         train.error_msg.clear();
     }
 
-    ui->start_training->setText(train.running ? (train.pause ? "Resume":"Pause") : "Start");
+    ui->train_start->setText(train.running ? (train.pause ? "Resume":"Pause") : "Start");
     ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
     ui->batch_size->setEnabled(!train.running || train.pause);
     ui->learning_rate->setEnabled(!train.running || train.pause);
     ui->training_output->setEnabled(!train.running || train.pause);
-
     ui->epoch->setEnabled(!train.running);
-    ui->open_files->setEnabled(!train.running);
-    ui->clear->setEnabled(!train.running);
-    ui->open_labels->setEnabled(!train.running);
-    ui->autofill->setEnabled(!train.running);
-    ui->load_network->setEnabled(!train.running);
-    ui->train_from_scratch->setEnabled(!train.running);
-    ui->gpu->setEnabled(!train.running);
+
+    ui->action_train_open_files->setEnabled(!train.running);
+    ui->train_open_files->setEnabled(!train.running);
+    ui->action_train_open_labels->setEnabled(!train.running);
+    ui->train_open_labels->setEnabled(!train.running);
+    ui->action_train_clear_all->setEnabled(!train.running);
+    ui->train_clear_all->setEnabled(!train.running);
+    ui->action_train_open_network->setEnabled(!train.running);
+    ui->train_open_network->setEnabled(!train.running);
+    ui->action_train_new_network->setEnabled(!train.running);
+    ui->train_new_network->setEnabled(!train.running);
+    ui->action_train_auto_match_label_files->setEnabled(!train.running);
+
+    ui->train_device->setEnabled(!train.running);
     ui->save_error->setEnabled(!train.error.empty());
-    ui->training->setEnabled(train.running);
+    ui->training_gif->setEnabled(train.running);
+
 
     if(!train.running || train.pause)
-        ui->training->movie()->stop();
+        ui->training_gif->movie()->stop();
     else
-        ui->training->movie()->start();
+        ui->training_gif->movie()->start();
 
     if(train.running)
     {
@@ -406,7 +422,7 @@ void MainWindow::training()
         ui->train_prog->setValue(0);
 
 
-    ui->end_training->setEnabled(train.running);
+    ui->train_stop->setEnabled(train.running);
 
     if(train.cur_epoch >= error_view_epoch)
         plot_error();

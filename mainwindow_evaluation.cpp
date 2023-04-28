@@ -10,7 +10,7 @@
 
 extern QSettings settings;
 
-void MainWindow::on_advance_eval_clicked()
+void MainWindow::on_action_evaluate_option_triggered()
 {
     if(ui->postproc_widget->isVisible())
         ui->postproc_widget->hide();
@@ -29,7 +29,7 @@ void MainWindow::update_evaluate_list(void)
     else
         ui->evaluate_list->setCurrentRow(0);
 }
-void MainWindow::on_open_evale_image_clicked()
+void MainWindow::on_action_evaluate_open_images_triggered()
 {
     QStringList file = QFileDialog::getOpenFileNames(this,"Open Image",settings.value("work_dir").toString(),"NIFTI files (*nii.gz);;All files (*)");
     if(file.isEmpty())
@@ -41,24 +41,25 @@ void MainWindow::on_open_evale_image_clicked()
 }
 
 
-void MainWindow::on_eval_from_train_clicked()
+void MainWindow::on_action_evaluate_copy_trained_network_triggered()
 {
     if(train.output_model->feature_string.empty())
     {
         QMessageBox::critical(this,"Error","No trained network");
         return;
     }
+    ui->evaluate_builtin_networks->setCurrentIndex(0);
     evaluate.model = UNet3d(train.output_model->in_count,train.output_model->out_count,train.output_model->feature_string);
     evaluate.model->set_requires_grad(false);
     evaluate.model->set_bn_tracking_running_stats(false);
     evaluate.model->eval();
     evaluate.model->copy_from(*train.output_model);
-    ui->evaluate_network->setText(QString("name: %1\n").arg(eval_name = train_name) + evaluate.model->get_info().c_str());
+    ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name = train_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
 }
 
 
-void MainWindow::on_eval_from_file_clicked()
+void MainWindow::on_action_evaluate_open_network_triggered()
 {
     QString fileName = QFileDialog::getOpenFileName(this,"Open Network File",                                                settings.value("work_dir").toString() + "/" +
                                                     settings.value("work_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
@@ -71,22 +72,22 @@ void MainWindow::on_eval_from_file_clicked()
     }
     settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
     settings.setValue("work_file",eval_name = QFileInfo(fileName.remove(".net.gz")).fileName());
-    ui->evaluate_network->setText(QString("name: %1\n").arg(eval_name) + evaluate.model->get_info().c_str());
+    ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
-    ui->eval_networks->setCurrentIndex(0);
+    ui->evaluate_builtin_networks->setCurrentIndex(0);
 }
 
-void MainWindow::on_eval_networks_currentIndexChanged(int index)
+void MainWindow::on_evaluate_builtin_networks_currentIndexChanged(int index)
 {
     if(index > 0)
     {
-        QString fileName =  QCoreApplication::applicationDirPath() + "/network/" + ui->eval_networks->currentText() + ".net.gz";
+        QString fileName =  QCoreApplication::applicationDirPath() + "/network/" + ui->evaluate_builtin_networks->currentText() + ".net.gz";
         if(!load_from_file(evaluate.model,fileName.toStdString().c_str()))
         {
             QMessageBox::critical(this,"Error","Failed to load network");
             return;
         }
-        ui->evaluate_network->setText(QString("name: %1\n").arg(ui->eval_networks->currentText()) + evaluate.model->get_info().c_str());
+        ui->evaluate_network_info->setText(QString("name: %1\n").arg(ui->evaluate_builtin_networks->currentText()) + evaluate.model->get_info().c_str());
         ui->evaluate->setEnabled(evaluate_list.size());
     }
 }
@@ -106,8 +107,8 @@ void MainWindow::on_evaluate_clicked()
         evaluate.param.image_file_name.push_back(s.toStdString());
 
     ui->evaluate->setText("Stop");
-    ui->eval_prog->setEnabled(true);
-    ui->eval_prog->setMaximum(evaluate_list.size());
+    ui->evaluate_progress->setEnabled(true);
+    ui->evaluate_progress->setMaximum(evaluate_list.size());
     ui->evaluate_list2->clear();
     evaluate.option = eval_option;
     evaluate.preproc_strategy = ui->preproc->currentIndex();
@@ -130,24 +131,32 @@ void MainWindow::evaluating()
         evaluate.error_msg.clear();
     }
     ui->evaluate->setText(evaluate.running ? "Stop" : "Start");
-    ui->open_evale_image->setEnabled(!evaluate.running);
-    ui->evaluate_clear->setEnabled(!evaluate.running);
-    ui->eval_from_file->setEnabled(!evaluate.running);
+
+    ui->action_evaluate_open_images->setEnabled(!evaluate.running);
+    ui->evaluate_open_images->setEnabled(!evaluate.running);
+    ui->action_evaluate_clear_all->setEnabled(!evaluate.running);
+    ui->evaluate_clear_all->setEnabled(!evaluate.running);
+    ui->action_evaluate_open_network->setEnabled(!evaluate.running);
+    ui->evaluate_open_network->setEnabled(!evaluate.running);
+    ui->action_evaluate_save_results->setEnabled(ui->evaluate_list2->count());
+    ui->evaluate_save_results->setEnabled(ui->evaluate_list2->count());
+
+
     ui->evaluate_device->setEnabled(!evaluate.running);
-    ui->evaluating->setEnabled(evaluate.running);
+    ui->evaluate_gif->setEnabled(evaluate.running);
 
     if(!evaluate.running)
-        ui->evaluating->movie()->stop();
+        ui->evaluate_gif->movie()->stop();
     else
-        ui->evaluating->movie()->start();
+        ui->evaluate_gif->movie()->start();
 
     if(train.running)
     {
-        ui->eval_prog->setValue(evaluate.cur_output);
-        ui->eval_prog->setFormat(QString("%1/%2").arg(evaluate.cur_output).arg(evaluate_list.size()));
+        ui->evaluate_progress->setValue(evaluate.cur_output);
+        ui->evaluate_progress->setFormat(QString("%1/%2").arg(evaluate.cur_output).arg(evaluate_list.size()));
     }
     else
-        ui->eval_prog->setValue(0);
+        ui->evaluate_progress->setValue(0);
 
     while(ui->evaluate_list2->count() < evaluate.cur_output)
     {
@@ -156,7 +165,6 @@ void MainWindow::evaluating()
             ui->evaluate_list2->setCurrentRow(ui->evaluate_list->currentRow());
         on_eval_pos_valueChanged(ui->eval_pos->value());
     }
-    ui->save_evale_image->setEnabled(ui->evaluate_list2->count());
 
     if(ui->tabWidget->currentIndex() == 1)
         ui->statusbar->showMessage(evaluate.status.c_str());
@@ -164,14 +172,15 @@ void MainWindow::evaluating()
 }
 
 
-void MainWindow::on_evaluate_clear_clicked()
+void MainWindow::on_action_evaluate_clear_all_triggered()
 {
     evaluate.clear();
     evaluate_list.clear();
     ui->evaluate_list->clear();
     ui->evaluate_list2->clear();
     ui->evaluate->setEnabled(false);
-    ui->save_evale_image->setEnabled(false);
+    ui->action_evaluate_save_results->setEnabled(false);
+    ui->evaluate_save_results->setEnabled(false);
     eval_scene1 << QImage();
     eval_scene2 << QImage();
 }
@@ -248,17 +257,19 @@ void MainWindow::on_eval_pos_valueChanged(int slice_pos)
                            evaluate.label_prob[currentRow].alias(
                                eval_I1.size()*ui->eval_label_slider->value(),eval_I1.shape()),
                            ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)]).mirrored(d,d!=2);
-        ui->save_evale_image->setEnabled(true);
     }
     else
     {
         eval_scene2 << QImage();
         ui->eval_label_slider->setVisible(false);
-        ui->save_evale_image->setEnabled(false);
     }
+
+    ui->action_evaluate_save_results->setEnabled(currentRow < evaluate.cur_output);
+    ui->evaluate_save_results->setEnabled(currentRow < evaluate.cur_output);
+
     eval_scene1 << network_input.mirrored(d,d!=2);
 }
-void MainWindow::on_save_evale_image_clicked()
+void MainWindow::on_action_evaluate_save_results_triggered()
 {
     auto currentRow = ui->evaluate_list2->currentRow();
     if(currentRow < 0 || currentRow >= evaluate.label_prob.size())
@@ -309,7 +320,7 @@ void postproc_actions(const std::string& command,
                       tipl::image<3>& this_image,
                       const tipl::shape<3>& dim,
                       char& is_label);
-void MainWindow::runAction(QString command)
+void MainWindow::run_action(QString command)
 {
     auto cur_index = ui->evaluate_list2->currentRow();
     if(cur_index < 0)

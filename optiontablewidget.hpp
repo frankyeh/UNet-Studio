@@ -172,7 +172,7 @@ public:
     void save(QSettings& set){treemodel->save(set);}
 
 Q_SIGNALS:
-    void runAction(QString command);
+    void run_action(QString command);
 public slots:
     void setDefault(QString parent_id);
     void dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight);

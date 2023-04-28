@@ -523,5 +523,5 @@ void OptionTableWidget::action()
 {
     auto button = reinterpret_cast<QPushButton*>(sender());
     if(button)
-        emit runAction(button->objectName());
+        emit run_action(button->objectName());
 }

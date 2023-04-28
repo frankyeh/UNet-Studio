@@ -292,6 +292,12 @@ void load_image_and_label(const OptionTableWidget& options,
         label_out.swap(label);
     }
 
+    if(apply("blurring"))
+    {
+        auto count = options.get<float>("blurring_count");
+        for(size_t i = 0;i < count;++i)
+            tipl::filter::gaussian(image);
+    }
 
     tipl::image<3> image_out(template_shape);
     {
@@ -338,8 +344,8 @@ void load_image_and_label(const OptionTableWidget& options,
             image_out[i] = std::pow(image_out[i],exp);
     }
 
-    if(apply("ring"))
-        ghost(image_out,range(0.05f,0.25f)*image_out.width(),options.get<float>("ring_mag"),one() > 0);
+    if(apply("astigmatism"))
+        ghost(image_out,range(0.05f,0.25f)*image_out.width(),options.get<float>("astigmatism_mag"),one() > 0);
 
     if(apply("linear_attenuation"))
         intensity_linear(image_out,one,options.get<float>("linear_attenuation_mag"));
@@ -413,6 +419,14 @@ void load_image_and_label(const OptionTableWidget& options,
             for(size_t i = 0;i < image_out.size();++i)
                 if(!label[i])
                     image_out[i] += background[i];
+        }
+
+        if(apply("background_scale"))
+        {
+            float scale = range(options.get<float>("background_scale_min"),options.get<float>("background_scale_max"));
+            for(size_t i = 0;i < image_out.size();++i)
+                if(!label[i])
+                    image_out[i] *= scale;
         }
     }
 

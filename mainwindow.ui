@@ -58,7 +58,7 @@
                 <number>0</number>
                </property>
                <item>
-                <widget class="QPushButton" name="open_evale_image">
+                <widget class="QPushButton" name="evaluate_open_images">
                  <property name="text">
                   <string/>
                  </property>
@@ -69,7 +69,7 @@
                 </widget>
                </item>
                <item>
-                <widget class="QPushButton" name="evaluate_clear">
+                <widget class="QPushButton" name="evaluate_clear_all">
                  <property name="text">
                   <string/>
                  </property>
@@ -106,16 +106,19 @@
              <string>Step 2: Configure Network</string>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_12">
+             <property name="topMargin">
+              <number>2</number>
+             </property>
              <item>
               <layout class="QHBoxLayout" name="horizontalLayout_11">
                <property name="spacing">
                 <number>0</number>
                </property>
                <item>
-                <widget class="QComboBox" name="eval_networks"/>
+                <widget class="QComboBox" name="evaluate_builtin_networks"/>
                </item>
                <item>
-                <widget class="QPushButton" name="eval_from_file">
+                <widget class="QPushButton" name="evaluate_open_network">
                  <property name="text">
                   <string/>
                  </property>
@@ -141,7 +144,7 @@
               </layout>
              </item>
              <item>
-              <widget class="QLabel" name="evaluate_network">
+              <widget class="QLabel" name="evaluate_network_info">
                <property name="text">
                 <string/>
                </property>
@@ -160,7 +163,7 @@
             </property>
             <layout class="QFormLayout" name="formLayout_2">
              <property name="verticalSpacing">
-              <number>6</number>
+              <number>2</number>
              </property>
              <item row="0" column="0">
               <widget class="QLabel" name="label">
@@ -206,7 +209,7 @@
               <widget class="QComboBox" name="evaluate_device"/>
              </item>
              <item row="5" column="0">
-              <widget class="QLabel" name="evaluating">
+              <widget class="QLabel" name="evaluate_gif">
                <property name="text">
                 <string/>
                </property>
@@ -282,13 +285,16 @@
              <string>Step 4: Output</string>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_15">
+             <property name="topMargin">
+              <number>2</number>
+             </property>
              <item>
               <layout class="QHBoxLayout" name="horizontalLayout_14">
                <property name="topMargin">
-                <number>6</number>
+                <number>0</number>
                </property>
                <item>
-                <widget class="QPushButton" name="save_evale_image">
+                <widget class="QPushButton" name="evaluate_save_results">
                  <property name="enabled">
                   <bool>false</bool>
                  </property>
@@ -314,26 +320,13 @@
                  </property>
                 </spacer>
                </item>
-               <item>
-                <widget class="QPushButton" name="advance_eval">
-                 <property name="maximumSize">
-                  <size>
-                   <width>32</width>
-                   <height>16777215</height>
-                  </size>
-                 </property>
-                 <property name="text">
-                  <string>...</string>
-                 </property>
-                </widget>
-               </item>
               </layout>
              </item>
              <item>
               <widget class="QListWidget" name="evaluate_list2"/>
              </item>
              <item>
-              <widget class="QProgressBar" name="eval_prog">
+              <widget class="QProgressBar" name="evaluate_progress">
                <property name="value">
                 <number>0</number>
                </property>
@@ -490,7 +483,7 @@
                 <number>0</number>
                </property>
                <item>
-                <widget class="QPushButton" name="open_files">
+                <widget class="QPushButton" name="train_open_files">
                  <property name="text">
                   <string/>
                  </property>
@@ -501,7 +494,7 @@
                 </widget>
                </item>
                <item>
-                <widget class="QPushButton" name="clear">
+                <widget class="QPushButton" name="train_clear_all">
                  <property name="text">
                   <string/>
                  </property>
@@ -524,19 +517,6 @@
                  </property>
                 </spacer>
                </item>
-               <item>
-                <widget class="QPushButton" name="show_advanced">
-                 <property name="maximumSize">
-                  <size>
-                   <width>30</width>
-                   <height>16777215</height>
-                  </size>
-                 </property>
-                 <property name="text">
-                  <string>...</string>
-                 </property>
-                </widget>
-               </item>
               </layout>
              </item>
              <item>
@@ -557,13 +537,16 @@
              <string>Step 2: Specify Output</string>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_2">
+             <property name="topMargin">
+              <number>2</number>
+             </property>
              <item>
               <layout class="QHBoxLayout" name="horizontalLayout_13">
                <property name="spacing">
                 <number>0</number>
                </property>
                <item>
-                <widget class="QPushButton" name="open_labels">
+                <widget class="QPushButton" name="train_open_labels">
                  <property name="enabled">
                   <bool>false</bool>
                  </property>
@@ -588,19 +571,6 @@
                   </size>
                  </property>
                 </spacer>
-               </item>
-               <item>
-                <widget class="QPushButton" name="autofill">
-                 <property name="maximumSize">
-                  <size>
-                   <width>16777215</width>
-                   <height>16777215</height>
-                  </size>
-                 </property>
-                 <property name="text">
-                  <string>match</string>
-                 </property>
-                </widget>
                </item>
               </layout>
              </item>
@@ -635,7 +605,7 @@
                 <number>0</number>
                </property>
                <item>
-                <widget class="QPushButton" name="train_from_scratch">
+                <widget class="QPushButton" name="train_new_network">
                  <property name="text">
                   <string/>
                  </property>
@@ -646,7 +616,7 @@
                 </widget>
                </item>
                <item>
-                <widget class="QPushButton" name="load_network">
+                <widget class="QPushButton" name="train_open_network">
                  <property name="text">
                   <string/>
                  </property>
@@ -657,7 +627,7 @@
                 </widget>
                </item>
                <item>
-                <widget class="QPushButton" name="save_network">
+                <widget class="QPushButton" name="train_save_network">
                  <property name="minimumSize">
                   <size>
                    <width>0</width>
@@ -686,13 +656,6 @@
                  </property>
                 </spacer>
                </item>
-               <item>
-                <widget class="QPushButton" name="eval_from_train">
-                 <property name="text">
-                  <string>Copy to Evaluate</string>
-                 </property>
-                </widget>
-               </item>
               </layout>
              </item>
              <item>
@@ -711,6 +674,12 @@
              <string>Step 4: Train</string>
             </property>
             <layout class="QFormLayout" name="formLayout">
+             <property name="horizontalSpacing">
+              <number>6</number>
+             </property>
+             <property name="verticalSpacing">
+              <number>2</number>
+             </property>
              <property name="leftMargin">
               <number>6</number>
              </property>
@@ -800,10 +769,31 @@
               </widget>
              </item>
              <item row="4" column="1">
-              <widget class="QComboBox" name="gpu"/>
+              <widget class="QComboBox" name="train_device"/>
+             </item>
+             <item row="5" column="0">
+              <widget class="QLabel" name="label_8">
+               <property name="text">
+                <string>Output</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="1">
+              <widget class="QComboBox" name="training_output">
+               <item>
+                <property name="text">
+                 <string>most-trained model</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>lowest-error model</string>
+                </property>
+               </item>
+              </widget>
              </item>
              <item row="6" column="0">
-              <widget class="QLabel" name="training">
+              <widget class="QLabel" name="training_gif">
                <property name="enabled">
                 <bool>false</bool>
                </property>
@@ -827,7 +817,7 @@
                 <number>0</number>
                </property>
                <item>
-                <widget class="QPushButton" name="start_training">
+                <widget class="QPushButton" name="train_start">
                  <property name="enabled">
                   <bool>false</bool>
                  </property>
@@ -855,7 +845,7 @@
                 </widget>
                </item>
                <item>
-                <widget class="QPushButton" name="end_training">
+                <widget class="QPushButton" name="train_stop">
                  <property name="enabled">
                   <bool>false</bool>
                  </property>
@@ -883,27 +873,6 @@
                 </widget>
                </item>
               </layout>
-             </item>
-             <item row="5" column="0">
-              <widget class="QLabel" name="label_8">
-               <property name="text">
-                <string>Output</string>
-               </property>
-              </widget>
-             </item>
-             <item row="5" column="1">
-              <widget class="QComboBox" name="training_output">
-               <item>
-                <property name="text">
-                 <string>most-trained model</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>lowest-error model</string>
-                </property>
-               </item>
-              </widget>
              </item>
             </layout>
            </widget>
@@ -1262,39 +1231,64 @@
      <height>22</height>
     </rect>
    </property>
-   <widget class="QMenu" name="menu_File">
-    <property name="title">
-     <string>&amp;File</string>
-    </property>
-    <addaction name="actionOpen_Training"/>
-    <addaction name="actionSave_Training"/>
-   </widget>
    <widget class="QMenu" name="menu_View">
     <property name="title">
      <string>&amp;View</string>
     </property>
     <addaction name="actionConsole"/>
    </widget>
-   <addaction name="menu_File"/>
+   <widget class="QMenu" name="menuEvalute">
+    <property name="title">
+     <string>Evalute</string>
+    </property>
+    <addaction name="action_evaluate_open_images"/>
+    <addaction name="action_evaluate_save_results"/>
+    <addaction name="action_evaluate_clear_all"/>
+    <addaction name="separator"/>
+    <addaction name="action_evaluate_open_network"/>
+    <addaction name="action_evaluate_copy_trained_network"/>
+    <addaction name="separator"/>
+    <addaction name="action_evaluate_option"/>
+   </widget>
+   <widget class="QMenu" name="menuTrain">
+    <property name="title">
+     <string>Train</string>
+    </property>
+    <addaction name="action_train_open_files"/>
+    <addaction name="action_train_open_labels"/>
+    <addaction name="action_train_auto_match_label_files"/>
+    <addaction name="action_train_clear_all"/>
+    <addaction name="separator"/>
+    <addaction name="action_train_new_network"/>
+    <addaction name="action_train_open_network"/>
+    <addaction name="action_train_save_network"/>
+    <addaction name="separator"/>
+    <addaction name="action_open_training_setting"/>
+    <addaction name="action_save_training_setting"/>
+    <addaction name="separator"/>
+    <addaction name="action_train_options"/>
+   </widget>
    <addaction name="menu_View"/>
+   <addaction name="menuEvalute"/>
+   <addaction name="menuTrain"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <action name="actionOpen_Training">
+  <action name="action_open_training_setting">
    <property name="icon">
     <iconset resource="icons.qrc">
      <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
    </property>
    <property name="text">
-    <string>Open Training...</string>
+    <string>Open Training Setting...</string>
    </property>
   </action>
-  <action name="actionSave_Training">
+  <action name="action_save_training_setting">
    <property name="icon">
     <iconset resource="icons.qrc">
      <normaloff>:/icons/icons/save.png</normaloff>:/icons/icons/save.png</iconset>
    </property>
    <property name="text">
-    <string>Save Training...</string>
+    <string>Save Training Setting...</string>
    </property>
   </action>
   <action name="actionConsole">
@@ -1302,25 +1296,145 @@
     <string>Console</string>
    </property>
   </action>
+  <action name="action_evaluate_open_images">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
+   </property>
+   <property name="text">
+    <string>Open Images...</string>
+   </property>
+  </action>
+  <action name="action_train_open_files">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
+   </property>
+   <property name="text">
+    <string>Open Images...</string>
+   </property>
+  </action>
+  <action name="action_train_open_labels">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
+   </property>
+   <property name="text">
+    <string>Open Label Image...</string>
+   </property>
+  </action>
+  <action name="action_evaluate_open_network">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
+   </property>
+   <property name="text">
+    <string>Open Network...</string>
+   </property>
+  </action>
+  <action name="action_evaluate_save_results">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/icons/icons/save.png</normaloff>:/icons/icons/save.png</iconset>
+   </property>
+   <property name="text">
+    <string>Save Results...</string>
+   </property>
+  </action>
+  <action name="action_evaluate_option">
+   <property name="text">
+    <string>Options...</string>
+   </property>
+  </action>
+  <action name="action_train_new_network">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/icons/icons/new.png</normaloff>:/icons/icons/new.png</iconset>
+   </property>
+   <property name="text">
+    <string>New Network...</string>
+   </property>
+  </action>
+  <action name="action_train_open_network">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/icons/icons/open.png</normaloff>:/icons/icons/open.png</iconset>
+   </property>
+   <property name="text">
+    <string>Open Network...</string>
+   </property>
+  </action>
+  <action name="action_train_save_network">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/icons/icons/save.png</normaloff>:/icons/icons/save.png</iconset>
+   </property>
+   <property name="text">
+    <string>Save Network...</string>
+   </property>
+  </action>
+  <action name="action_evaluate_copy_trained_network">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Copy From Trained</string>
+   </property>
+  </action>
+  <action name="action_train_auto_match_label_files">
+   <property name="text">
+    <string>Auto-Match Label Images...</string>
+   </property>
+  </action>
+  <action name="action_train_options">
+   <property name="text">
+    <string>Options</string>
+   </property>
+  </action>
+  <action name="action_train_clear_all">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/icons/icons/delete.png</normaloff>:/icons/icons/delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Clear All</string>
+   </property>
+  </action>
+  <action name="action_evaluate_clear_all">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/icons/icons/delete.png</normaloff>:/icons/icons/delete.png</iconset>
+   </property>
+   <property name="text">
+    <string>Clear All</string>
+   </property>
+  </action>
  </widget>
  <tabstops>
-  <tabstop>open_files</tabstop>
-  <tabstop>clear</tabstop>
-  <tabstop>show_advanced</tabstop>
+  <tabstop>train_open_files</tabstop>
+  <tabstop>train_clear_all</tabstop>
   <tabstop>list1</tabstop>
-  <tabstop>open_labels</tabstop>
-  <tabstop>autofill</tabstop>
+  <tabstop>train_open_labels</tabstop>
   <tabstop>list2</tabstop>
-  <tabstop>train_from_scratch</tabstop>
-  <tabstop>load_network</tabstop>
-  <tabstop>save_network</tabstop>
+  <tabstop>train_new_network</tabstop>
+  <tabstop>train_open_network</tabstop>
+  <tabstop>train_save_network</tabstop>
   <tabstop>tabWidget</tabstop>
   <tabstop>batch_size</tabstop>
   <tabstop>epoch</tabstop>
   <tabstop>learning_rate</tabstop>
-  <tabstop>gpu</tabstop>
-  <tabstop>start_training</tabstop>
-  <tabstop>end_training</tabstop>
+  <tabstop>train_device</tabstop>
+  <tabstop>train_start</tabstop>
+  <tabstop>train_stop</tabstop>
   <tabstop>view1</tabstop>
   <tabstop>view2</tabstop>
   <tabstop>view_dim</tabstop>
@@ -1331,8 +1445,8 @@
   <tabstop>save_error</tabstop>
   <tabstop>clear_error</tabstop>
   <tabstop>show_transform</tabstop>
-  <tabstop>open_evale_image</tabstop>
-  <tabstop>evaluate_clear</tabstop>
+  <tabstop>evaluate_open_images</tabstop>
+  <tabstop>evaluate_clear_all</tabstop>
   <tabstop>evaluate_list</tabstop>
   <tabstop>evaluate_device</tabstop>
   <tabstop>evaluate</tabstop>
@@ -1347,5 +1461,166 @@
  <resources>
   <include location="icons.qrc"/>
  </resources>
- <connections/>
+ <connections>
+  <connection>
+   <sender>train_open_files</sender>
+   <signal>clicked()</signal>
+   <receiver>action_train_open_files</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>45</x>
+     <y>97</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>train_open_labels</sender>
+   <signal>clicked()</signal>
+   <receiver>action_train_open_labels</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>45</x>
+     <y>303</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>train_new_network</sender>
+   <signal>clicked()</signal>
+   <receiver>action_train_new_network</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>45</x>
+     <y>494</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>train_open_network</sender>
+   <signal>clicked()</signal>
+   <receiver>action_train_open_network</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>73</x>
+     <y>494</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>train_save_network</sender>
+   <signal>clicked()</signal>
+   <receiver>action_train_save_network</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>101</x>
+     <y>494</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>train_clear_all</sender>
+   <signal>clicked()</signal>
+   <receiver>action_train_clear_all</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>73</x>
+     <y>97</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>evaluate_open_network</sender>
+   <signal>clicked()</signal>
+   <receiver>action_evaluate_open_network</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>114</x>
+     <y>334</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>evaluate_clear_all</sender>
+   <signal>clicked()</signal>
+   <receiver>action_evaluate_clear_all</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>73</x>
+     <y>97</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>evaluate_open_images</sender>
+   <signal>clicked()</signal>
+   <receiver>action_evaluate_open_images</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>45</x>
+     <y>97</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>evaluate_save_results</sender>
+   <signal>clicked()</signal>
+   <receiver>action_evaluate_save_results</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>45</x>
+     <y>653</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>
