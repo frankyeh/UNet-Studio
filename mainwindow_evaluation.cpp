@@ -56,6 +56,8 @@ void MainWindow::on_action_evaluate_copy_trained_network_triggered()
     evaluate.model->copy_from(*train.output_model);
     ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name = train_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
+    ui->evaluate_builtin_networks->setCurrentIndex(0);
+    ui->postproc->setCurrentIndex(evaluate.model->out_count > 1 ? 1 : 2);
 }
 
 
@@ -75,6 +77,7 @@ void MainWindow::on_action_evaluate_open_network_triggered()
     ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
     ui->evaluate_builtin_networks->setCurrentIndex(0);
+    ui->postproc->setCurrentIndex(evaluate.model->out_count > 1 ? 1 : 2);
 }
 
 void MainWindow::on_evaluate_builtin_networks_currentIndexChanged(int index)
@@ -89,6 +92,7 @@ void MainWindow::on_evaluate_builtin_networks_currentIndexChanged(int index)
         }
         ui->evaluate_network_info->setText(QString("name: %1\n").arg(ui->evaluate_builtin_networks->currentText()) + evaluate.model->get_info().c_str());
         ui->evaluate->setEnabled(evaluate_list.size());
+        ui->postproc->setCurrentIndex(evaluate.model->out_count > 1 ? 1 : 2);
     }
 }
 
