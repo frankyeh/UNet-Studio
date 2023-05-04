@@ -97,3 +97,7 @@ void MainWindow::on_actionConsole_triggered()
     con->showNormal();
 }
 
+
+
+
+

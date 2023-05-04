@@ -15,7 +15,6 @@ Post-processing/Normalize All/normalize_all/button/0/normalize volume by sum of 
 Post-processing/Gaussian Smoothing/gaussian_smoothing/button/0/apply Gaussian smoothing
 Post-processing/Anisotropic Smoothing/anisotropic_smoothing/button/0/apply anisotropic smoothing
 Post-processing/Soft Max/soft_max/button/0/calculate soft max
-Post-processing/└Minimum Probability/soft_min_prob/float:0.0:1.0:0.1:2/0.5/maximum probability
-Post-processing/└Maximum Probability/soft_max_prob/float:0.2:1.0:0.1:2/1.0/maximum probability
+Post-processing/└Probability threshold/soft_max_prob/float:0.0:1.0:0.1:2/0.5/probability threshold
 Post-processing/Binarize/binarize/button/0/binarize the values
 Post-processing/└Threshold/binarize_threshold/float:0.0:1.0:0.1:2/0.5/threshold for threshold value to 0 and 1

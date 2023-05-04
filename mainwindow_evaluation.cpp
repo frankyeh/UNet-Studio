@@ -57,7 +57,7 @@ void MainWindow::on_action_evaluate_copy_trained_network_triggered()
     ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name = train_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
     ui->evaluate_builtin_networks->setCurrentIndex(0);
-    ui->postproc->setCurrentIndex(evaluate.model->out_count > 1 ? 1 : 2);
+    ui->convert_to_3d->setChecked(evaluate.model->out_count > 1);
 }
 
 
@@ -77,7 +77,7 @@ void MainWindow::on_action_evaluate_open_network_triggered()
     ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
     ui->evaluate_builtin_networks->setCurrentIndex(0);
-    ui->postproc->setCurrentIndex(evaluate.model->out_count > 1 ? 1 : 2);
+    ui->convert_to_3d->setChecked(evaluate.model->out_count > 1);
 }
 
 void MainWindow::on_evaluate_builtin_networks_currentIndexChanged(int index)
@@ -92,7 +92,7 @@ void MainWindow::on_evaluate_builtin_networks_currentIndexChanged(int index)
         }
         ui->evaluate_network_info->setText(QString("name: %1\n").arg(ui->evaluate_builtin_networks->currentText()) + evaluate.model->get_info().c_str());
         ui->evaluate->setEnabled(evaluate_list.size());
-        ui->postproc->setCurrentIndex(evaluate.model->out_count > 1 ? 1 : 2);
+        ui->convert_to_3d->setChecked(evaluate.model->out_count > 1);
     }
 }
 
@@ -115,8 +115,10 @@ void MainWindow::on_evaluate_clicked()
     ui->evaluate_progress->setMaximum(evaluate_list.size());
     ui->evaluate_list2->clear();
     evaluate.option = eval_option;
-    evaluate.preproc_strategy = ui->preproc->currentIndex();
-    evaluate.postproc_strategy = ui->postproc->currentIndex();
+    evaluate.proc_strategy.match_resolution = ui->match_resolution->isChecked();
+    evaluate.proc_strategy.crop_fov = ui->crop_fov->isChecked();
+    evaluate.proc_strategy.remove_background = ui->remove_background->isChecked();
+    evaluate.proc_strategy.convert_to_3d = ui->convert_to_3d->isChecked();
     evaluate.start();
     eval_timer->start();
 
@@ -336,10 +338,7 @@ void MainWindow::run_action(QString command)
         param2 = eval_option->get<float>("erase_background_smoothing");
     }
     if(command == "soft_max")
-    {
-        param1 = eval_option->get<float>("soft_min_prob");
-        param2 = eval_option->get<float>("soft_max_prob");
-    }
+        param1 = eval_option->get<float>("soft_max_prob");
     if(command == "defragment")
         param1 = eval_option->get<float>("defragment_threshold");
     if(command == "upper_threshold")

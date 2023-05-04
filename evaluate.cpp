@@ -19,62 +19,40 @@ std::vector<std::string> operations({
         "swap_xy",
         "swap_yz",
         "swap_xz"});
-bool preproc_actions(tipl::image<3>& image,
+void preproc_actions(tipl::image<3>& image,
                    tipl::vector<3>& image_vs,
-                   const tipl::shape<3>& input_dim,
-                   const tipl::vector<3>& input_vs,
-                   unsigned char preproc_strategy,
+                   const tipl::shape<3>& model_dim,
+                   const tipl::vector<3>& model_vs,
+                   const ProcStrategy& proc_strategy,
                    std::string& error_msg)
 {
-    if(input_dim == image.shape() && image_vs == input_vs)
+    if(model_dim == image.shape() && image_vs == model_vs)
     {
         tipl::out() << "image resolution and dimension are the same as training data. No padding or regrinding needed.";
-        return true;
+        return;
     }
 
-    switch(preproc_strategy)
+    tipl::vector<3> target_vs(proc_strategy.match_resolution ? model_vs : image_vs);
+    tipl::image<3> target_image(proc_strategy.crop_fov ? model_dim :
+                        unet_inputsize(tipl::shape<3>(float(image.width())*image_vs[0]/target_vs[0],
+                                       float(image.height())*image_vs[1]/target_vs[1],
+                                       float(image.depth())*image_vs[2]/target_vs[2])));
+    if(!proc_strategy.crop_fov && !proc_strategy.match_resolution)
     {
-        case 0: //match voxel size
-        if(image_vs != input_vs)
-        {
-            tipl::image<3> new_sized_image(unet_inputsize(tipl::shape<3>(
-                    float(image.width()*image_vs[0])/input_vs[0],
-                    float(image.height()*image_vs[1])/input_vs[1],
-                    float(image.depth()*image_vs[2])/input_vs[2])));
-            tipl::out() << "regriding to a resolution of " << input_vs << " with a size of " << new_sized_image.shape();
-            tipl::resample_mt(image,new_sized_image,
-                    tipl::transformation_matrix<float>(tipl::affine_transform<float>(),
-                        new_sized_image.shape(),input_vs,image.shape(),image_vs));
-            new_sized_image.swap(image);
-            return true;
-        }
-        case 2: //original
-        {
-            tipl::out() << "image has a different dimension. padding or cropping applied";
-            tipl::image<3> new_sized_image(unet_inputsize(image.shape()));
-            auto shift = tipl::vector<3,int>(new_sized_image.shape())-
-                         tipl::vector<3,int>(image.shape());
-            shift[2] = 0;
-            tipl::draw(image,new_sized_image,shift);
-            new_sized_image.swap(image);
-        }
-        return true;
-        case 1: //match sizes
-        {
-            tipl::out() << "regriding applied.";
-            float target_vs = std::min({float(image.width())*image_vs[0]/float(input_dim[0]),
-                                        float(image.height())*image_vs[1]/float(input_dim[1]),
-                                        float(image.depth())*image_vs[2]/float(input_dim[2])});
-            tipl::vector<3> new_input_vs(target_vs,target_vs,target_vs);
-            tipl::image<3> new_sized_image(input_dim);
-            tipl::resample_mt(image,new_sized_image,
-                    tipl::transformation_matrix<float>(tipl::affine_transform<float>(),
-                        input_dim,new_input_vs,image.shape(),image_vs));
-            new_sized_image.swap(image);
-        }
-        return true;
+        auto shift = tipl::vector<3,int>(target_image.shape())-
+                     tipl::vector<3,int>(image.shape());
+        shift[0] /= 2;
+        shift[1] /= 2;
+        tipl::draw(image,target_image,shift);
     }
-    return false;
+    else
+    {
+        tipl::affine_transform<float> arg;
+        arg.translocation[2] = (float(image.shape()[2])*image_vs[2]-float(target_image.shape()[2])*target_vs[2])*0.5f;
+        tipl::resample_mt(image,target_image,
+            tipl::transformation_matrix<float>(arg,target_image.shape(),target_vs,image.shape(),image_vs));
+    }
+    target_image.swap(image);
 }
 
 template<typename T,typename U>
@@ -222,21 +200,21 @@ void postproc_actions(const std::string& command,
     }
     if(command =="soft_max")
     {
+        tipl::image<3> sum_image(dim);
+        reduce_mt(this_image,sum_image);
         float soft_min_prob = param1;
-        float soft_max_prob = param2;
         tipl::par_for(dim.size(),[&](size_t pos)
         {
             float m = 0.0f;
             for(size_t i = pos;i < this_image.size();i += dim.size())
                 if(this_image[i] > m)
                     m = this_image[i];
-            if(m <= soft_min_prob)
+            if(sum_image[pos] <= soft_min_prob)
             {
                 for(size_t i = pos;i < this_image.size();i += dim.size())
                     this_image[i] = 0.0f;
                 return;
             }
-            m *= soft_max_prob;
             for(size_t i = pos;i < this_image.size();i += dim.size())
                 this_image[i] = (this_image[i] >= m ? 1.0f:0.0f);
         });
@@ -293,16 +271,12 @@ void evaluate_unet::read_file(void)
             raw_image_flip_swap[i] = in.flip_swap_seq;
             raw_image_shape[i] = network_input[i].shape();
             tipl::out() << "dim: " << network_input[i].shape() << " vs:" << raw_image_vs[i] << std::endl;
-            if(!preproc_actions(network_input[i],
+            preproc_actions(network_input[i],
                           raw_image_vs[i],
                           model->dim,model->voxel_size,
-                          preproc_strategy,error_msg))
-            {
-                aborted = true;
-                return;
-            }
+                          proc_strategy,error_msg);
             tipl::lower_threshold(network_input[i],0.0f);
-            tipl::normalize(network_input[i],1.0f);
+            tipl::normalize(network_input[i]);
             data_ready[i] = true;
         }
     }));
@@ -384,60 +358,47 @@ void evaluate_unet::output(void)
                 {
                     auto from = network_output[cur_output].alias(dim_from.size()*i,dim_from);
                     auto to = label_prob[cur_output].alias(dim_to.size()*i,dim_to);
-                    switch(preproc_strategy)
-                    {
-                    case 0: //match resolution
-                        if(raw_image_vs[cur_output] != model->voxel_size)
-                        {
-                            tipl::resample_mt(from,to,
-                                tipl::transformation_matrix<float>(tipl::affine_transform<float>(),
-                                    dim_to,raw_image_vs[cur_output],
-                                    dim_from,model->voxel_size));
-                            return;
-                        }
-                    case 2: //original
-                        {
-                            auto shift = tipl::vector<3,int>(to.shape())-tipl::vector<3,int>(from.shape());
-                            shift[2] = 0;
-                            tipl::draw(from,to,shift);
-                        }
-                        return;
-                    case 1: //match sizes
-                    {
-                        float target_vs = std::min({float(raw_image_shape[cur_output].width())*raw_image_vs[cur_output][0]/float(model->dim[0]),
-                                                    float(raw_image_shape[cur_output].height())*raw_image_vs[cur_output][1]/float(model->dim[1]),
-                                                    float(raw_image_shape[cur_output].depth())*raw_image_vs[cur_output][2]/float(model->dim[2])});
-                        tipl::resample_mt(from,to,
-                            tipl::transformation_matrix<float>(tipl::affine_transform<float>(),
-                                dim_to,raw_image_vs[cur_output],
-                                dim_from,tipl::vector<3>(target_vs,target_vs,target_vs)));
-                        return;
-                    }
 
+                    const auto& model_vs = model->voxel_size;
+                    const auto& model_dim = model->dim;
+                    const auto& image_vs = raw_image_vs[cur_output];
+                    const auto& image_dim = raw_image_shape[cur_output];
+
+                    tipl::vector<3> target_vs(proc_strategy.match_resolution ? model_vs : image_vs);
+                    tipl::shape<3> target_dim(proc_strategy.crop_fov ? model_dim :
+                                        unet_inputsize(tipl::shape<3>(float(image_dim.width())*image_vs[0]/target_vs[0],
+                                                       float(image_dim.height())*image_vs[1]/target_vs[1],
+                                                       float(image_dim.depth())*image_vs[2]/target_vs[2])));
+
+                    if(!proc_strategy.crop_fov && !proc_strategy.match_resolution)
+                    {
+                        auto shift = tipl::vector<3,int>(to.shape())-tipl::vector<3,int>(from.shape());
+                        shift[0] /= 2;
+                        shift[1] /= 2;
+                        tipl::draw(from,to,shift);
+                    }
+                    else
+                    {
+                        tipl::affine_transform<float> arg;
+                        arg.translocation[2] = (float(target_dim[2])*target_vs[2]-float(raw_image_shape[cur_output][2])*raw_image_vs[cur_output][2])*0.5;
+                        tipl::resample_mt(from,to,
+                            tipl::transformation_matrix<float>(arg,raw_image_shape[cur_output],raw_image_vs[cur_output],target_dim,target_vs));
                     }
                 });
 
-                switch(postproc_strategy)
+
                 {
-                    case 0: // 3d labels
-                        proc_actions("upper_threshold",1.0f);
-                        proc_actions("lower_threshold",0.0f);
-                        proc_actions("normalize_each");
-                        proc_actions("erase_background",param.prob_threshold*0.5f,1);
-                        proc_actions("erase_background",param.prob_threshold,1);
-                        proc_actions("soft_max",0.5f,1.0f);
-                        proc_actions("convert_to_3d");
-                    break;
-                    case 1: // 4d proc maps
-                        proc_actions("upper_threshold",1.0f);
-                        proc_actions("lower_threshold",0.0f);
-                        proc_actions("normalize_each");
-                        proc_actions("minus",param.prob_threshold);
-                        proc_actions("lower_threshold",0.0f);
-                        proc_actions("normalize_each");
-                        proc_actions("erase_background",param.prob_threshold,1);
-                        proc_actions("normalize_each");
-                    break;
+                    proc_actions("upper_threshold",1.0f);
+                    proc_actions("lower_threshold",0.0f);
+                }
+                if(proc_strategy.remove_background)
+                {
+                    proc_actions("erase_background",param.prob_threshold,1);
+                }
+                if(proc_strategy.convert_to_3d)
+                {
+                    proc_actions("soft_max",param.prob_threshold);
+                    proc_actions("convert_to_3d");
                 }
                 network_input[cur_output] = tipl::image<3>();
                 network_output[cur_output] = tipl::image<3>();

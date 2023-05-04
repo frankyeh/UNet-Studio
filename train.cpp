@@ -83,39 +83,32 @@ bool read_image_and_label(const std::string& image_name,
 }
 
 template<typename image_type>
-void intensity_linear(image_type& image_out,tipl::uniform_dist<float>& one,float magnitude)
+void diffuse_light(image_type& image_out,tipl::uniform_dist<float>& one,float magnitude)
 {
-    tipl::vector<3> f(one(),one(),one());
-    f.normalize();
+    tipl::vector<3> f(one()-0.5f,one()-0.5f,one()-0.5f);
     image_type scale(image_out.shape());
+    auto center = tipl::vector<3>(image_out.shape())*0.5f;
+    f.normalize();
+    f *= magnitude/float(tipl::max_value(image_out.shape().begin(),image_out.shape().end()));
     for(tipl::pixel_index<3> index(image_out.shape());index < image_out.size();++index)
     {
-        tipl::vector<3> pos(index.begin());
-        tipl::divide(pos,image_out.shape());
-        pos -= 0.5f;
-        scale[index.index()] = pos*f;
+        tipl::vector<3> pos(index);
+        pos -= center;
+        image_out[index.index()] *= std::max<float>(0.0f,1.0f + pos*f);
     }
-    tipl::normalize_upper_lower(scale,magnitude);
-    scale += 1.0f-magnitude;
-    tipl::lower_threshold(scale,0.0f);
-    tipl::multiply(image_out,scale);
 }
 
 
 template<typename image_type>
-void intensity_cos(image_type& image_out,tipl::uniform_dist<float>& one,float frequency,float magnitude)
+void specular_light(image_type& image_out,tipl::uniform_dist<float>& one,const tipl::vector<3,int>& center,float frequency,float mag)
 {
-    const double pi = std::acos(-1);
-    tipl::vector<3> f(one()*frequency*pi,one()*frequency*pi,one()*frequency*pi);
-    tipl::vector<3> shift(one()*pi,one()*pi,one()*pi);
-    float a = std::abs(one()*magnitude); // [0 0.25]
-    float b = 1.0f-a-a;
+    float b = 1.0f-mag-mag;
+    frequency *= std::acos(-1)*0.5f/tipl::max_value(image_out.shape().begin(),image_out.shape().end());
     for(tipl::pixel_index<3> index(image_out.shape());index < image_out.size();++index)
     {
         tipl::vector<3> pos(index.begin());
-        tipl::divide(pos,image_out.shape());
-        pos += shift;
-        image_out[index.index()] *= ((std::cos(pos*f)+1.0f)*a+b);
+        pos -= center;
+        image_out[index.index()] *= ((std::cos(pos.length()*frequency)+1.0f)*mag+b);
     }
 }
 template<typename image_type>
@@ -152,12 +145,12 @@ void create_distortion_at(image_type& displaced,const tipl::vector<3,int>& cente
 }
 
 template<typename image_type>
-void create_cropout_at(image_type& image,image_type& label,const tipl::vector<3,int>& pos,int radius)
+void create_occlusion_at(image_type& image,image_type& label,const tipl::vector<3,int>& pos,int radius,float occlusion_value)
 {
     tipl::for_each_neighbors(tipl::pixel_index<3>(pos.begin(),image.shape()),image.shape(),radius,
                                  [&](const auto& index)
     {
-        image[index.index()] = 0;
+        image[index.index()] = occlusion_value;
         if(!label.empty())
             label[index.index()] = 0;
     });
@@ -231,9 +224,9 @@ void load_image_and_label(const OptionTableWidget& options,
         int index = options.get<int>(name);
         if(index == 0)
             return false;
-        if(index == 5)
+        if(index >= 4)
             return true;
-        return std::abs(one()) < float(index)*0.2f;
+        return std::abs(one()) < float(index)*0.25f;
     };
     auto random_location = [&range](const tipl::shape<3>& sp,float from,float to)
                     {return tipl::vector<3,int>((sp[0]-1)*range(from,to),(sp[1]-1)*range(from,to),(sp[2]-1)*range(from,to));};
@@ -246,9 +239,9 @@ void load_image_and_label(const OptionTableWidget& options,
                 one()*options.get<float>("rotation_x"),
                 one()*options.get<float>("rotation_y"),
                 one()*options.get<float>("rotation_z"),
-                resolution*range(1.0f/options.get<float>("scaling_axis"),options.get<float>("scaling_axis")),
-                resolution*range(1.0f/options.get<float>("scaling_axis"),options.get<float>("scaling_axis")),
-                resolution*range(1.0f/options.get<float>("scaling_axis"),options.get<float>("scaling_axis")),
+                resolution*range(1.0f/options.get<float>("aspect_ratio"),options.get<float>("aspect_ratio")),
+                resolution*range(1.0f/options.get<float>("aspect_ratio"),options.get<float>("aspect_ratio")),
+                resolution*range(1.0f/options.get<float>("aspect_ratio"),options.get<float>("aspect_ratio")),
                 one()*options.get<float>("affine"),
                 one()*options.get<float>("affine"),
                 one()*options.get<float>("affine")};
@@ -270,15 +263,17 @@ void load_image_and_label(const OptionTableWidget& options,
     }
 
 
-    if(apply("cropout"))
+    if(apply("occlusion"))
     {
-        auto count = options.get<float>("cropout_count");
+        auto count = options.get<float>("occlusion_count");
         for(size_t i = 0;i < count;++i)
         {
-            auto cropout_size = range(options.get<float>("cropout_size_min"),
-                                      options.get<float>("cropout_size_max"));
-            create_cropout_at(image,label,
-                          random_location(image.shape(),cropout_size,1.0f - cropout_size),cropout_size*float(image.width()));
+            auto occlusion_size = range(options.get<float>("occlusion_size_min"),
+                                      options.get<float>("occlusion_size_max"));
+            create_occlusion_at(image,label,
+                          random_location(image.shape(),occlusion_size,1.0f - occlusion_size),
+                                occlusion_size*float(image.width()),
+                                range(0.0f,1.0f));
         }
     }
 
@@ -292,72 +287,44 @@ void load_image_and_label(const OptionTableWidget& options,
         label_out.swap(label);
     }
 
+    tipl::image<3> image_out(template_shape);
+    tipl::compose_displacement_with_affine(image,image_out,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs),displaced);
+
+    bool downsample_x = apply("downsample_x");
+    bool downsample_y = apply("downsample_y");
+    bool downsample_z = apply("downsample_z");
+    if(downsample_x || downsample_y || downsample_z)
+    {
+        tipl::image<3> low_reso_image(tipl::shape<3>(float(template_shape[0])*(downsample_x ? options.get<float>("downsample_x_ratio"): 1.0f),
+                                                    float(template_shape[1])*(downsample_y ? options.get<float>("downsample_y_ratio"): 1.0f),
+                                                    float(template_shape[2])*(downsample_z ? options.get<float>("downsample_z_ratio"): 1.0f)));
+        tipl::scale(image_out,low_reso_image);
+        low_reso_image.swap(image_out);
+    }
     if(apply("blurring"))
     {
         auto count = options.get<float>("blurring_count");
         for(size_t i = 0;i < count;++i)
-            tipl::filter::gaussian(image);
+            tipl::filter::gaussian(image_out);
     }
 
-    tipl::image<3> image_out(template_shape);
-    {
-        bool downsample_x = apply("downsample_x");
-        bool downsample_y = apply("downsample_y");
-        bool downsample_z = apply("downsample_z");
-        if(downsample_x || downsample_y || downsample_z)
-        {
-            tipl::image<3> reduced_image(image.shape());
-            tipl::vector<3> dd(downsample_x ? range(options.get<float>("downsample_x_ratio"),1.0f) : 1.0f,
-                               downsample_y ? range(options.get<float>("downsample_y_ratio"),1.0f) : 1.0f,
-                               downsample_z ? range(options.get<float>("downsample_z_ratio"),1.0f) : 1.0f);
-            tipl::vector<3> new_vs(image_vs[0]/dd[0],image_vs[1]/dd[1],image_vs[2]/dd[2]);
-            tipl::affine_transform<float> image_arg;
-            image_arg.scaling[0] = 1.0f/dd[0];
-            image_arg.scaling[1] = 1.0f/dd[1];
-            image_arg.scaling[2] = 1.0f/dd[2];
-            tipl::resample_mt(image,reduced_image,
-                tipl::transformation_matrix<float>(image_arg,image.shape(),new_vs,image.shape(),image_vs));
-            image_arg = transform;
-            image_arg.scaling[0] *= dd[0];
-            image_arg.scaling[1] *= dd[1];
-            image_arg.scaling[2] *= dd[2];
-            tipl::compose_displacement_with_affine(reduced_image,image_out,
-                tipl::transformation_matrix<float>(image_arg,template_shape,template_vs,image.shape(),new_vs),displaced);
-        }
-        else
-            tipl::compose_displacement_with_affine(image,image_out,tipl::transformation_matrix<float>(transform,template_shape,template_vs,image.shape(),image_vs),displaced);
-    }
-
-    tipl::lower_threshold(image_out,0.0f);
-    tipl::normalize(image_out,1.0f);
-
-
-    if(apply("invert_signal"))
-    {
-        for(size_t i = 0;i < image_out.size();++i)
-            image_out[i] = 1.0f-image_out[i];
-    }
-    if(apply("pow_signal"))
-    {
-        float exp = range(1.0f/options.get<float>("pow_signal_exp"),options.get<float>("pow_signal_exp"));
-        for(size_t i = 0;i < image_out.size();++i)
-            image_out[i] = std::pow(image_out[i],exp);
-    }
-
-    if(apply("astigmatism"))
-        ghost(image_out,range(0.05f,0.25f)*image_out.width(),options.get<float>("astigmatism_mag"),one() > 0);
-
-    if(apply("linear_attenuation"))
-        intensity_linear(image_out,one,options.get<float>("linear_attenuation_mag"));
-
-    if(apply("cos_attenuation1"))
-        intensity_cos(image_out,one,options.get<float>("cos_attenuation1_freq"),options.get<float>("cos_attenuation1_mag"));
-
-    if(apply("cos_attenuation2"))
-        intensity_cos(image_out,one,options.get<float>("cos_attenuation2_freq"),options.get<float>("cos_attenuation2_mag"));
+    if(apply("ambient"))
+        image_out += range(0.0f,options.get<float>("ambient_mag"));
+    if(apply("diffuse"))
+        diffuse_light(image_out,one,options.get<float>("diffuse_mag"));
+    if(apply("specular"))
+        specular_light(image_out,one,random_location(image_out.shape(),0.4f,0.6f),options.get<float>("specular_freq"),options.get<float>("specular_mag"));
 
     tipl::normalize(image_out);
     tipl::lower_threshold(image_out,0.0f);
+
+
+    if(image_out.shape() != template_shape)
+    {
+        tipl::image<3> original_reso_image(template_shape);
+        tipl::scale(image_out,original_reso_image);
+        original_reso_image.swap(image_out);
+    }
 
 
     if(!label.empty())
@@ -366,10 +333,9 @@ void load_image_and_label(const OptionTableWidget& options,
         {
             tipl::image<3> background(template_shape);
             {
-                auto resolution = range(0.05f,0.1f);
                 tipl::affine_transform<float> arg= {one()*30.0f,one()*30.0f,one()*30.0f,
                                                     one()*2.0f,one()*2.0f,one()*2.0f,
-                                                    resolution,resolution,resolution,
+                                                    0.25f,0.25f,0.25f,
                                                     0.0f,0.0f,0.0f};
                 tipl::resample_mt(image,background,tipl::transformation_matrix<float>(arg,template_shape,template_vs,image.shape(),image_vs));
             }
@@ -461,39 +427,22 @@ std::vector<size_t> get_label_count(const tipl::image<3>& label,size_t out_count
 }
 tipl::shape<3> unet_inputsize(const tipl::shape<3>& s);
 
-void fuzzy_labels(tipl::image<3>& label,const std::vector<size_t>& label_count)
-{
-    if(label_count.size() <= 1)
-        return;
-    auto original_label = label;
-    size_t sum = tipl::sum(label_count);
-    tipl::expand_label_to_dimension(label,label_count.size());
-    tipl::par_for(label_count.size(),[&](size_t i)
-    {
-        float cur_weight = float(label_count[i])/float(sum);
-        for(size_t j = 0,base = i*original_label.size();j < original_label.size();++j,++base)
-            if(original_label[j])
-                label[base] = std::max<float>(cur_weight,label[base]);
-    });
-}
-
 void train_unet::read_file(void)
 {
-    const int thread_count = std::min<int>(8,std::thread::hardware_concurrency());
+    int thread_count = std::min<int>(8,std::thread::hardware_concurrency());
     in_data = std::vector<tipl::image<3> >(thread_count);
     out_data = std::vector<tipl::image<3> >(thread_count);
     data_ready = std::vector<bool>(thread_count,false);
 
+    test_data_ready = false;
     test_in_tensor.clear();
     test_out_tensor.clear();
-    test_error.clear();
+    test_mask.clear();
 
     read_file_thread.reset(new std::thread([=]()
     {
-        std::vector<tipl::image<3> > image,label;
-        std::vector<std::vector<size_t> > label_count;
+        std::vector<tipl::image<3> > train_image,train_label;
         std::vector<tipl::vector<3> > image_vs;
-
         // prepare training data
         {
             status = "reading input data";
@@ -508,72 +457,87 @@ void train_unet::read_file(void)
                 if(!read_image_and_label(param.image_file_name[read_id],
                                          param.label_file_name[read_id],
                                          new_image,new_label,new_vs))
-                    continue;
-                label_count.push_back(param.is_label ? get_label_count(new_label,model->out_count) : std::vector<size_t>(model->out_count));
-                image.push_back(std::move(new_image));
-                label.push_back(std::move(new_label));
-                image_vs.push_back(new_vs);
-                if(param.is_label)
                 {
-                    std::ostringstream out;
-                    std::copy(label_count.back().begin(),label_count.back().end(),std::ostream_iterator<float>(out," "));
-                    tipl::out() << "label count: " << out.str();
+                    error_msg = "cannot read image or label data for ";
+                    error_msg += std::filesystem::path(param.image_file_name[read_id]).filename().string();
+                    aborted = true;
+                    return;
                 }
-                else
-                    tipl::normalize(label.back());
-
+                tipl::normalize(new_image);
+                if(!param.is_label)
+                    tipl::normalize(new_label);
+                train_image.push_back(std::move(new_image));
+                train_label.push_back(std::move(new_label));
+                image_vs.push_back(new_vs);
             }
+            if(train_image.empty())
+            {
+                error_msg = "no training image";
+                aborted = true;
+                return;
+            }
+            tipl::out() << "a total of " << train_image.size() << " training dataset" << std::endl;
         }
         //prepare test data
         {
             tipl::progress prog("read test data");
             for(int read_id = 0;read_id < param.test_image_file_name.size();++read_id)
             {
-                tipl::out() << "reading test image " << param.test_image_file_name[read_id] << std::endl;
-                tipl::out() << "reading test label " << param.test_label_file_name[read_id] << std::endl;
+                tipl::out() << "reading " << param.test_image_file_name[read_id] << std::endl;
+                tipl::out() << "reading " << param.test_label_file_name[read_id] << std::endl;
                 tipl::image<3> new_image,new_label;
                 tipl::vector<3> new_vs;
                 if(!read_image_and_label(param.test_image_file_name[read_id],
                                          param.test_label_file_name[read_id],
                                          new_image,new_label,new_vs))
-                    continue;
-                auto new_shape = unet_inputsize(new_image.shape());
-                if(new_shape != new_image.shape())
                 {
-                    tipl::image<3> image(new_shape),label(new_shape);
-                    tipl::draw(new_image,image,tipl::vector<3,int>(0,0,0));
-                    tipl::draw(new_label,label,tipl::vector<3,int>(0,0,0));
-                    new_image.swap(image);
-                    new_label.swap(label);
+                    error_msg = "cannot read image or label data for ";
+                    error_msg += std::filesystem::path(param.test_image_file_name[read_id]).filename().string();
+                    aborted = true;
+                    return;
                 }
+                if(new_image.shape() != model->dim)
+                {
+                    tipl::image<3> I(model->dim),I2(model->dim);
+                    auto shift = tipl::vector<3,int>(model->dim)-tipl::vector<3,int>(new_image.shape());
+                    tipl::draw(new_image,I,shift);
+                    tipl::draw(new_label,I2,shift);
+                    new_image.swap(I);
+                    new_label.swap(I2);
+                }
+                tipl::image<3,char> mask(model->dim);
                 if(model->out_count > 1)
-                    tipl::expand_label_to_dimension(new_label,model->out_count);
-                if(!param.is_label)
+                {
+                    for(size_t pos = 0;pos < mask.size();++pos)
+                        if(new_label[pos])
+                            mask[pos] = 1;
+                    expand_label_to_dimension(new_label,model->out_count);
+                }
+                else
                     tipl::normalize(new_label);
+                tipl::normalize(new_image);
                 test_in_tensor.push_back(torch::from_blob(&new_image[0],
-                    {1,model->in_count,int(new_image.shape()[2]),int(new_image.shape()[1]),int(new_image.shape()[0])}).to(param.device));
+                    {1,model->in_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device));
                 test_out_tensor.push_back(torch::from_blob(&new_label[0],
-                    {1,model->out_count,int(new_image.shape()[2]),int(new_image.shape()[1]),int(new_image.shape()[0])}).to(param.device));
+                    {1,model->out_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device));
+                test_mask.push_back(std::move(mask));
             }
+            if(test_in_tensor.empty())
+            {
+                error_msg = "no test data";
+                aborted = true;
+                return;
+            }
+            tipl::out() << "a total of " << test_mask.size() << " testing dataset" << std::endl;
+            test_data_ready = true;
+        }
 
-        }
-        if(test_in_tensor.empty())
-        {
-            error_msg = "no testing image";
-            aborted = true;
-            return;
-        }
-        if(image.empty())
-        {
-            error_msg = "no training image";
-            aborted = true;
-            return;
-        }
         model->voxel_size = image_vs[0];
-
+        size_t seed_base = model->total_training_count;
+        tipl::out() << "vision simulation starts" << std::endl;
         tipl::par_for(thread_count,[&](size_t thread)
         {
-            size_t seed = thread;
+            size_t seed = thread + seed_base;
             while(!aborted)
             {
                 while(data_ready[thread] || pause)
@@ -584,14 +548,14 @@ void train_unet::read_file(void)
                     if(aborted)
                         return;
                 }
-                auto read_id = seed % image.size();
-                if(!image[read_id].size())
+                auto read_id = seed % train_image.size();
+                if(!train_image[read_id].size())
                     continue;
-                in_data[thread] = image[read_id];
-                out_data[thread] = label[read_id];
+                in_data[thread] = train_image[read_id];
+                out_data[thread] = train_label[read_id];
                 load_image_and_label(*option,in_data[thread],out_data[thread],param.is_label,image_vs[read_id],model->voxel_size,model->dim,seed);
                 if(model->out_count > 1)
-                    fuzzy_labels(out_data[thread],label_count[read_id]);
+                    tipl::expand_label_to_dimension(out_data[thread],model->out_count);
                 data_ready[thread] = true;
                 seed += thread_count;
             }
@@ -647,7 +611,10 @@ void train_unet::prepare_tensor(void)
 void train_unet::train(void)
 {
     error = std::vector<float>(param.epoch);
-    test_error = std::vector<float>(param.epoch);
+    test_error_foreground = std::vector<std::vector<float> >(param.test_image_file_name.size());
+    for(auto& each : test_error_foreground)
+        each.resize(param.epoch);
+    test_error_background = test_error_foreground;
     cur_epoch = 0;
 
     output_model = UNet3d(1,model->out_count,model->feature_string);
@@ -669,7 +636,7 @@ void train_unet::train(void)
 
             optimizer.reset(new torch::optim::Adam(model->parameters(), torch::optim::AdamOptions(param.learning_rate)));
 
-            while(test_in_tensor.empty() || pause)
+            while(!test_data_ready || pause)
             {
                 if(aborted)
                     return;
@@ -677,18 +644,46 @@ void train_unet::train(void)
                 using namespace std::chrono_literals;
                 std::this_thread::sleep_for(100ms);
             }
-
+            tipl::out() << "begin training networks" << std::endl;
             for (; cur_epoch < param.epoch && !aborted;cur_epoch++)
             {
-                if(!test_in_tensor.empty())
+                if(param.learning_rate != optimizer->defaults().get_lr())
+                {
+                    tipl::out() << "set learning rate to " << param.learning_rate << std::endl;
+                    optimizer->defaults().set_lr(param.learning_rate);
+                }
+
+                std::ostringstream out;
                 {
                     model->eval();
-                    float sum_error = 0.0f;
+                    out << "epoch:" << cur_epoch << " testing error:";
                     for(size_t i = 0;i < test_in_tensor.size();++i)
-                        sum_error += torch::mse_loss(model->forward(test_in_tensor[i]),test_out_tensor[i]).item().toFloat();
-                    tipl::out() << "epoch:" << cur_epoch << " test error:" << (test_error[cur_epoch] = sum_error/float(test_in_tensor.size())) << std::endl;
+                    {
+                        tipl::image<3> dif_map(model->dim.multiply(tipl::shape<3>::z,model->out_count));
+                        std::memcpy(&dif_map[0],(model->forward(test_in_tensor[i])-test_out_tensor[i]).to(torch::kCPU).data_ptr<float>(),dif_map.size()*sizeof(float));
 
-                    if(test_error[best_epoch] <= test_error[cur_epoch])
+                        auto thread_count = std::min<int>(8,std::thread::hardware_concurrency());
+                        std::vector<double> sum_foreground(thread_count);
+                        std::vector<double> sum_background(thread_count);
+                        const auto& mask = test_mask[i];
+                        tipl::par_for(thread_count,[&](size_t thread_id)
+                        {
+                            for(size_t out_base = 0;out_base < dif_map.size();out_base += mask.size())
+                            for(size_t pos = thread_id;pos < mask.size();pos += thread_count)
+                            {
+                                float v = std::fabs(dif_map[out_base+pos]);
+                                if(mask[pos])
+                                    sum_foreground[thread_id] += v;
+                                else
+                                    sum_background[thread_id] += v;
+                            }
+                        });
+                        test_error_foreground[i][cur_epoch] = tipl::sum(sum_foreground)/float(dif_map.size());
+                        test_error_background[i][cur_epoch] = tipl::sum(sum_background)/float(dif_map.size());
+                        out << test_error_foreground[i][cur_epoch] << " " << test_error_background[i][cur_epoch] << " ";
+                    }
+                    if(test_error_foreground[0][best_epoch] + test_error_background[0][best_epoch] <=
+                       test_error_foreground[0][cur_epoch]  + test_error_background[0][cur_epoch])
                         best_epoch = cur_epoch;
 
                     if(param.output_model_type == 0 || best_epoch == cur_epoch)
@@ -710,7 +705,7 @@ void train_unet::train(void)
                         std::this_thread::sleep_for(100ms);
                     }
                     status = "training";
-                    torch::Tensor loss = torch::mse_loss(model->forward(in_tensor[data_index]),out_tensor[data_index]);
+                    torch::Tensor loss = torch::l1_loss(model->forward(in_tensor[data_index]),out_tensor[data_index]);
                     sum_error += loss.item().toFloat();
                     loss.backward();
                     tensor_ready[data_index] = false;
@@ -720,14 +715,10 @@ void train_unet::train(void)
                     optimizer->step();
                     optimizer->zero_grad();
                     model->total_training_count += param.batch_size;
-                    tipl::out() << "epoch:" << cur_epoch << " error:" << (error[cur_epoch] = sum_error/float(param.batch_size)) << std::endl;
-                    if(param.learning_rate != optimizer->defaults().get_lr())
-                    {
-                        tipl::out() << "set learning rate to " << param.learning_rate << std::endl;
-                        optimizer->defaults().set_lr(param.learning_rate);
-                    }
-                }
+                    out << " training error:" << (error[cur_epoch] = sum_error/float(param.batch_size)) << std::endl;
 
+                }
+                tipl::out() << out.str();
             }
         }
         catch(const c10::Error& error)
@@ -774,6 +765,5 @@ void train_unet::stop(void)
         train_thread->join();
         train_thread.reset();
     }
-    cur_epoch = 0;
 }
 

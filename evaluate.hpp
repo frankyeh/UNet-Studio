@@ -10,13 +10,22 @@ struct EvaluateParam{
     torch::Device device = torch::kCPU;
     float prob_threshold = 0.5f;
 };
+struct ProcStrategy{
+    // preproc
+    bool match_resolution = true;
+    bool crop_fov = true;
+    // postproc
+    bool remove_background = true;
+    bool convert_to_3d = true;
+};
+
 class OptionTableWidget;
 class evaluate_unet{
 public:
     OptionTableWidget* option = nullptr;
     EvaluateParam param;
 public:
-    unsigned char preproc_strategy = 0,postproc_strategy = 0; //
+    ProcStrategy proc_strategy;
     std::vector<tipl::image<3> > network_input,network_output;
     std::vector<tipl::shape<3> > raw_image_shape;
     std::vector<tipl::vector<3> > raw_image_vs;

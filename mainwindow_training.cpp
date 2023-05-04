@@ -3,6 +3,7 @@
 #include "optiontablewidget.hpp"
 #include <QFileDialog>
 #include <QInputDialog>
+#include <QClipboard>
 #include <QSettings>
 #include <QMessageBox>
 #include <QMovie>
@@ -38,6 +39,9 @@ void MainWindow::on_action_open_training_setting_triggered()
     settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
     settings.setValue("work_file",QFileInfo(fileName.remove(".ini")).fileName());
 
+    ui->action_train_open_labels->setEnabled(true);
+    ui->train_open_labels->setEnabled(true);
+
 }
 
 void MainWindow::on_action_save_training_setting_triggered()
@@ -65,12 +69,11 @@ void MainWindow::on_action_save_training_setting_triggered()
 
 void MainWindow::update_list(void)
 {
-    if(!label_list.empty() &&
-       QFileInfo(label_list[0]).exists())
+    if(!label_list.empty() && QFileInfo(label_list[0]).exists())
     {
          if(get_label_info(label_list[0].toStdString(),out_count,is_label))
          {
-             ui->output_info->setText(QString("dim: %1 type: %2").arg(out_count).arg(is_label?"label":"scalar"));
+             ui->output_info->setText(QString("num label: %1 type: %2").arg(out_count).arg(is_label?"label":"scalar"));
              ui->label_slider->setMaximum(out_count-1);
          }
          else
@@ -79,7 +82,6 @@ void MainWindow::update_list(void)
              label_list[0].clear();
          }
     }
-
 
     auto index = ui->list1->currentRow();
     ui->list1->clear();
@@ -90,9 +92,11 @@ void MainWindow::update_list(void)
         if(!QFileInfo(label_list[i]).exists())
             label_list[i].clear();
         ui->list1->addItem(QFileInfo(image_list[i]).fileName());
+        auto item = ui->list1->item(i);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(Qt::Checked);
         ui->list2->addItem(label_list[i].isEmpty() ? QString("(to be assigned)") : QFileInfo(label_list[i]).fileName());
         ready_to_train = true;
-
     }
     ui->train_start->setEnabled(ready_to_train);
 
@@ -112,7 +116,6 @@ void MainWindow::on_action_train_open_files_triggered()
     if (fileNames.isEmpty())
         return;
     settings.setValue("work_dir",QFileInfo(fileNames[0]).absolutePath());
-
     for(auto s : fileNames)
     {
         image_list << s;
@@ -184,6 +187,8 @@ void MainWindow::on_action_train_new_network_triggered()
     if(feature.isEmpty())
         return;
     torch::manual_seed(0);
+    at::globalContext().setDeterministicCuDNN(true);
+    qputenv("CUDNN_DETERMINISTIC", "1");
     train.model = UNet3d(1,out_count,feature.toStdString());
     ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
     ui->batch_size->setValue(1);
@@ -224,29 +229,32 @@ void MainWindow::on_action_train_save_network_triggered()
 
 }
 #include <ATen/Context.h>
+tipl::shape<3> unet_inputsize(const tipl::shape<3>& s);
 void MainWindow::on_train_start_clicked()
 {
-    tipl::progress p("initiate training");
-    torch::manual_seed(0);
-    at::globalContext().setDeterministicCuDNN(true);
-    qputenv("CUDNN_DETERMINISTIC", "1");
 
+
+    tipl::progress p("initiate training");
+
+
+    // those parameters can be modified using training pause
     train.param.batch_size = ui->batch_size->value();
     train.param.learning_rate = ui->learning_rate->value();
     train.param.output_model_type = ui->training_output->currentIndex();
-    train.option = option;
+
     if(train.running)
     {
         train.pause = !train.pause;
         return;
     }
+
+
     if(train.model->feature_string.empty())
     {
         on_action_train_new_network_triggered();
         if(train.model->feature_string.empty())
             return;
     }
-
     if(out_count != train.model->out_count)
     {
         tipl::out() << "copy pretrained model" << std::endl;
@@ -257,27 +265,47 @@ void MainWindow::on_train_start_clicked()
 
     //tipl::out() << show_structure(train.model);
 
-    train.model->dim = tipl::shape<3>(option->get<int>("dim_x"),
-                                     option->get<int>("dim_y"),
-                                     option->get<int>("dim_z"));
-    train.param.device = ui->train_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->train_device->currentIndex()-1):torch::Device(torch::kCPU);
-    train.param.epoch = ui->epoch->value();
+
     train.param.image_file_name.clear();
     train.param.label_file_name.clear();
-    train.param.is_label = is_label;
-    for(size_t i = 0;i < image_list.size();++i)
-    {
-        train.param.image_file_name.push_back(image_list[i].toStdString());
-        train.param.label_file_name.push_back(label_list[i].toStdString());
-    }
-
     train.param.test_image_file_name.clear();
     train.param.test_label_file_name.clear();
+    for(size_t i = 0;i < image_list.size();++i)
     {
-        train.param.test_image_file_name = train.param.image_file_name;
-        train.param.test_label_file_name = train.param.label_file_name;
+        if(ui->list1->item(i)->checkState() == Qt::Checked)
+        {
+            train.param.image_file_name.push_back(image_list[i].toStdString());
+            train.param.label_file_name.push_back(label_list[i].toStdString());
+        }
+        train.param.test_image_file_name.push_back(image_list[i].toStdString());
+        train.param.test_label_file_name.push_back(label_list[i].toStdString());
     }
+    if(train.param.image_file_name.empty())
+    {
+        QMessageBox::critical(this,"Error","Please specify the training data");
+        return;
+    }
+
+
+    {
+        tipl::io::gz_nifti in;
+        if(!in.load_from_file(train.param.image_file_name[0]))
+        {
+            QMessageBox::critical(this,"Error","Invalid NIFTI format");
+            return;
+        }
+        in.toLPS();
+        in.get_image_dimension(train.model->dim);
+        train.model->dim = unet_inputsize(train.model->dim);
+        tipl::out() << "network input sizes: " << train.model->dim << std::endl;
+    }
+
+    train.param.device = ui->train_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->train_device->currentIndex()-1):torch::Device(torch::kCPU);
+    train.param.epoch = ui->epoch->value();
+    train.param.is_label = is_label;
+    train.option = option;
     train.start();
+
     ui->train_prog->setMaximum(ui->epoch->value());
     ui->train_prog->setValue(1);
     timer->start();
@@ -294,77 +322,64 @@ void MainWindow::on_train_stop_clicked()
 }
 
 
+
 void MainWindow::plot_error()
 {
     if(train.cur_epoch > 1)
     {
         size_t x_size = ui->error_x_size->value();
         size_t y_size = ui->error_y_size->value();
-        auto x_scale = std::min<float>(5.0f,float(x_size)/float(train.cur_epoch+1));
-        size_t s = std::min<int>(train.cur_epoch,train.error.size());
-        size_t s2 = std::min<int>(train.cur_epoch,train.test_error.size());
-        size_t s3 = std::min<int>(loaded_error1.size(),float(x_size)/x_scale);
-        size_t s4 = std::min<int>(loaded_error2.size(),float(x_size)/x_scale);
-
         QImage image(x_size+10,y_size+10,QImage::Format_RGB32);
         QPainter painter(&image);
         painter.fillRect(image.rect(), Qt::white);
         painter.setPen(QPen(Qt::black, 2));
         painter.drawRect(QRectF(5, 5, x_size,y_size));
 
-        std::vector<float> y_value(train.error.begin(),train.error.begin()+s);
-        if(s2)
-            y_value.insert(y_value.end(),train.test_error.begin(),train.test_error.begin()+s2);
-        if(s3)
-            y_value.insert(y_value.end(),loaded_error1.begin(),loaded_error1.begin()+s3);
-        if(s4)
-            y_value.insert(y_value.end(),loaded_error2.begin(),loaded_error2.begin()+s4);
-        if(y_value.empty())
-            return;
-        for(auto& v : y_value)
-            v = -std::log10(v);
-        tipl::normalize_upper_lower(y_value,(image.height()-10));
+        std::vector<std::vector<float> > all_errors;
 
-        auto y_value1 = std::vector<float>(y_value.begin(),y_value.begin()+s);
-        auto y_value2 = std::vector<float>(y_value.begin()+s,y_value.begin()+s+s2);
-        auto y_value3 = std::vector<float>(y_value.begin()+s+s2,y_value.begin()+s+s2+s3);
-        auto y_value4 = std::vector<float>(y_value.begin()+s+s2+s3,y_value.end());
+        all_errors.push_back(std::vector<float>(train.error.begin(),train.error.begin()+train.cur_epoch));
+        for(size_t i = 0;i < train.test_error_foreground.size();++i)
+        {
+            all_errors.push_back(std::vector<float>(train.test_error_foreground[i].begin(),train.test_error_foreground[i].begin()+train.cur_epoch));
+            all_errors.push_back(std::vector<float>(train.test_error_background[i].begin(),train.test_error_background[i].begin()+train.cur_epoch));
+        }
 
-        QVector<QPointF> p1,p2,p3,p4;
-        for(size_t i = 0;i < y_value1.size();++i)
-            p1 << QPointF(float(i)*x_scale+5,y_value1[i]+5);
 
-        for(size_t i = 0;i < y_value2.size();++i)
-            p2 << QPointF(float(i)*x_scale+5,y_value2[i]+5);
-        for(size_t i = 0;i < y_value3.size();++i)
-            p3 << QPointF(float(i)*x_scale+5,y_value3[i]+5);
-        for(size_t i = 0;i < y_value4.size();++i)
-            p4 << QPointF(float(i)*x_scale+5,y_value4[i]+5);
+        {
+            std::vector<float> data;
+            for(const auto& d : all_errors)
+                data.insert(data.end(),d.begin(),d.end());
 
-        if(!p1.empty())
-        {
-            painter.setPen(QPen(Qt::black, 2));
-            painter.drawPolyline(p1);
-            painter.setPen(QPen(Qt::black, 1));
-            painter.drawLine(5,p1.back().y(),p1.back().x(),p1.back().y());
+            for(auto& v : data)
+                v = -std::log10(v);
+            tipl::normalize_upper_lower(data,image.height()-10);
+
+            size_t pos = 0;
+            for(auto& d : all_errors)
+            {
+                std::copy(data.begin()+pos,data.begin()+pos+d.size(),d.begin());
+                pos += d.size();
+            }
         }
-        if(!p3.empty())
+
+
+        std::vector<QColor> colors = {QColor(0,0,0),QColor(244,177,131),QColor(197,90,17),QColor(142,170,219),QColor(47,84,150)};
+        auto x_scale = std::min<float>(5.0f,float(x_size)/float(train.cur_epoch+1));
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        for(size_t i = 0;i < all_errors.size() && i < colors.size();++i)
         {
-            painter.setPen(QPen(Qt::black, 1));
-            painter.drawPolyline(p3);
+            if(all_errors[i].empty())
+                continue;
+            QVector<QPointF> points;
+            for(size_t j = 0;j < all_errors[i].size();++j)
+                points << QPointF(float(j)*x_scale+5,all_errors[i][j]+5);
+
+            painter.setPen(QPen(colors[i],1.5f));
+            painter.drawPolyline(points);
+            //painter.setPen(QPen(Qt::black, 1));
+            //painter.drawLine(5,p1.back().y(),p1.back().x(),p1.back().y());
         }
-        if(!p2.empty())
-        {
-            painter.setPen(QPen(Qt::red, 2));
-            painter.drawPolyline(p2);
-            painter.setPen(QPen(Qt::red, 1));
-            painter.drawLine(5,p2.back().y(),p2.back().x(),p2.back().y());
-        }
-        if(!p4.empty())
-        {
-            painter.setPen(QPen(Qt::red, 1));
-            painter.drawPolyline(p4);
-        }
+
         error_view_epoch = train.cur_epoch;
         error_scene << image;
     }
@@ -431,8 +446,6 @@ void MainWindow::training()
         ui->statusbar->showMessage(train.status.c_str());
 }
 
-
-void fuzzy_labels(tipl::image<3>& label,const std::vector<size_t>& weights);
 std::vector<size_t> get_label_count(const tipl::image<3>& label,size_t out_count);
 void MainWindow::on_list1_currentRowChanged(int currentRow)
 {
@@ -446,15 +459,13 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         tipl::vector<3> vs;
         if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),I1,I2,vs))
             I2.clear();
-        if(ui->show_transform->isChecked())
-            load_image_and_label(*option,I1,I2,is_label,vs,vs,tipl::shape<3>(option->get<int>("dim_x"),
-                                                                 option->get<int>("dim_y"),
-                                                                 option->get<int>("dim_z")),time(0));
+        if(ui->train_view_transform->isChecked())
+            load_image_and_label(*option,I1,I2,is_label,vs,vs,I1.shape(),time(0));
         if(!I2.empty())
         {
-            if(is_label && out_count != 1)
-                fuzzy_labels(I2,get_label_count(I2,out_count));
-            if(!is_label)
+            if(out_count != 1 && !ui->train_view_3d_label->isChecked())
+                tipl::expand_label_to_dimension(I2,out_count);
+            else
                 tipl::normalize(I2);
         }
         v2c1.set_range(0,tipl::max_value_mt(I1));
@@ -525,44 +536,52 @@ void label_on_images(QImage& I,
                                                      -1,display_ratio));
     }
 }
+void MainWindow::get_train_views(QImage& view1,QImage& view2)
+{
+    auto d = ui->view_dim->currentIndex();
+    auto sizes = tipl::space2slice<tipl::vector<2,int> >(d,I1.shape());
+    float display_ratio = std::min<float>(float((ui->view1->width()-10))/float(sizes[0]),float(ui->view1->height()-10)/float(sizes[1]));
+    if(display_ratio < 1.0f)
+        display_ratio = 1.0f;
 
+    int slice_pos = ui->pos->value();
+    view1 << v2c1[tipl::volume2slice_scaled(I1,d,slice_pos,display_ratio)];
+
+    if(I2.size() == I1.size()*out_count)
+    {
+        if(d == 2 && is_label && ui->train_view_contour->isChecked())
+            label_on_images(view1,I2,I1.shape(),slice_pos,ui->label_slider->value(),out_count);
+
+        view2 << v2c2[tipl::volume2slice_scaled(
+                            I2.alias(I1.size()*ui->label_slider->value(),I1.shape()),
+                            ui->view_dim->currentIndex(),slice_pos,display_ratio)];
+    }
+    else
+    {
+        if(!I2.empty())
+            view2 << v2c2[tipl::volume2slice_scaled(I2,ui->view_dim->currentIndex(),slice_pos,display_ratio)];
+        else
+            view2 = QImage();
+    }
+    view1 = view1.mirrored(d,d!=2);
+    view2 = view2.mirrored(d,d!=2);
+}
 void MainWindow::on_pos_valueChanged(int slice_pos)
 {
     if(I1.empty())
         return ;
-
-    auto d = ui->view_dim->currentIndex();
-    auto sizes = tipl::space2slice<tipl::vector<2,int> >(d,I1.shape());
-    float display_ratio = std::min<float>((ui->view1->width()-10)/sizes[0],(ui->view1->height()-10)/sizes[1]);
-    if(display_ratio < 1.0f)
-        display_ratio = 1.0f;
-
-
-    QImage train_image;
-    train_image << v2c1[tipl::volume2slice_scaled(I1,d,slice_pos,display_ratio)];
-
-    if(I2.size() == I1.size()*out_count)
-    {
-        if(d == 2 && is_label)
-            label_on_images(train_image,I2,I1.shape(),slice_pos,ui->label_slider->value(),out_count);
-
-        train_scene2 << (QImage() << v2c2[tipl::volume2slice_scaled(
-                            I2.alias(I1.size()*ui->label_slider->value(),I1.shape()),
-                            ui->view_dim->currentIndex(),slice_pos,display_ratio)]).mirrored(d,d!=2);
-    }
-    else
-        train_scene2 << QImage();
-    train_scene1 << train_image.mirrored(d,d!=2);
-
+    QImage view1,view2;
+    get_train_views(view1,view2);
+    train_scene1 << view1;
+    train_scene2 << view2;
 }
 
 
-
-
-void MainWindow::on_show_transform_clicked()
+void MainWindow::on_train_view_transform_clicked()
 {
     on_list1_currentRowChanged(ui->list1->currentRow());
 }
+
 
 void MainWindow::on_save_error_clicked()
 {
@@ -570,34 +589,32 @@ void MainWindow::on_save_error_clicked()
     if(file.isEmpty())
         return;
     std::ofstream out(file.toStdString());
-    std::copy(train.error.begin(),train.error.begin()+train.cur_epoch,std::ostream_iterator<float>(out," "));
-    if(train.cur_epoch)
+    out << "trainning_error ";
+    for(size_t j = 0;j < train.test_error_foreground.size();++j)
+        out << "test_foreground_error test_background_error ";
+    for(size_t i = 0;i < train.error.size() && i < train.cur_epoch;++i)
     {
+        out << train.error[i] << " ";
+        for(size_t j = 0;j < train.test_error_foreground.size();++j)
+        {
+            out << train.test_error_foreground[j][i] << " ";
+            out << train.test_error_background[j][i] << " ";
+        }
         out << std::endl;
-        std::copy(train.test_error.begin(),train.test_error.begin()+train.cur_epoch,std::ostream_iterator<float>(out," "));
     }
     if(out.is_open())
         QMessageBox::information(this,"","Saved");
 }
 
-void MainWindow::on_open_error_clicked()
+
+void MainWindow::on_action_train_copy_view_triggered()
 {
-    QString file = QFileDialog::getOpenFileName(this,"Open Error",settings.value("on_open_error_clicked").toString(),"Text values (*.txt);;All files (*)");
-    if(file.isEmpty())
-        return;
-    std::ifstream in(file.toStdString());
-    std::string line1,line2;
-    std::getline(in,line1);
-    std::getline(in,line2);
-    std::istringstream in1(line1),in2(line2);
-    loaded_error1 = std::vector<float>(std::istream_iterator<float>(in1),std::istream_iterator<float>());
-    loaded_error2 = std::vector<float>(std::istream_iterator<float>(in2),std::istream_iterator<float>());
+    QImage view1,view2;
+    get_train_views(view1,view2);
+    QImage concatenatedImage(view1.width()+view2.width(),view1.height(),QImage::Format_ARGB32);
+    QPainter painter(&concatenatedImage);
+    painter.drawImage(0, 0, view1);
+    painter.drawImage(view1.width(), 0, view2);
+    painter.end();
+    QApplication::clipboard()->setImage(concatenatedImage);
 }
-
-
-void MainWindow::on_clear_error_clicked()
-{
-    loaded_error1.clear();
-    loaded_error2.clear();
-}
-

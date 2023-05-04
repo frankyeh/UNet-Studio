@@ -1,51 +1,43 @@
-Network/Width/dim_x/int:128:512:64/192/width of input and output
-Network/Height/dim_y/int:128:512:64/224/height of input and output
-Network/Depth/dim_z/int:128:512:64/192/depth of input and output
 Viewport/Translocation/translocation_ratio/float:0.0:1.0:0.05:2/0.1/upper limit of translocation in the ratio of image dimension
 Viewport/Rotation X/rotation_x/float:0.0:2.0:0.05:2/0.4/upper limit of rotation at x axis
 Viewport/Rotation Y/rotation_y/float:0.0:2.0:0.05:2/0.1/upper limit of rotation at y axis
 Viewport/Rotation Z/rotation_z/float:0.0:2.0:0.05:2/0.1/upper limit of rotation at z axis
 Viewport/Zoom Out/scaling_up/float:1.0:2.0:0.05:2/1.25/upper limit of scaling up
 Viewport/Zoom In/scaling_down/float:0.1:1.0:0.05:2/0.8/lower limit of scaling down
-Viewport/Scaling Axis/scaling_axis/float:1.0:2.0:0.05:2/1.25/upper limit of relative scaling at axis
+Viewport/Aspect Ratio/aspect_ratio/float:1.0:2.0:0.05:2/1.25/upper limit of relative scaling at axis
 Viewport/Affine/affine/float:0.0:0.5:0.05:2/0.15/upper limit of affine transform
-Viewport/Deformation/deformation/Off:20%:40%:60%:80%:On/1/apply nonlinear deformation
+Viewport/Deformation/deformation/Off:25%:50%:75%:On/1/apply nonlinear deformation
 Viewport/Foci Count/foci_count/int:1:10:1/3/upper limit of deformation foci
 Viewport/├Minimum Radius/foci_radius_min/float:0.1:0.5:0.1:2/0.1/minimum foci radius
 Viewport/├Maximum Radius/foci_radius_max/float:0.1:1.0:0.1:2/0.5/maximum foci radius
 Viewport/├Minimum Magnitude/deformation_mag_min/float:0.0:0.5:0.05:2/0.05/minimum deformation magnitude
 Viewport/└Maximum Magnitude/deformation_mag_max/float:0.0:0.5:0.05:2/0.1/maximum deformation magnitude
-Illumination/Invert Light/invert_signal/Off:20%:40%:60%:80%:On/0/Apply inverted signal
-Illumination/Powered Transform/pow_signal/Off:20%:40%:60%:80%:On/2/Apply power function with signal as the base
-Illumination/└Exponential/pow_signal_exp/float:1.0:4.0:0.5:2/2.0/The exponential constant of the power function
-Illumination/Linear Attenuation/linear_attenuation/Off:20%:40%:60%:80%:On/5/add signal attenuation
-Illumination/└Magnitude/linear_attenuation_mag/float:0.0:2.0:0.1:2/0.2/The magnitude of attenuation drop
-Illumination/Cosine Attenuation 1/cos_attenuation1/Off:20%:40%:60%:80%:On/5/add signal attenuation
-Illumination/├Frequency/cos_attenuation1_freq/float:0.0:40.0:0.1:2/2.0/The frequency of attenuation
-Illumination/└Magnitude/cos_attenuation1_mag/float:0.0:1.0:0.1:2/0.25/The magnitude of attenuation
-Illumination/Cosine Attenuation 2/cos_attenuation2/Off:20%:40%:60%:80%:On/5/add signal attenuation
-Illumination/├Frequency/cos_attenuation2_freq/float:0.0:40.0:0.1:2/10.0/The frequency of attenuation
-Illumination/└Magnitude/cos_attenuation2_mag/float:0.0:1.0:0.1:2/0.1/The magnitude of attenuation
-Focus/Blurring/blurring/Off:20%:40%:60%:80%:On/1/add ring artifact
+Illumination/Ambient Light/ambient/Off:25%:50%:75%:On/2/add ambient light
+Illumination/└Magnitude/ambient_mag/float:0.0:4.0:0.5:2/2.0/The magnitude of ambient light
+Illumination/Diffuse Light/diffuse/Off:25%:50%:75%:On/4/add diffuse light
+Illumination/└Magnitude/diffuse_mag/float:0.0:2.0:0.1:2/1.0/The magnitude of diffuse light
+Illumination/Specular Light/specular/Off:25%:50%:75%:On/4/add specular light
+Illumination/├Frequency/specular_freq/float:0.0:10.0:0.1:2/2.0/The frequency of specular light
+Illumination/└Magnitude/specular_mag/float:0.0:2.0:0.1:2/1.0/The magnitude of specular light
+Focus/Blurring/blurring/Off:25%:50%:75%:On/1/add ring artifact
 Focus/└Count/blurring_count/int:1:10:1/1/number of blurring iteration
-Focus/Downsample X/downsample_x/Off:20%:40%:60%:80%:On/1/apply downsample of data
+Focus/Downsample X/downsample_x/Off:25%:50%:75%:On/1/apply downsample of data
 Focus/└Ratio/downsample_x_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
-Focus/Downsample Y/downsample_y/Off:20%:40%:60%:80%:On/1/apply downsample of data
+Focus/Downsample Y/downsample_y/Off:25%:50%:75%:On/1/apply downsample of data
 Focus/└Ratio/downsample_y_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
-Focus/Downsample Z/downsample_z/Off:20%:40%:60%:80%:On/1/apply downsample of data
+Focus/Downsample Z/downsample_z/Off:25%:50%:75%:On/1/apply downsample of data
 Focus/└Ratio/downsample_z_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
-Focus/Astigmatism/astigmatism/Off:20%:40%:60%:80%:On/1/add ring artifact
-Focus/└Magnitude/astigmatism_mag/float:0.0:1.0:0.1:2/0.1/magnitude of ring artifact
-Background/Self Replication/self_replication/Off:20%:40%:60%:80%:On/5/Add background
+Background/Self Replication/self_replication/Off:25%:50%:75%:On/4/Add background
 Background/└Magnitude/self_replication_mag/float:0.0:1.0:0.1:2/0.05/The magnitude of background images
-Background/Perline Noise/perlin_noise/Off:20%:40%:60%:80%:On/1/Add Perlin noise
+Background/Perline Noise/perlin_noise/Off:25%:50%:75%:On/1/Add Perlin noise
 Background/└Magnitude/perlin_noise_mag/float:0.0:1.0:0.1:2/0.05/The magnitude of background images
-Background/Uniform Noise/noise/Off:20%:40%:60%:80%:On/1/add uniform noise
+Background/Uniform Noise/noise/Off:25%:50%:75%:On/1/add uniform noise
 Background/└Magnitude/noise_mag/float:0.0:1.0:0.1:2/0.1/magnitude of uniform noise
-Background/Scale Values/background_scale/Off:20%:40%:60%:80%:On/1/scale background value
+Background/Scale Values/background_scale/Off:25%:50%:75%:On/1/scale background value
 Background/├Minimum/background_scale_min/float:0.0:1.0:0.1:2/0.0/minimum ratio
 Background/└Maximum/background_scale_max/float:0.0:4.0:0.1:2/2.0/maximum ratio
-Occlusion/Cropout/cropout/Off:20%:40%:60%:80%:On/0/Apply signal cropout
-Occlusion/Cropout Count/cropout_count/int:1:10:1/3/maximum number of cropouts
-Occlusion/├Minimum Size/cropout_size_min/float:0.0:1.0:0.05:2/0.05/minimum size of cropout in proportion to image width
-Occlusion/└Maximum Size/cropout_size_max/float:0.0:1.0:0.05:2/0.2/maximum size of cropout in proportion to image width
+Foreground/Occlusion/occlusion/Off:25%:50%:75%:On/0/Apply signal occlusion
+Foreground/Occlusion Count/occlusion_count/int:1:10:1/3/maximum number of occlusions
+Foreground/├Minimum Size/occlusion_size_min/float:0.0:1.0:0.05:2/0.05/minimum size of occlusion in proportion to image width
+Foreground/└Maximum Size/occlusion_size_max/float:0.0:1.0:0.05:2/0.2/maximum size of occlusion in proportion to image width
+

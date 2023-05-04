@@ -26,7 +26,7 @@ public: //training
     tipl::image<3> I1,I2;
     tipl::value_to_color<float> v2c1,v2c2;
     size_t error_view_epoch = 0;
-    std::vector<float> loaded_error1,loaded_error2;
+    void get_train_views(QImage& view1,QImage& view2);
 public:
     QStringList evaluate_list;
     void update_evaluate_list(void);
@@ -73,15 +73,12 @@ private slots:
     void on_action_evaluate_clear_all_triggered();
     void on_list2_currentRowChanged(int currentRow);
     void on_action_train_auto_match_label_files_triggered();
-    void on_show_transform_clicked();
 
     void on_evaluate_list2_currentRowChanged(int currentRow);
     void on_action_evaluate_save_results_triggered();
     void on_error_x_size_valueChanged(int arg1);
     void on_error_y_size_valueChanged(int arg1);
     void on_save_error_clicked();
-    void on_open_error_clicked();
-    void on_clear_error_clicked();
 
 
 
@@ -101,5 +98,7 @@ private slots:
     void on_action_train_new_network_triggered();
     void on_action_train_open_network_triggered();
     void on_action_train_save_network_triggered();
+    void on_train_view_transform_clicked();
+    void on_action_train_copy_view_triggered();
 };
 #endif // MAINWINDOW_H

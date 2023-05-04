@@ -46,6 +46,7 @@ public:
         out << "structure: " << feature_string << std::endl;
         out << "input: " << in_count << std::endl;
         out << "output: " << out_count << std::endl;
+        out << "input/output sizes: " << dim << std::endl;
         out << "resolution: " << voxel_size << std::endl;
         out << "total training: " << total_training_count << std::endl;
         return out.str();

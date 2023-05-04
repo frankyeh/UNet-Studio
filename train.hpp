@@ -49,6 +49,8 @@ private:
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;
     std::vector<torch::Tensor> test_in_tensor,test_out_tensor;
+    std::vector<tipl::image<3,char> > test_mask;
+    bool test_data_ready = false;
     void read_file(void);
 private:
     std::vector<torch::Tensor> in_tensor,out_tensor;
@@ -61,7 +63,8 @@ private:
     void train(void);
 public:
     size_t cur_epoch = 0;
-    std::vector<float> error,test_error;
+    std::vector<float> error;
+    std::vector<std::vector<float> > test_error_foreground,test_error_background;
 public:
     UNet3d model,output_model;
     ~train_unet(void)
