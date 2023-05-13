@@ -4,6 +4,7 @@
 #include <QFileDialog>
 #include <QSettings>
 #include <QMessageBox>
+#include <QClipboard>
 #include <QMovie>
 #include "TIPL/tipl.hpp"
 #include "console.h"
@@ -57,7 +58,6 @@ void MainWindow::on_action_evaluate_copy_trained_network_triggered()
     ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name = train_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
     ui->evaluate_builtin_networks->setCurrentIndex(0);
-    ui->convert_to_3d->setChecked(evaluate.model->out_count > 1);
 }
 
 
@@ -77,7 +77,6 @@ void MainWindow::on_action_evaluate_open_network_triggered()
     ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
     ui->evaluate_builtin_networks->setCurrentIndex(0);
-    ui->convert_to_3d->setChecked(evaluate.model->out_count > 1);
 }
 
 void MainWindow::on_evaluate_builtin_networks_currentIndexChanged(int index)
@@ -92,7 +91,6 @@ void MainWindow::on_evaluate_builtin_networks_currentIndexChanged(int index)
         }
         ui->evaluate_network_info->setText(QString("name: %1\n").arg(ui->evaluate_builtin_networks->currentText()) + evaluate.model->get_info().c_str());
         ui->evaluate->setEnabled(evaluate_list.size());
-        ui->convert_to_3d->setChecked(evaluate.model->out_count > 1);
     }
 }
 
@@ -117,8 +115,7 @@ void MainWindow::on_evaluate_clicked()
     evaluate.option = eval_option;
     evaluate.proc_strategy.match_resolution = ui->match_resolution->isChecked();
     evaluate.proc_strategy.crop_fov = ui->crop_fov->isChecked();
-    evaluate.proc_strategy.remove_background = ui->remove_background->isChecked();
-    evaluate.proc_strategy.convert_to_3d = ui->convert_to_3d->isChecked();
+    evaluate.proc_strategy.output_format = ui->evaluate_output->currentIndex();
     evaluate.start();
     eval_timer->start();
 
@@ -220,38 +217,38 @@ void MainWindow::on_evaluate_list2_currentRowChanged(int currentRow)
     if(currentRow >= 0 && currentRow != ui->evaluate_list->currentRow())
         ui->evaluate_list->setCurrentRow(currentRow);
 }
-
 void label_on_images(QImage& I,
                      const tipl::image<3>& I2,
                      const tipl::shape<3>& dim,
                      int slice_pos,
                      int cur_label_index,
                      int out_count);
-void MainWindow::on_eval_pos_valueChanged(int slice_pos)
+
+void MainWindow::get_evaluate_views(QImage& view1,QImage& view2)
 {
     auto currentRow = ui->evaluate_list->currentRow();
     if(eval_I1.empty() || currentRow < 0)
         return;
-    auto d = ui->eval_view_dim->currentIndex();
 
+    auto d = ui->eval_view_dim->currentIndex();
     auto sizes = tipl::space2slice<tipl::vector<2,int> >(d,eval_I1.shape());
-    float display_ratio = std::min<float>((ui->eval_view1->width()-10)/sizes[0],(ui->eval_view1->height()-10)/sizes[1]);
+    float display_ratio = std::min<float>(float((ui->eval_view1->width()-10))/float(sizes[0]),float(ui->eval_view1->height()-10)/float(sizes[1]));
     if(display_ratio < 1.0f)
         display_ratio = 1.0f;
 
-    QImage network_input;
-    network_input << eval_v2c1[tipl::volume2slice_scaled(eval_I1,ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
+    int slice_pos = ui->eval_pos->value();
+    view1 << eval_v2c1[tipl::volume2slice_scaled(eval_I1,d,slice_pos,display_ratio)];
 
     if(currentRow < evaluate.cur_output)
     {
-        auto eval_output_count = evaluate.label_prob[currentRow].depth()/
-                                              evaluate.raw_image_shape[currentRow][2];
+        const auto& eval_I2 = evaluate.label_prob[currentRow];
+        auto eval_output_count = eval_I2.depth()/evaluate.raw_image_shape[currentRow][2];
         eval_v2c2.set_range(0,1);
         if(evaluate.is_label[currentRow] && eval_output_count == 1)
             eval_v2c2.set_range(0,evaluate.model->out_count);
         if(d == 2 && evaluate.is_label[currentRow] && eval_output_count >= 1)
-            label_on_images(network_input,
-                            evaluate.label_prob[currentRow],
+            label_on_images(view1,
+                            eval_I2,
                             evaluate.raw_image_shape[currentRow],
                             slice_pos,
                             ui->eval_label_slider->value(),
@@ -259,21 +256,35 @@ void MainWindow::on_eval_pos_valueChanged(int slice_pos)
 
         ui->eval_label_slider->setMaximum(eval_output_count-1);
         ui->eval_label_slider->setVisible(eval_output_count > 1);
-        eval_scene2 << (QImage() << eval_v2c2[tipl::volume2slice_scaled(
-                           evaluate.label_prob[currentRow].alias(
+        view2 << eval_v2c2[tipl::volume2slice_scaled(
+                           eval_I2.alias(
                                eval_I1.size()*ui->eval_label_slider->value(),eval_I1.shape()),
-                           ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)]).mirrored(d,d!=2);
+                           ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
+
     }
     else
     {
-        eval_scene2 << QImage();
+        view2 = QImage();
         ui->eval_label_slider->setVisible(false);
     }
+    view1 = view1.mirrored(d,d!=2);
+    view2 = view2.mirrored(d,d!=2);
+}
+
+void MainWindow::on_eval_pos_valueChanged(int slice_pos)
+{
+    auto currentRow = ui->evaluate_list->currentRow();
+    if(eval_I1.empty() || currentRow < 0)
+        return;
+
+    QImage view1,view2;
+    get_evaluate_views(view1,view2);
+    eval_scene1 << view1;
+    eval_scene2 << view2;
 
     ui->action_evaluate_save_results->setEnabled(currentRow < evaluate.cur_output);
     ui->evaluate_save_results->setEnabled(currentRow < evaluate.cur_output);
 
-    eval_scene1 << network_input.mirrored(d,d!=2);
 }
 void MainWindow::on_action_evaluate_save_results_triggered()
 {
@@ -320,26 +331,38 @@ void MainWindow::on_action_evaluate_save_results_triggered()
 }
 
 
+void MainWindow::on_action_evaluate_copy_view_left_triggered()
+{
+    QImage view1,view2;
+    get_evaluate_views(view1,view2);
+    QApplication::clipboard()->setImage(view1);
+    QMessageBox::information(this,"","Copied");
+}
 
-void postproc_actions(const std::string& command,
-                      float value1,float value2,
-                      tipl::image<3>& this_image,
-                      const tipl::shape<3>& dim,
-                      char& is_label);
+
+void MainWindow::on_action_evaluate_copy_view_right_triggered()
+{
+    QImage view1,view2;
+    get_evaluate_views(view1,view2);
+    QApplication::clipboard()->setImage(view2);
+    QMessageBox::information(this,"","Copied");
+}
+
+
 void MainWindow::run_action(QString command)
 {
     auto cur_index = ui->evaluate_list2->currentRow();
     if(cur_index < 0)
         return;
     float param1(0),param2(0);
-    if(command == "erase_background")
+    if(command == "defragment")
     {
-        param1 = eval_option->get<float>("erase_background_threshold");
-        param2 = eval_option->get<float>("erase_background_smoothing");
+        param1 = eval_option->get<float>("defragment_threshold");
+        param2 = eval_option->get<float>("defragment_smoothing");
     }
     if(command == "soft_max")
         param1 = eval_option->get<float>("soft_max_prob");
-    if(command == "defragment")
+    if(command == "defragment_each")
         param1 = eval_option->get<float>("defragment_threshold");
     if(command == "upper_threshold")
         param1 = eval_option->get<float>("upper_threshold_threshold");
@@ -347,10 +370,7 @@ void MainWindow::run_action(QString command)
         param1 = eval_option->get<float>("lower_threshold_threshold");
     if(command == "minus")
         param1 = eval_option->get<float>("minus_value");
-    postproc_actions(command.toStdString(),param1,param2,
-                     evaluate.label_prob[cur_index],
-                     evaluate.raw_image_shape[cur_index],
-                     evaluate.is_label[cur_index]);
+    evaluate.proc_actions(command.toStdString().c_str(),param1,param2);
     on_eval_pos_valueChanged(ui->eval_pos->value());
 }
 

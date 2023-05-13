@@ -31,6 +31,7 @@ set(UNET_STUDIO_SOURCES
         mainwindow.cpp
         mainwindow_training.cpp
         mainwindow_evaluation.cpp
+        visual_perception_augmentation.cpp
         mainwindow.h
         mainwindow.ui
 )

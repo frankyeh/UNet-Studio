@@ -27,6 +27,7 @@ public: //training
     tipl::value_to_color<float> v2c1,v2c2;
     size_t error_view_epoch = 0;
     void get_train_views(QImage& view1,QImage& view2);
+    void get_evaluate_views(QImage& view1,QImage& view2);
 public:
     QStringList evaluate_list;
     void update_evaluate_list(void);
@@ -100,5 +101,8 @@ private slots:
     void on_action_train_save_network_triggered();
     void on_train_view_transform_clicked();
     void on_action_train_copy_view_triggered();
+    void on_action_evaluate_copy_view_left_triggered();
+    void on_action_evaluate_copy_view_right_triggered();
+    void on_seed_valueChanged(int arg1);
 };
 #endif // MAINWINDOW_H

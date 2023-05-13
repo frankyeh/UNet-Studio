@@ -69,9 +69,47 @@ void reduce_mt(const T& in,U& out,size_t gap = 0)
     });
 }
 
+tipl::image<3> get_foreground_prob(
+        tipl::image<3>& this_image,
+        float prob_threshold,
+        const tipl::shape<3>& dim)
+{
+    tipl::image<3> foreground_prob(dim);
+    auto this_image_frames = this_image.depth()/dim[2];
+    if(this_image.empty())
+        return foreground_prob;
+    // hard threshold to make sure prob is between 0 and 1
+    tipl::upper_lower_threshold(this_image,0.0f,1.0f);
+    reduce_mt(this_image,foreground_prob);
+    auto original_prob = foreground_prob;
+
+
+    {
+        tipl::image<3> foreground_posterior;
+        tipl::threshold(foreground_prob,foreground_posterior,prob_threshold,1,0);
+        tipl::morphology::defragment(foreground_posterior);
+        tipl::filter::gaussian(foreground_posterior);
+        tipl::filter::gaussian(foreground_posterior);
+        foreground_prob *= foreground_posterior;
+        tipl::upper_threshold(foreground_prob,1.0f);
+    }
+
+    tipl::par_for(this_image_frames,[&](size_t label)
+    {
+        auto I = this_image.alias(dim.size()*label,dim);
+        for(size_t pos = 0;pos < dim.size();++pos)
+            if(original_prob[pos] != 0.0f)
+                I[pos] *= foreground_prob[pos]/original_prob[pos];
+    });
+
+    return foreground_prob;
+}
+
+
 void postproc_actions(const std::string& command,
                       float param1,float param2,
                       tipl::image<3>& this_image,
+                      tipl::image<3>& foreground_prob,
                       const tipl::shape<3>& dim,
                       char& is_label)
 {
@@ -79,28 +117,6 @@ void postproc_actions(const std::string& command,
     if(this_image.empty())
         return;
     tipl::out() << "run " << command;
-    if(command == "erase_background")
-    {
-        float erase_background_threshold = param1;
-        float erase_background_smoothing = param2;
-        tipl::image<3> sum_image(dim);
-        reduce_mt(this_image,sum_image);
-
-        tipl::image<3> mask;
-        tipl::threshold(sum_image,mask,erase_background_threshold,1,0);
-        tipl::morphology::defragment(mask);
-
-        for(size_t i = 0;i < erase_background_smoothing;++i)
-            tipl::filter::gaussian(mask);
-
-        tipl::par_for(this_image_frames,[&](size_t label)
-        {
-            auto I = this_image.alias(dim.size()*label,dim);
-            for(size_t pos = 0;pos < dim.size();++pos)
-                I[pos] *= mask[pos];
-        });
-        return;
-    }
     if(command == "upper_threshold")
     {
         float upper_threshold_threshold = param1;
@@ -136,18 +152,19 @@ void postproc_actions(const std::string& command,
         return;
     }
 
-    if(command == "defragment")
+    if(command == "defragment_each")
     {
-        float defragment_threshold = param1;
+        float defragment_each_threshold = param1;
         tipl::par_for(this_image_frames,[&](size_t label)
         {
             auto I = this_image.alias(dim.size()*label,dim);
-            tipl::image<3,char> mask(I.shape());
+            tipl::image<3,char> mask(I.shape()),mask2;
             for(size_t i = 0;i < I.size();++i)
-                mask[i] = (I[i] > defragment_threshold ? 1:0);
-            tipl::morphology::defragment(mask);
+                mask[i] = (I[i] > defragment_each_threshold ? 1:0);
+            mask2 = mask;
+            tipl::morphology::defragment_by_size_ratio(mask);
             for(size_t i = 0;i < I.size();++i)
-                if(!mask[i])
+                if(!mask[i] && mask[2])
                     I[i] = 0;
         });
         return;
@@ -182,26 +199,8 @@ void postproc_actions(const std::string& command,
         is_label = false;
         return;
     }
-
-    if(command =="normalize_all")
-    {
-        tipl::image<3> sum_image(dim);
-        reduce_mt(this_image,sum_image);
-
-        tipl::par_for(this_image_frames,[&](size_t label)
-        {
-            auto I = this_image.alias(dim.size()*label,dim);
-            for(size_t pos = 0;pos < dim.size();++pos)
-                if(sum_image[pos] != 0.0f)
-                    I[pos] /= sum_image[pos];
-        });
-        is_label = false;
-        return;
-    }
     if(command =="soft_max")
     {
-        tipl::image<3> sum_image(dim);
-        reduce_mt(this_image,sum_image);
         float soft_min_prob = param1;
         tipl::par_for(dim.size(),[&](size_t pos)
         {
@@ -209,7 +208,7 @@ void postproc_actions(const std::string& command,
             for(size_t i = pos;i < this_image.size();i += dim.size())
                 if(this_image[i] > m)
                     m = this_image[i];
-            if(sum_image[pos] <= soft_min_prob)
+            if(foreground_prob[pos] <= soft_min_prob)
             {
                 for(size_t i = pos;i < this_image.size();i += dim.size())
                     this_image[i] = 0.0f;
@@ -221,7 +220,7 @@ void postproc_actions(const std::string& command,
         is_label = true;
         return;
     }
-    if(command =="convert_to_3d")
+    if(command =="to_3d_label")
     {
         tipl::image<3> I(dim);
         tipl::par_for(dim.size(),[&](size_t pos)
@@ -322,12 +321,14 @@ void evaluate_unet::evaluate(void)
 void evaluate_unet::proc_actions(const char* cmd,float param1,float param2)
 {
     postproc_actions(cmd,param1,param2,label_prob[cur_output],
+                 foreground_prob[cur_output],
                  raw_image_shape[cur_output],
                  is_label[cur_output]);
 }
 void evaluate_unet::output(void)
 {
     label_prob = std::vector<tipl::image<3> >(param.image_file_name.size());
+    foreground_prob = std::vector<tipl::image<3> >(param.image_file_name.size());
     is_label = std::vector<char>(param.image_file_name.size());
     output_thread.reset(new std::thread([this]()
     {
@@ -386,20 +387,34 @@ void evaluate_unet::output(void)
                     }
                 });
 
+                foreground_prob[cur_output] = get_foreground_prob(label_prob[cur_output],param.prob_threshold,raw_image_shape[cur_output]);
+                switch(proc_strategy.output_format)
+                {
+                    case 0: // 3D label
+                        proc_actions("soft_max",param.prob_threshold);
+                        proc_actions("to_3d_label");
+                    break;
+                    case 2: // skull strip
+                        {
+                            tipl::image<3> I;
+                            tipl::io::gz_nifti in;
+                            tipl::image<3> foreground_mask;
+                            tipl::threshold(foreground_prob[cur_output],foreground_mask,param.prob_threshold,1,0);
+                            tipl::filter::gaussian(foreground_mask);
 
-                {
-                    proc_actions("upper_threshold",1.0f);
-                    proc_actions("lower_threshold",0.0f);
+                            if(in.load_from_file(param.image_file_name[cur_output]))
+                            {
+                                in >> I;
+                                for(size_t pos = 0;pos < I.size() && pos < foreground_mask.size();++pos)
+                                    I[pos] *= foreground_mask[pos];
+                            }
+                            tipl::normalize(I);
+                            label_prob[cur_output].swap(I);
+                        }
+                    break;
+
                 }
-                if(proc_strategy.remove_background)
-                {
-                    proc_actions("erase_background",param.prob_threshold,1);
-                }
-                if(proc_strategy.convert_to_3d)
-                {
-                    proc_actions("soft_max",param.prob_threshold);
-                    proc_actions("convert_to_3d");
-                }
+
                 network_input[cur_output] = tipl::image<3>();
                 network_output[cur_output] = tipl::image<3>();
             }

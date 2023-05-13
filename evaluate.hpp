@@ -15,8 +15,7 @@ struct ProcStrategy{
     bool match_resolution = true;
     bool crop_fov = true;
     // postproc
-    bool remove_background = true;
-    bool convert_to_3d = true;
+    unsigned char output_format = 0;
 };
 
 class OptionTableWidget;
@@ -44,11 +43,11 @@ private:
     void evaluate(void);
 private:
     std::shared_ptr<std::thread> output_thread;
-    void proc_actions(const char* cmd,float param1 = 0.0f,float param2 = 0.0f);
     void output(void);
 public:
     size_t cur_output = 0;
-    std::vector<tipl::image<3> > label_prob;
+    std::vector<tipl::image<3> > label_prob,foreground_prob;
+    void proc_actions(const char* cmd,float param1 = 0.0f,float param2 = 0.0f);
     std::vector<char> is_label;
     void clear(void)
     {

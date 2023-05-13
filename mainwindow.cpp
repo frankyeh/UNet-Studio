@@ -84,10 +84,24 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::on_eval_view_dim_currentIndexChanged(int index){   on_eval_pos_valueChanged(ui->eval_pos->value()); }
-void MainWindow::on_view_dim_currentIndexChanged(int index){  on_pos_valueChanged(ui->pos->value()); }
-void MainWindow::on_label_slider_valueChanged(int value){    on_pos_valueChanged(ui->pos->value());}
-void MainWindow::on_eval_label_slider_valueChanged(int value){    on_eval_pos_valueChanged(ui->eval_pos->value());}
+void MainWindow::on_eval_view_dim_currentIndexChanged(int index)
+{
+    ui->eval_pos->setMaximum(eval_I1.shape()[index]-1);
+    ui->eval_pos->setValue(ui->eval_pos->maximum()/2);
+}
+void MainWindow::on_view_dim_currentIndexChanged(int index)
+{
+    ui->pos->setMaximum(I1.shape()[index]-1);
+    ui->pos->setValue(ui->pos->maximum()/2);
+}
+void MainWindow::on_label_slider_valueChanged(int value)
+{
+    on_pos_valueChanged(ui->pos->value());
+}
+void MainWindow::on_eval_label_slider_valueChanged(int value)
+{
+    on_eval_pos_valueChanged(ui->eval_pos->value());
+}
 void MainWindow::on_error_x_size_valueChanged(int arg1){plot_error();}
 void MainWindow::on_error_y_size_valueChanged(int arg1){plot_error();}
 
@@ -96,6 +110,9 @@ void MainWindow::on_actionConsole_triggered()
     static auto* con = new Console(this);
     con->showNormal();
 }
+
+
+
 
 
 

@@ -1,43 +1,31 @@
-Viewport/Translocation/translocation_ratio/float:0.0:1.0:0.05:2/0.1/upper limit of translocation in the ratio of image dimension
-Viewport/Rotation X/rotation_x/float:0.0:2.0:0.05:2/0.4/upper limit of rotation at x axis
-Viewport/Rotation Y/rotation_y/float:0.0:2.0:0.05:2/0.1/upper limit of rotation at y axis
-Viewport/Rotation Z/rotation_z/float:0.0:2.0:0.05:2/0.1/upper limit of rotation at z axis
-Viewport/Zoom Out/scaling_up/float:1.0:2.0:0.05:2/1.25/upper limit of scaling up
-Viewport/Zoom In/scaling_down/float:0.1:1.0:0.05:2/0.8/lower limit of scaling down
-Viewport/Aspect Ratio/aspect_ratio/float:1.0:2.0:0.05:2/1.25/upper limit of relative scaling at axis
-Viewport/Affine/affine/float:0.0:0.5:0.05:2/0.15/upper limit of affine transform
-Viewport/Deformation/deformation/Off:25%:50%:75%:On/1/apply nonlinear deformation
-Viewport/Foci Count/foci_count/int:1:10:1/3/upper limit of deformation foci
-Viewport/├Minimum Radius/foci_radius_min/float:0.1:0.5:0.1:2/0.1/minimum foci radius
-Viewport/├Maximum Radius/foci_radius_max/float:0.1:1.0:0.1:2/0.5/maximum foci radius
-Viewport/├Minimum Magnitude/deformation_mag_min/float:0.0:0.5:0.05:2/0.05/minimum deformation magnitude
-Viewport/└Maximum Magnitude/deformation_mag_max/float:0.0:0.5:0.05:2/0.1/maximum deformation magnitude
-Illumination/Ambient Light/ambient/Off:25%:50%:75%:On/2/add ambient light
-Illumination/└Magnitude/ambient_mag/float:0.0:4.0:0.5:2/2.0/The magnitude of ambient light
-Illumination/Diffuse Light/diffuse/Off:25%:50%:75%:On/4/add diffuse light
-Illumination/└Magnitude/diffuse_mag/float:0.0:2.0:0.1:2/1.0/The magnitude of diffuse light
-Illumination/Specular Light/specular/Off:25%:50%:75%:On/4/add specular light
-Illumination/├Frequency/specular_freq/float:0.0:10.0:0.1:2/2.0/The frequency of specular light
-Illumination/└Magnitude/specular_mag/float:0.0:2.0:0.1:2/1.0/The magnitude of specular light
-Focus/Blurring/blurring/Off:25%:50%:75%:On/1/add ring artifact
-Focus/└Count/blurring_count/int:1:10:1/1/number of blurring iteration
-Focus/Downsample X/downsample_x/Off:25%:50%:75%:On/1/apply downsample of data
-Focus/└Ratio/downsample_x_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
-Focus/Downsample Y/downsample_y/Off:25%:50%:75%:On/1/apply downsample of data
-Focus/└Ratio/downsample_y_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
-Focus/Downsample Z/downsample_z/Off:25%:50%:75%:On/1/apply downsample of data
-Focus/└Ratio/downsample_z_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
-Background/Self Replication/self_replication/Off:25%:50%:75%:On/4/Add background
-Background/└Magnitude/self_replication_mag/float:0.0:1.0:0.1:2/0.05/The magnitude of background images
-Background/Perline Noise/perlin_noise/Off:25%:50%:75%:On/1/Add Perlin noise
-Background/└Magnitude/perlin_noise_mag/float:0.0:1.0:0.1:2/0.05/The magnitude of background images
-Background/Uniform Noise/noise/Off:25%:50%:75%:On/1/add uniform noise
-Background/└Magnitude/noise_mag/float:0.0:1.0:0.1:2/0.1/magnitude of uniform noise
-Background/Scale Values/background_scale/Off:25%:50%:75%:On/1/scale background value
-Background/├Minimum/background_scale_min/float:0.0:1.0:0.1:2/0.0/minimum ratio
-Background/└Maximum/background_scale_max/float:0.0:4.0:0.1:2/2.0/maximum ratio
-Foreground/Occlusion/occlusion/Off:25%:50%:75%:On/0/Apply signal occlusion
-Foreground/Occlusion Count/occlusion_count/int:1:10:1/3/maximum number of occlusions
-Foreground/├Minimum Size/occlusion_size_min/float:0.0:1.0:0.05:2/0.05/minimum size of occlusion in proportion to image width
-Foreground/└Maximum Size/occlusion_size_max/float:0.0:1.0:0.05:2/0.2/maximum size of occlusion in proportion to image width
-
+Reduction/Cropping/cropping/Off:25%:50%:75%:On/0/Apply signal cropping
+Reduction/├Minimum Size/cropping_size_min/float:0.0:1.0:0.05:2/0.1/minimum size of cropping in proportion to image width
+Reduction/└Maximum Size/cropping_size_max/float:0.0:1.0:0.05:2/0.2/maximum size of cropping in proportion to image width
+Reduction/Downsample X/downsample_x/Off:25%:50%:75%:On/0/apply downsample of data
+Reduction/└Ratio/downsample_x_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
+Reduction/Downsample Y/downsample_y/Off:25%:50%:75%:On/0/apply downsample of data
+Reduction/└Ratio/downsample_y_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
+Reduction/Downsample Z/downsample_z/Off:25%:50%:75%:On/0/apply downsample of data
+Reduction/└Ratio/downsample_z_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
+Reduction/Noise/noise/Off:25%:50%:75%:On/2/add uniform noise
+Reduction/└Magnitude/noise_mag/float:0.0:1.0:0.1:2/0.2/magnitude of uniform noise
+Lighting/Ambient Light/ambient/Off:25%:50%:75%:On/2/add ambient light
+Lighting/└Magnitude/ambient_mag/float:0.0:4.0:0.5:2/2.0/The magnitude of ambient light
+Lighting/Diffuse Light/diffuse/Off:25%:50%:75%:On/2/add diffuse light
+Lighting/└Magnitude/diffuse_mag/float:0.0:2.0:0.1:2/2.0/The magnitude of diffuse light
+Lighting/Specular Light/specular/Off:25%:50%:75%:On/2/add specular light
+Lighting/├Frequency/specular_freq/float:0.0:10.0:0.1:2/2.0/The frequency of specular light
+Lighting/└Magnitude/specular_mag/float:0.0:2.0:0.1:2/0.5/The magnitude of specular light
+Rigid Motion/Translocation/translocation_ratio/float:0.0:1.0:0.05:2/0.2/upper limit of translocation in the ratio of image dimension
+Rigid Motion/Rotation X/rotation_x/float:0.0:2.0:0.05:2/0.2/upper limit of rotation at x axis
+Rigid Motion/Rotation Y/rotation_y/float:0.0:2.0:0.05:2/0.2/upper limit of rotation at y axis
+Rigid Motion/Rotation Z/rotation_z/float:0.0:2.0:0.05:2/0.2/upper limit of rotation at z axis
+Camera Transform/Zoom Out/scaling_up/float:1.0:2.0:0.05:2/1.25/upper limit of scaling up
+Camera Transform/Zoom In/scaling_down/float:0.1:1.0:0.05:2/0.8/lower limit of scaling down
+Camera Transform/Aspect Ratio/aspect_ratio/float:1.0:2.0:0.05:2/1.25/upper limit of relative scaling at axis
+Camera Transform/Perspective/perspective/float:0.0:0.5:0.05:2/0.1/upper limit of perspective transform
+Camera Transform/Lens Distortion/lens_distortion/float:0.0:0.5:0.01:2/0.1/upper limit of lens distortion
+Background/Rubber-Stamping/rubber_stamping/Off:25%:50%:75%:On/2/Add background
+Background/└Magnitude/rubber_stamping_mag/float:0.0:1.0:0.1:2/1.0/The magnitude of background images
+Background/Perlin Texture/perlin_texture/Off:25%:50%:75%:On/2/Add Perlin noise
+Background/└Magnitude/perlin_texture_mag/float:0.0:1.0:0.1:2/1.0/The magnitude of background images

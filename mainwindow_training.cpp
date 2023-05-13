@@ -39,8 +39,7 @@ void MainWindow::on_action_open_training_setting_triggered()
     settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
     settings.setValue("work_file",QFileInfo(fileName.remove(".ini")).fileName());
 
-    ui->action_train_open_labels->setEnabled(true);
-    ui->train_open_labels->setEnabled(true);
+    ui->tabWidget->setCurrentIndex(1);
 
 }
 
@@ -69,6 +68,15 @@ void MainWindow::on_action_save_training_setting_triggered()
 
 void MainWindow::update_list(void)
 {
+    for(size_t i = 0;i < image_list.size();)
+        if(!QFileInfo(image_list[i]).exists())
+        {
+            image_list.remove(i);
+            label_list.remove(i);
+        }
+    else
+        ++i;
+
     if(!label_list.empty() && QFileInfo(label_list[0]).exists())
     {
          if(get_label_info(label_list[0].toStdString(),out_count,is_label))
@@ -106,6 +114,11 @@ void MainWindow::update_list(void)
         ui->list1->setCurrentRow(0);
 
     on_list1_currentRowChanged(ui->list1->currentRow());
+    ui->action_train_open_labels->setEnabled(image_list.size());
+    ui->train_open_labels->setEnabled(image_list.size());
+    ui->train_start->setEnabled(ready_to_train);
+
+
 }
 
 void MainWindow::on_action_train_open_files_triggered()
@@ -122,10 +135,6 @@ void MainWindow::on_action_train_open_files_triggered()
         label_list << QString();
     }
     update_list();
-
-    ui->action_train_open_labels->setEnabled(true);
-    ui->train_open_labels->setEnabled(true);
-
 }
 
 void MainWindow::on_action_train_open_labels_triggered()
@@ -168,10 +177,6 @@ void MainWindow::on_action_train_clear_all_triggered()
 {
     image_list.clear();
     label_list.clear();
-    ui->list1->clear();
-    ui->action_train_open_labels->setEnabled(false);
-    ui->train_open_labels->setEnabled(false);
-    ui->train_start->setEnabled(false);
     update_list();
 }
 
@@ -329,11 +334,24 @@ void MainWindow::plot_error()
     {
         size_t x_size = ui->error_x_size->value();
         size_t y_size = ui->error_y_size->value();
-        QImage image(x_size+10,y_size+10,QImage::Format_RGB32);
+        const int left_border = 40;
+        const int upper_border = 10;
+        QImage image(x_size+left_border+5,y_size+upper_border+20,QImage::Format_RGB32);
         QPainter painter(&image);
         painter.fillRect(image.rect(), Qt::white);
+        painter.setPen(QPen(Qt::gray, 2));
+        painter.drawRect(left_border,upper_border + y_size/4, x_size,y_size/2);
+        painter.drawLine(left_border,upper_border + y_size/2,left_border + x_size,upper_border + y_size/2);
+        painter.drawText(QRect(0,upper_border-8,left_border-4,16), Qt::AlignRight,"1");
+        painter.drawText(QRect(0,upper_border-8+y_size/4,left_border-4,16), Qt::AlignRight,"0.1");
+        painter.drawText(QRect(0,upper_border-8+y_size/2,left_border-4,16), Qt::AlignRight,"0.01");
+        painter.drawText(QRect(0,upper_border-8+y_size*3/4,left_border-4,16), Qt::AlignRight,"0.001");
+        painter.drawText(QRect(0,upper_border-8+y_size,left_border-4,16), Qt::AlignRight,"0.0001");
+        painter.drawText(left_border + x_size/2-16,upper_border+y_size+16,"Epoch");
+        painter.setPen(QPen(Qt::red, 2));
+
         painter.setPen(QPen(Qt::black, 2));
-        painter.drawRect(QRectF(5, 5, x_size,y_size));
+        painter.drawRect(left_border,upper_border,x_size ,y_size);
 
         std::vector<std::vector<float> > all_errors;
 
@@ -344,25 +362,6 @@ void MainWindow::plot_error()
             all_errors.push_back(std::vector<float>(train.test_error_background[i].begin(),train.test_error_background[i].begin()+train.cur_epoch));
         }
 
-
-        {
-            std::vector<float> data;
-            for(const auto& d : all_errors)
-                data.insert(data.end(),d.begin(),d.end());
-
-            for(auto& v : data)
-                v = -std::log10(v);
-            tipl::normalize_upper_lower(data,image.height()-10);
-
-            size_t pos = 0;
-            for(auto& d : all_errors)
-            {
-                std::copy(data.begin()+pos,data.begin()+pos+d.size(),d.begin());
-                pos += d.size();
-            }
-        }
-
-
         std::vector<QColor> colors = {QColor(0,0,0),QColor(244,177,131),QColor(197,90,17),QColor(142,170,219),QColor(47,84,150)};
         auto x_scale = std::min<float>(5.0f,float(x_size)/float(train.cur_epoch+1));
         painter.setRenderHint(QPainter::Antialiasing, true);
@@ -372,12 +371,10 @@ void MainWindow::plot_error()
                 continue;
             QVector<QPointF> points;
             for(size_t j = 0;j < all_errors[i].size();++j)
-                points << QPointF(float(j)*x_scale+5,all_errors[i][j]+5);
+                points << QPointF(float(j)*x_scale+left_border,-std::log10(all_errors[i][j])*y_size/4.0f+upper_border);
 
             painter.setPen(QPen(colors[i],1.5f));
             painter.drawPolyline(points);
-            //painter.setPen(QPen(Qt::black, 1));
-            //painter.drawLine(5,p1.back().y(),p1.back().x(),p1.back().y());
         }
 
         error_view_epoch = train.cur_epoch;
@@ -460,7 +457,7 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),I1,I2,vs))
             I2.clear();
         if(ui->train_view_transform->isChecked())
-            load_image_and_label(*option,I1,I2,is_label,vs,vs,I1.shape(),time(0));
+            visual_perception_augmentation(*option,I1,I2,is_label,vs,ui->seed->value());
         if(!I2.empty())
         {
             if(out_count != 1 && !ui->train_view_3d_label->isChecked())
@@ -481,6 +478,17 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
 
     on_pos_valueChanged(ui->pos->value());
 }
+void MainWindow::on_train_view_transform_clicked()
+{
+    on_list1_currentRowChanged(ui->list1->currentRow());
+}
+
+void MainWindow::on_seed_valueChanged(int arg1)
+{
+    ui->train_view_transform->setChecked(true);
+    on_list1_currentRowChanged(ui->list1->currentRow());
+}
+
 
 void MainWindow::on_list2_currentRowChanged(int currentRow)
 {
@@ -577,11 +585,6 @@ void MainWindow::on_pos_valueChanged(int slice_pos)
 }
 
 
-void MainWindow::on_train_view_transform_clicked()
-{
-    on_list1_currentRowChanged(ui->list1->currentRow());
-}
-
 
 void MainWindow::on_save_error_clicked()
 {
@@ -589,16 +592,17 @@ void MainWindow::on_save_error_clicked()
     if(file.isEmpty())
         return;
     std::ofstream out(file.toStdString());
-    out << "trainning_error ";
+    out << "trainning_error\t";
     for(size_t j = 0;j < train.test_error_foreground.size();++j)
-        out << "test_foreground_error test_background_error ";
+        out << "test_foreground_error\ttest_background_error\t";
+    out << std::endl;
     for(size_t i = 0;i < train.error.size() && i < train.cur_epoch;++i)
     {
-        out << train.error[i] << " ";
+        out << train.error[i] << "\t";
         for(size_t j = 0;j < train.test_error_foreground.size();++j)
         {
-            out << train.test_error_foreground[j][i] << " ";
-            out << train.test_error_background[j][i] << " ";
+            out << train.test_error_foreground[j][i] << "\t";
+            out << train.test_error_background[j][i] << "\t";
         }
         out << std::endl;
     }

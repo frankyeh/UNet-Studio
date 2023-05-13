@@ -192,14 +192,14 @@
                </property>
               </widget>
              </item>
-             <item row="9" column="0">
+             <item row="5" column="0">
               <widget class="QLabel" name="label_10">
                <property name="text">
                 <string>Prob threshold</string>
                </property>
               </widget>
              </item>
-             <item row="9" column="1">
+             <item row="5" column="1">
               <widget class="QDoubleSpinBox" name="postproc_prob_threshold">
                <property name="maximum">
                 <double>1.000000000000000</double>
@@ -209,17 +209,48 @@
                </property>
               </widget>
              </item>
-             <item row="10" column="0">
+             <item row="7" column="0">
+              <widget class="QLabel" name="label_11">
+               <property name="text">
+                <string>Output</string>
+               </property>
+              </widget>
+             </item>
+             <item row="7" column="1">
+              <widget class="QComboBox" name="evaluate_output">
+               <item>
+                <property name="text">
+                 <string>3D Labels</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>4D Probability</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>Skull Strip</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>UNet output</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+             <item row="11" column="0">
               <widget class="QLabel" name="label_5">
                <property name="text">
                 <string>Device</string>
                </property>
               </widget>
              </item>
-             <item row="10" column="1">
+             <item row="11" column="1">
               <widget class="QComboBox" name="evaluate_device"/>
              </item>
-             <item row="12" column="0">
+             <item row="13" column="0">
               <widget class="QLabel" name="evaluate_gif">
                <property name="text">
                 <string/>
@@ -229,7 +260,7 @@
                </property>
               </widget>
              </item>
-             <item row="12" column="1">
+             <item row="13" column="1">
               <widget class="QPushButton" name="evaluate">
                <property name="enabled">
                 <bool>false</bool>
@@ -242,30 +273,6 @@
                </property>
                <property name="text">
                 <string>Evaluate</string>
-               </property>
-              </widget>
-             </item>
-             <item row="5" column="0">
-              <widget class="QLabel" name="label_7">
-               <property name="text">
-                <string>Post Processing</string>
-               </property>
-              </widget>
-             </item>
-             <item row="5" column="1">
-              <widget class="QCheckBox" name="remove_background">
-               <property name="text">
-                <string>remove background</string>
-               </property>
-               <property name="checked">
-                <bool>true</bool>
-               </property>
-              </widget>
-             </item>
-             <item row="6" column="1">
-              <widget class="QCheckBox" name="convert_to_3d">
-               <property name="text">
-                <string>to 3D labels</string>
                </property>
               </widget>
              </item>
@@ -422,13 +429,6 @@
            </size>
           </property>
           <layout class="QVBoxLayout" name="postproc_widget_layout">
-           <item>
-            <widget class="QLabel" name="label_6">
-             <property name="text">
-              <string>Step 5: Custome Processing</string>
-             </property>
-            </widget>
-           </item>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_17">
              <item>
@@ -1064,19 +1064,6 @@
                       </property>
                      </widget>
                     </item>
-                    <item>
-                     <widget class="QToolButton" name="train_view_transform">
-                      <property name="text">
-                       <string>T</string>
-                      </property>
-                      <property name="checkable">
-                       <bool>true</bool>
-                      </property>
-                      <property name="checked">
-                       <bool>true</bool>
-                      </property>
-                     </widget>
-                    </item>
                    </layout>
                   </item>
                  </layout>
@@ -1203,6 +1190,50 @@
           </property>
           <layout class="QVBoxLayout" name="option_widget_layout">
            <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_16">
+             <item>
+              <spacer name="horizontalSpacer_6">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QToolButton" name="train_view_transform">
+               <property name="text">
+                <string>T</string>
+               </property>
+               <property name="checkable">
+                <bool>true</bool>
+               </property>
+               <property name="checked">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="label_6">
+               <property name="text">
+                <string>random seed:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QSpinBox" name="seed">
+               <property name="maximum">
+                <number>65536</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
             <layout class="QHBoxLayout" name="horizontalLayout_6"/>
            </item>
           </layout>
@@ -1269,6 +1300,8 @@
       <string>Copy To Clipboard</string>
      </property>
      <addaction name="action_train_copy_view"/>
+     <addaction name="action_evaluate_copy_view_left"/>
+     <addaction name="action_evaluate_copy_view_right"/>
     </widget>
     <addaction name="menuCopy_To_Clipboard"/>
    </widget>
@@ -1426,6 +1459,16 @@
   <action name="action_train_copy_view">
    <property name="text">
     <string>Training Views</string>
+   </property>
+  </action>
+  <action name="action_evaluate_copy_view_left">
+   <property name="text">
+    <string>Evaluate View Left</string>
+   </property>
+  </action>
+  <action name="action_evaluate_copy_view_right">
+   <property name="text">
+    <string>Evaluate View Right</string>
    </property>
   </action>
  </widget>
