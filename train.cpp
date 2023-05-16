@@ -96,7 +96,18 @@ std::vector<size_t> get_label_count(const tipl::image<3>& label,size_t out_count
     return sum;
 }
 tipl::shape<3> unet_inputsize(const tipl::shape<3>& s);
-
+void shifted_to_dimension(tipl::image<3>& new_image,tipl::image<3>& new_label,tipl::shape<3> model_dim)
+{
+    if(new_image.shape() != model_dim)
+    {
+        tipl::image<3> I(model_dim),I2(model_dim);
+        auto shift = tipl::vector<3,int>(model_dim)-tipl::vector<3,int>(new_image.shape());
+        tipl::draw(new_image,I,shift);
+        tipl::draw(new_label,I2,shift);
+        new_image.swap(I);
+        new_label.swap(I2);
+    }
+}
 void train_unet::read_file(void)
 {
     int thread_count = std::min<int>(8,std::thread::hardware_concurrency());
@@ -133,6 +144,9 @@ void train_unet::read_file(void)
                     aborted = true;
                     return;
                 }
+
+                shifted_to_dimension(new_image,new_label,model->dim);
+
                 tipl::normalize(new_image);
                 if(!param.is_label)
                     tipl::normalize(new_label);
@@ -166,15 +180,9 @@ void train_unet::read_file(void)
                     aborted = true;
                     return;
                 }
-                if(new_image.shape() != model->dim)
-                {
-                    tipl::image<3> I(model->dim),I2(model->dim);
-                    auto shift = tipl::vector<3,int>(model->dim)-tipl::vector<3,int>(new_image.shape());
-                    tipl::draw(new_image,I,shift);
-                    tipl::draw(new_label,I2,shift);
-                    new_image.swap(I);
-                    new_label.swap(I2);
-                }
+
+                shifted_to_dimension(new_image,new_label,model->dim);
+
                 tipl::image<3,char> mask(model->dim);
                 if(model->out_count > 1)
                 {
