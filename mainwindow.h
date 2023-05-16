@@ -27,7 +27,7 @@ public: //training
     tipl::value_to_color<float> v2c1,v2c2;
     size_t error_view_epoch = 0;
     void get_train_views(QImage& view1,QImage& view2);
-    void get_evaluate_views(QImage& view1,QImage& view2);
+    void get_evaluate_views(QImage& view1,QImage& view2,float display_ratio = 0.0f);
 public:
     QStringList evaluate_list;
     void update_evaluate_list(void);
@@ -36,7 +36,8 @@ public:
     void update_list(void);
 public: //evalute
     QGraphicsScene eval_scene1,eval_scene2;
-    tipl::image<3> eval_I1;
+    std::vector<tipl::image<3> > eval_I1_buffer;
+    std::vector<float> eval_I1_buffer_max;
     tipl::value_to_color<float> eval_v2c1,eval_v2c2;
 private:
     int out_count = 1;
@@ -104,5 +105,10 @@ private slots:
     void on_action_evaluate_copy_view_left_triggered();
     void on_action_evaluate_copy_view_right_triggered();
     void on_seed_valueChanged(int arg1);
+    void on_action_evaluate_copy_all_right_view_triggered();
+    void on_action_evaluate_copy_all_left_view_triggered();
+    void on_eval_show_contrast_panel_clicked();
+    void on_eval_image_max_valueChanged(double arg1);
+    void on_eval_image_min_valueChanged(double arg1);
 };
 #endif // MAINWINDOW_H

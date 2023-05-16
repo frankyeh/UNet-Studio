@@ -2,12 +2,14 @@
 #include "./ui_mainwindow.h"
 #include "optiontablewidget.hpp"
 #include <QFileDialog>
+#include <QInputDialog>
 #include <QSettings>
 #include <QMessageBox>
 #include <QClipboard>
 #include <QMovie>
 #include "TIPL/tipl.hpp"
 #include "console.h"
+
 
 extern QSettings settings;
 
@@ -21,6 +23,8 @@ void MainWindow::on_action_evaluate_option_triggered()
 
 void MainWindow::update_evaluate_list(void)
 {
+    eval_I1_buffer.resize(evaluate_list.size());
+    eval_I1_buffer_max.resize(evaluate_list.size());
     auto index = ui->evaluate_list->currentRow();
     ui->evaluate_list->clear();
     for(auto s: evaluate_list)
@@ -179,6 +183,8 @@ void MainWindow::on_action_evaluate_clear_all_triggered()
 {
     evaluate.clear();
     evaluate_list.clear();
+    eval_I1_buffer.clear();
+    eval_I1_buffer_max.clear();
     ui->evaluate_list->clear();
     ui->evaluate_list2->clear();
     ui->evaluate->setEnabled(false);
@@ -194,15 +200,21 @@ void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
     auto pos_index = float(ui->eval_pos->value())/float(ui->eval_pos->maximum());
     if(pos_index == 0.0f)
         pos_index = 0.5f;
-    eval_I1.clear();
-    if(currentRow >= 0 && currentRow < evaluate_list.size())
+    if(currentRow >= 0 && currentRow < eval_I1_buffer.size())
     {
-        tipl::vector<3> vs;
-        if(!tipl::io::gz_nifti::load_from_file(evaluate_list[currentRow].toStdString().c_str(),eval_I1,vs))
-            return;
-        eval_v2c1.set_range(0,tipl::max_value_mt(eval_I1)*0.8f);
-        eval_v2c2.set_range(0,1.0f);
-        ui->eval_pos->setMaximum(eval_I1.shape()[ui->eval_view_dim->currentIndex()]-1);
+        float ratio = 1.0f;
+        if(ui->eval_image_max->maximum() != 0.0f)
+            ratio = float(ui->eval_image_max->value())/float(ui->eval_image_max->maximum());
+        if(eval_I1_buffer[currentRow].empty())
+        {
+            tipl::vector<3> vs;
+            if(!tipl::io::gz_nifti::load_from_file(evaluate_list[currentRow].toStdString().c_str(),eval_I1_buffer[currentRow],vs))
+                return;
+            eval_I1_buffer_max[currentRow] = tipl::max_value_mt(eval_I1_buffer[currentRow]);
+        }
+        ui->eval_image_max->setMaximum(eval_I1_buffer_max[currentRow]);
+        ui->eval_image_max->setValue(eval_I1_buffer_max[currentRow]*ratio);
+        ui->eval_pos->setMaximum(eval_I1_buffer[currentRow].shape()[ui->eval_view_dim->currentIndex()]-1);
     }
     else
         ui->eval_pos->setMaximum(0);
@@ -224,20 +236,20 @@ void label_on_images(QImage& I,
                      int cur_label_index,
                      int out_count);
 
-void MainWindow::get_evaluate_views(QImage& view1,QImage& view2)
+void MainWindow::get_evaluate_views(QImage& view1,QImage& view2,float display_ratio)
 {
     auto currentRow = ui->evaluate_list->currentRow();
-    if(eval_I1.empty() || currentRow < 0)
+    if(currentRow < 0 || currentRow >= eval_I1_buffer.size() || eval_I1_buffer[currentRow].empty())
         return;
-
     auto d = ui->eval_view_dim->currentIndex();
-    auto sizes = tipl::space2slice<tipl::vector<2,int> >(d,eval_I1.shape());
-    float display_ratio = std::min<float>(float((ui->eval_view1->width()-10))/float(sizes[0]),float(ui->eval_view1->height()-10)/float(sizes[1]));
+    auto sizes = tipl::space2slice<tipl::vector<2,int> >(d,eval_I1_buffer[currentRow].shape());
+    if(display_ratio == 0.0f)
+        display_ratio = std::min<float>(float((ui->eval_view1->width()-10))/float(sizes[0]),float(ui->eval_view1->height()-10)/float(sizes[1]));
     if(display_ratio < 1.0f)
         display_ratio = 1.0f;
 
     int slice_pos = ui->eval_pos->value();
-    view1 << eval_v2c1[tipl::volume2slice_scaled(eval_I1,d,slice_pos,display_ratio)];
+    view1 << eval_v2c1[tipl::volume2slice_scaled(eval_I1_buffer[currentRow],d,slice_pos,display_ratio)];
 
     if(currentRow < evaluate.cur_output)
     {
@@ -258,7 +270,7 @@ void MainWindow::get_evaluate_views(QImage& view1,QImage& view2)
         ui->eval_label_slider->setVisible(eval_output_count > 1);
         view2 << eval_v2c2[tipl::volume2slice_scaled(
                            eval_I2.alias(
-                               eval_I1.size()*ui->eval_label_slider->value(),eval_I1.shape()),
+                            eval_I1_buffer[currentRow].size()*ui->eval_label_slider->value(),eval_I1_buffer[currentRow].shape()),
                            ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
 
     }
@@ -274,7 +286,7 @@ void MainWindow::get_evaluate_views(QImage& view1,QImage& view2)
 void MainWindow::on_eval_pos_valueChanged(int slice_pos)
 {
     auto currentRow = ui->evaluate_list->currentRow();
-    if(eval_I1.empty() || currentRow < 0)
+    if(currentRow < 0 || currentRow >= eval_I1_buffer.size() || eval_I1_buffer[currentRow].empty())
         return;
 
     QImage view1,view2;
@@ -348,6 +360,58 @@ void MainWindow::on_action_evaluate_copy_view_right_triggered()
     QMessageBox::information(this,"","Copied");
 }
 
+void MainWindow::on_action_evaluate_copy_all_right_view_triggered()
+{
+    bool ok;
+    int num_col = QInputDialog::getInt(nullptr,"", "Specify number of columns:",5,1,12,1&ok);
+    if(!ok)
+        return;
+    std::vector<QImage> images;
+    tipl::progress p("generating",true);
+    for(size_t i = 0;p(i,ui->evaluate_list2->count());++i)
+    {
+        ui->evaluate_list2->setCurrentRow(i);
+        QImage view1,view2;
+        get_evaluate_views(view1,view2,1.0f);
+        images.push_back(view2);
+    }
+    QApplication::clipboard()->setImage(tipl::qt::create_mosaic(images,num_col));
+}
+
+
+void MainWindow::on_action_evaluate_copy_all_left_view_triggered()
+{
+    bool ok;
+    int num_col = QInputDialog::getInt(nullptr,"", "Specify number of columns:",5,1,12,1&ok);
+    if(!ok)
+        return;
+    std::vector<QImage> images;
+    tipl::progress p("generating",true);
+    for(size_t i = 0;p(i,ui->evaluate_list2->count());++i)
+    {
+        ui->evaluate_list2->setCurrentRow(i);
+        QImage view1,view2;
+        get_evaluate_views(view1,view2,1.0f);
+        images.push_back(view1);
+    }
+    QApplication::clipboard()->setImage(tipl::qt::create_mosaic(images,num_col));
+}
+
+void MainWindow::on_eval_show_contrast_panel_clicked()
+{
+    ui->eval_contrast->show();
+}
+void MainWindow::on_eval_image_max_valueChanged(double arg1)
+{
+    eval_v2c1.set_range(ui->eval_image_min->value(),ui->eval_image_max->value());
+    on_eval_pos_valueChanged(ui->eval_pos->value());
+}
+
+void MainWindow::on_eval_image_min_valueChanged(double arg1)
+{
+    eval_v2c1.set_range(ui->eval_image_min->value(),ui->eval_image_max->value());
+    on_eval_pos_valueChanged(ui->eval_pos->value());
+}
 
 void MainWindow::run_action(QString command)
 {

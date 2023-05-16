@@ -40,6 +40,7 @@ MainWindow::MainWindow(QWidget *parent)
     eval_v2c2.two_color(tipl::rgb(0,0,0),tipl::rgb(255,255,255));
     eval_v2c2.set_range(0.0f,1.0f);
 
+    ui->eval_contrast->hide();
 
     // populate device list
     {
@@ -86,8 +87,12 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_eval_view_dim_currentIndexChanged(int index)
 {
-    ui->eval_pos->setMaximum(eval_I1.shape()[index]-1);
-    ui->eval_pos->setValue(ui->eval_pos->maximum()/2);
+    auto currentRow = ui->evaluate_list->currentRow();
+    if(currentRow >= 0 && currentRow < eval_I1_buffer.size() && !eval_I1_buffer[currentRow].empty())
+    {
+        ui->eval_pos->setMaximum(eval_I1_buffer[currentRow].shape()[index]-1);
+        ui->eval_pos->setValue(ui->eval_pos->maximum()/2);
+    }
 }
 void MainWindow::on_view_dim_currentIndexChanged(int index)
 {
@@ -110,6 +115,15 @@ void MainWindow::on_actionConsole_triggered()
     static auto* con = new Console(this);
     con->showNormal();
 }
+
+
+
+
+
+
+
+
+
 
 
 
