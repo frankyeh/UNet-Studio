@@ -19,8 +19,20 @@ std::vector<std::string> operations({
         "swap_xy",
         "swap_yz",
         "swap_xz"});
+
+size_t linear_cuda(const tipl::image<3,float>& from,
+                              tipl::vector<3> from_vs,
+                              const tipl::image<3,float>& to,
+                              tipl::vector<3> to_vs,
+                              tipl::affine_transform<float>& arg,
+                              tipl::reg::reg_type reg_type,
+                              bool& terminated,
+                              const float* bound);
 void preproc_actions(tipl::image<3>& image,
-                   tipl::vector<3>& image_vs,
+                     tipl::vector<3>& image_vs,
+                     const tipl::image<3>& template_image,
+                     const tipl::vector<3>& template_image_vs,
+                   tipl::transformation_matrix<float>& trans,
                    const tipl::shape<3>& model_dim,
                    const tipl::vector<3>& model_vs,
                    const ProcStrategy& proc_strategy,
@@ -32,12 +44,12 @@ void preproc_actions(tipl::image<3>& image,
         return;
     }
 
-    tipl::vector<3> target_vs(proc_strategy.match_resolution ? model_vs : image_vs);
-    tipl::image<3> target_image(proc_strategy.crop_fov ? model_dim :
+    tipl::vector<3> target_vs(proc_strategy.match_resolution || proc_strategy.match_resolution ? model_vs : image_vs);
+    tipl::image<3> target_image(proc_strategy.match_fov || proc_strategy.match_resolution ? model_dim :
                         unet_inputsize(tipl::shape<3>(float(image.width())*image_vs[0]/target_vs[0],
                                        float(image.height())*image_vs[1]/target_vs[1],
                                        float(image.depth())*image_vs[2]/target_vs[2])));
-    if(!proc_strategy.crop_fov && !proc_strategy.match_resolution)
+    if(!proc_strategy.match_fov && !proc_strategy.match_resolution)
     {
         auto shift = tipl::vector<3,int>(target_image.shape())-
                      tipl::vector<3,int>(image.shape());
@@ -49,8 +61,29 @@ void preproc_actions(tipl::image<3>& image,
     {
         tipl::affine_transform<float> arg;
         arg.translocation[2] = (float(image.shape()[2])*image_vs[2]-float(target_image.shape()[2])*target_vs[2])*0.5f;
-        tipl::resample_mt(image,target_image,
-            tipl::transformation_matrix<float>(arg,target_image.shape(),target_vs,image.shape(),image_vs));
+        if(proc_strategy.match_orientation && !template_image.empty())
+        {
+            tipl::out() << "rotating images to template orientation" << std::endl;
+            auto arg_rotated = arg;
+            bool terminated = false;
+            linear_cuda(template_image,template_image_vs,image,image_vs,arg_rotated,
+                                          tipl::reg::rigid_body,terminated,tipl::reg::large_bound);
+            trans = tipl::transformation_matrix<float>(arg_rotated,target_image.shape(),target_vs,image.shape(),image_vs);
+            tipl::image<3> rotated_image(model_dim);
+            tipl::resample_mt(image,rotated_image,trans);
+            float r = tipl::correlation_mt(rotated_image.begin(),rotated_image.end(),template_image.begin());
+            tipl::out() << arg_rotated << std::endl;
+            tipl::out() << "r2:" << r*r << std::endl;
+            if(r*r > 0.3f)
+            {
+                image.swap(rotated_image);
+                return;
+            }
+        }
+
+        trans = tipl::transformation_matrix<float>(arg,target_image.shape(),target_vs,image.shape(),image_vs);
+        tipl::resample_mt(image,target_image,trans);
+
     }
     target_image.swap(image);
 }
@@ -243,10 +276,24 @@ void evaluate_unet::read_file(void)
     network_input = std::vector<tipl::image<3> >(param.image_file_name.size());
     raw_image_shape = std::vector<tipl::shape<3> >(param.image_file_name.size());
     raw_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
+    raw_image_trans = std::vector<tipl::transformation_matrix<float> >(param.image_file_name.size());
     raw_image_flip_swap = std::vector<std::vector<char> >(param.image_file_name.size());
     data_ready = std::vector<bool> (param.image_file_name.size());
     read_file_thread.reset(new std::thread([=]()
     {
+        tipl::image<3> template_image;
+        tipl::vector<3> template_image_vs;
+        if(proc_strategy.match_resolution && !proc_strategy.template_file_name.empty())
+        {
+            tipl::io::gz_nifti in;
+            if(in.load_from_file(proc_strategy.template_file_name))
+            {
+                in >> template_image;
+                in.get_voxel_size(template_image_vs);
+            }
+            else
+                tipl::out() << "cannot read template file: " << proc_strategy.template_file_name << std::endl;
+        }
         for(size_t i = 0;i < network_input.size() && !aborted;++i)
         {
             while(i > cur_prog+6)
@@ -272,6 +319,8 @@ void evaluate_unet::read_file(void)
             tipl::out() << "dim: " << network_input[i].shape() << " vs:" << raw_image_vs[i] << std::endl;
             preproc_actions(network_input[i],
                           raw_image_vs[i],
+                          template_image,template_image_vs,
+                          raw_image_trans[i],
                           model->dim,model->voxel_size,
                           proc_strategy,error_msg);
             tipl::lower_threshold(network_input[i],0.0f);
@@ -366,12 +415,12 @@ void evaluate_unet::output(void)
                     const auto& image_dim = raw_image_shape[cur_output];
 
                     tipl::vector<3> target_vs(proc_strategy.match_resolution ? model_vs : image_vs);
-                    tipl::shape<3> target_dim(proc_strategy.crop_fov ? model_dim :
+                    tipl::shape<3> target_dim(proc_strategy.match_fov ? model_dim :
                                         unet_inputsize(tipl::shape<3>(float(image_dim.width())*image_vs[0]/target_vs[0],
                                                        float(image_dim.height())*image_vs[1]/target_vs[1],
                                                        float(image_dim.depth())*image_vs[2]/target_vs[2])));
 
-                    if(!proc_strategy.crop_fov && !proc_strategy.match_resolution)
+                    if(!proc_strategy.match_fov && !proc_strategy.match_resolution)
                     {
                         auto shift = tipl::vector<3,int>(to.shape())-tipl::vector<3,int>(from.shape());
                         shift[0] /= 2;
@@ -380,10 +429,9 @@ void evaluate_unet::output(void)
                     }
                     else
                     {
-                        tipl::affine_transform<float> arg;
-                        arg.translocation[2] = (float(target_dim[2])*target_vs[2]-float(raw_image_shape[cur_output][2])*raw_image_vs[cur_output][2])*0.5;
-                        tipl::resample_mt(from,to,
-                            tipl::transformation_matrix<float>(arg,raw_image_shape[cur_output],raw_image_vs[cur_output],target_dim,target_vs));
+                        auto trans = raw_image_trans[cur_output];
+                        trans.inverse();
+                        tipl::resample_mt<tipl::nearest>(from,to,trans);
                     }
                 });
 

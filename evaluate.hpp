@@ -13,7 +13,9 @@ struct EvaluateParam{
 struct ProcStrategy{
     // preproc
     bool match_resolution = true;
-    bool crop_fov = true;
+    bool match_fov = true;
+    bool match_orientation = false;
+    std::string template_file_name;
     // postproc
     unsigned char output_format = 0;
 };
@@ -28,6 +30,7 @@ public:
     std::vector<tipl::image<3> > network_input,network_output;
     std::vector<tipl::shape<3> > raw_image_shape;
     std::vector<tipl::vector<3> > raw_image_vs;
+    std::vector<tipl::transformation_matrix<float> > raw_image_trans;
     std::vector<std::vector<char> > raw_image_flip_swap;
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;

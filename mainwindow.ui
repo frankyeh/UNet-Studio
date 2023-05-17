@@ -183,9 +183,9 @@
               </widget>
              </item>
              <item row="1" column="1">
-              <widget class="QCheckBox" name="crop_fov">
+              <widget class="QCheckBox" name="match_fov">
                <property name="text">
-                <string>crop FOV</string>
+                <string>match FOV</string>
                </property>
                <property name="checked">
                 <bool>true</bool>
@@ -273,6 +273,13 @@
                </property>
                <property name="text">
                 <string>Evaluate</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QCheckBox" name="match_orientation">
+               <property name="text">
+                <string>match_orientation</string>
                </property>
               </widget>
              </item>

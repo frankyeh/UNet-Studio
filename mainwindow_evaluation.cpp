@@ -93,7 +93,7 @@ void MainWindow::on_evaluate_builtin_networks_currentIndexChanged(int index)
             QMessageBox::critical(this,"Error","Failed to load network");
             return;
         }
-        ui->evaluate_network_info->setText(QString("name: %1\n").arg(ui->evaluate_builtin_networks->currentText()) + evaluate.model->get_info().c_str());
+        ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name = ui->evaluate_builtin_networks->currentText()) + evaluate.model->get_info().c_str());
         ui->evaluate->setEnabled(evaluate_list.size());
     }
 }
@@ -117,9 +117,31 @@ void MainWindow::on_evaluate_clicked()
     ui->evaluate_progress->setMaximum(evaluate_list.size());
     ui->evaluate_list2->clear();
     evaluate.option = eval_option;
-    evaluate.proc_strategy.match_resolution = ui->match_resolution->isChecked();
-    evaluate.proc_strategy.crop_fov = ui->crop_fov->isChecked();
+    evaluate.proc_strategy.match_resolution = ui->match_resolution->isChecked() | ui->match_orientation->isChecked();
+    evaluate.proc_strategy.match_fov = ui->match_fov->isChecked() | ui->match_orientation->isChecked();
+    evaluate.proc_strategy.match_orientation = ui->match_orientation->isChecked();
     evaluate.proc_strategy.output_format = ui->evaluate_output->currentIndex();
+    // find template
+    if(ui->match_orientation->isChecked())
+    {
+        evaluate.proc_strategy.template_file_name.clear();
+        QDir dir(QCoreApplication::applicationDirPath() + "/template");
+        dir.setNameFilters(QStringList() << "*.nii.gz");
+        QFileInfoList files = dir.entryInfoList(QDir::Files);
+        for (const QFileInfo& fileInfo : files)
+        {
+            if(eval_name.contains(fileInfo.fileName().remove(".nii.gz")))
+            {
+                evaluate.proc_strategy.template_file_name = (QCoreApplication::applicationDirPath() + "/template/" + fileInfo.fileName()).toStdString();
+                tipl::out() << "rotation template: " << evaluate.proc_strategy.template_file_name << std::endl;
+            }
+        }
+        if(evaluate.proc_strategy.template_file_name.empty())
+        {
+            QMessageBox::critical(this,"ERROR",QString("cannot find a rotation template for ") + eval_name);
+            return;
+        }
+    }
     evaluate.start();
     eval_timer->start();
 
