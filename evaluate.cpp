@@ -384,7 +384,7 @@ void evaluate_unet::output(void)
         {
             bool& running;
             exist_guard(bool& running_):running(running_){}
-            ~exist_guard() { running = false; }
+            ~exist_guard() { running = false;status = "complete";}
         } guard(running);
 
         try{
@@ -407,18 +407,7 @@ void evaluate_unet::output(void)
                 {
                     auto from = network_output[cur_output].alias(dim_from.size()*i,dim_from);
                     auto to = label_prob[cur_output].alias(dim_to.size()*i,dim_to);
-
                     const auto& model_vs = model->voxel_size;
-                    const auto& model_dim = model->dim;
-                    const auto& image_vs = raw_image_vs[cur_output];
-                    const auto& image_dim = raw_image_shape[cur_output];
-
-                    tipl::vector<3> target_vs(proc_strategy.match_resolution ? model_vs : image_vs);
-                    tipl::shape<3> target_dim(proc_strategy.match_fov ? model_dim :
-                                        unet_inputsize(tipl::shape<3>(float(image_dim.width())*image_vs[0]/target_vs[0],
-                                                       float(image_dim.height())*image_vs[1]/target_vs[1],
-                                                       float(image_dim.depth())*image_vs[2]/target_vs[2])));
-
                     if(!proc_strategy.match_fov && !proc_strategy.match_resolution)
                     {
                         auto shift = tipl::vector<3,int>(to.shape())-tipl::vector<3,int>(from.shape());
@@ -433,7 +422,8 @@ void evaluate_unet::output(void)
                         tipl::resample_mt<tipl::nearest>(from,to,trans);
                     }
                 });
-
+                if(aborted)
+                    return;
                 foreground_prob[cur_output] = get_foreground_prob(label_prob[cur_output],param.prob_threshold,raw_image_shape[cur_output]);
                 switch(proc_strategy.output_format)
                 {
@@ -475,7 +465,7 @@ void evaluate_unet::output(void)
         }
         tipl::out() << error_msg << std::endl;
         aborted = true;
-        status = "complete";
+
     }));
 }
 
