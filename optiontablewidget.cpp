@@ -280,7 +280,6 @@ void TreeModel::load(QSettings& set)
 }
 TreeModel::~TreeModel()
 {
-    save(settings);
 }
 
 int TreeModel::columnCount(const QModelIndex &) const

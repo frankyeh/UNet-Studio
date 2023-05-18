@@ -110,5 +110,9 @@ private slots:
     void on_eval_show_contrast_panel_clicked();
     void on_eval_image_max_valueChanged(double arg1);
     void on_eval_image_min_valueChanged(double arg1);
+    void on_action_train_open_options_triggered();
+    void on_action_train_save_options_triggered();
+    void on_action_train_copy_view_left_triggered();
+    void on_action_train_copy_view_right_triggered();
 };
 #endif // MAINWINDOW_H

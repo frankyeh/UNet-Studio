@@ -1,11 +1,11 @@
 Reduction/Cropping/cropping/Off:25%:50%:75%:On/0/Apply signal cropping
 Reduction/├Minimum Size/cropping_size_min/float:0.0:1.0:0.05:2/0.1/minimum size of cropping in proportion to image width
 Reduction/└Maximum Size/cropping_size_max/float:0.0:1.0:0.05:2/0.2/maximum size of cropping in proportion to image width
-Reduction/Downsample X/downsample_x/Off:25%:50%:75%:On/0/apply downsample of data
+Reduction/Downsample X/downsample_x/Off:25%:50%:75%:On/2/apply downsample of data
 Reduction/└Ratio/downsample_x_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
-Reduction/Downsample Y/downsample_y/Off:25%:50%:75%:On/0/apply downsample of data
+Reduction/Downsample Y/downsample_y/Off:25%:50%:75%:On/2/apply downsample of data
 Reduction/└Ratio/downsample_y_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
-Reduction/Downsample Z/downsample_z/Off:25%:50%:75%:On/0/apply downsample of data
+Reduction/Downsample Z/downsample_z/Off:25%:50%:75%:On/2/apply downsample of data
 Reduction/└Ratio/downsample_z_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
 Reduction/Noise/noise/Off:25%:50%:75%:On/2/add uniform noise
 Reduction/└Magnitude/noise_mag/float:0.0:1.0:0.1:2/0.2/magnitude of uniform noise
@@ -20,8 +20,8 @@ Rigid Motion/Translocation/translocation_ratio/float:0.0:1.0:0.05:2/0.2/upper li
 Rigid Motion/Rotation X/rotation_x/float:0.0:2.0:0.05:2/0.2/upper limit of rotation at x axis
 Rigid Motion/Rotation Y/rotation_y/float:0.0:2.0:0.05:2/0.2/upper limit of rotation at y axis
 Rigid Motion/Rotation Z/rotation_z/float:0.0:2.0:0.05:2/0.2/upper limit of rotation at z axis
-Camera Transform/Zoom Out/scaling_up/float:1.0:2.0:0.05:2/1.25/upper limit of scaling up
-Camera Transform/Zoom In/scaling_down/float:0.1:1.0:0.05:2/0.8/lower limit of scaling down
+Camera Transform/Zoom Out/scaling_up/float:1.0:5.0:0.05:2/1.25/upper limit of scaling up
+Camera Transform/Zoom In/scaling_down/float:0.05:1.0:0.05:2/0.8/lower limit of scaling down
 Camera Transform/Aspect Ratio/aspect_ratio/float:1.0:2.0:0.05:2/1.25/upper limit of relative scaling at axis
 Camera Transform/Perspective/perspective/float:0.0:0.5:0.05:2/0.1/upper limit of perspective transform
 Camera Transform/Lens Distortion/lens_distortion/float:0.0:0.5:0.01:2/0.1/upper limit of lens distortion

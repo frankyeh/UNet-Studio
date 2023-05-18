@@ -219,9 +219,10 @@ void MainWindow::on_action_evaluate_clear_all_triggered()
 
 void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
 {
-    auto pos_index = float(ui->eval_pos->value())/float(ui->eval_pos->maximum());
-    if(pos_index == 0.0f)
-        pos_index = 0.5f;
+    float pos_index = 0.5f;
+    if(ui->eval_pos->value() && ui->eval_pos->maximum())
+        pos_index = float(ui->eval_pos->value())/float(ui->eval_pos->maximum());
+
     if(currentRow >= 0 && currentRow < eval_I1_buffer.size())
     {
         float ratio = 1.0f;
@@ -270,7 +271,7 @@ void MainWindow::get_evaluate_views(QImage& view1,QImage& view2,float display_ra
     if(display_ratio < 1.0f)
         display_ratio = 1.0f;
 
-    int slice_pos = ui->eval_pos->value();
+    int slice_pos = std::max<int>(0,std::min<int>(ui->eval_pos->value(),eval_I1_buffer[currentRow].shape()[d]-1));
     view1 << eval_v2c1[tipl::volume2slice_scaled(eval_I1_buffer[currentRow],d,slice_pos,display_ratio)];
 
     if(currentRow < evaluate.cur_output)
@@ -394,7 +395,7 @@ void MainWindow::on_action_evaluate_copy_all_right_view_triggered()
     {
         ui->evaluate_list2->setCurrentRow(i);
         QImage view1,view2;
-        get_evaluate_views(view1,view2,1.0f);
+        get_evaluate_views(view1,view2);
         images.push_back(view2);
     }
     QApplication::clipboard()->setImage(tipl::qt::create_mosaic(images,num_col));
@@ -413,7 +414,7 @@ void MainWindow::on_action_evaluate_copy_all_left_view_triggered()
     {
         ui->evaluate_list2->setCurrentRow(i);
         QImage view1,view2;
-        get_evaluate_views(view1,view2,1.0f);
+        get_evaluate_views(view1,view2);
         images.push_back(view1);
     }
     QApplication::clipboard()->setImage(tipl::qt::create_mosaic(images,num_col));

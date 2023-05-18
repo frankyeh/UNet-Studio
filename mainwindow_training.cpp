@@ -622,3 +622,46 @@ void MainWindow::on_action_train_copy_view_triggered()
     painter.end();
     QApplication::clipboard()->setImage(concatenatedImage);
 }
+
+
+void MainWindow::on_action_train_copy_view_left_triggered()
+{
+    QImage view1,view2;
+    get_train_views(view1,view2);
+    QApplication::clipboard()->setImage(view1);
+
+}
+
+
+void MainWindow::on_action_train_copy_view_right_triggered()
+{
+    QImage view1,view2;
+    get_train_views(view1,view2);
+    QApplication::clipboard()->setImage(view2);
+
+}
+
+
+
+void MainWindow::on_action_train_open_options_triggered()
+{
+    QString file = QFileDialog::getOpenFileName(this,"Open Settings","settings.ini","Settings (*.ini);;All files (*)");
+    if(file.isEmpty())
+        return;
+    QSettings s(file,QSettings::IniFormat);
+    option->load(s);
+    QMessageBox::information(this,"","Setting Loaded");
+}
+
+
+void MainWindow::on_action_train_save_options_triggered()
+{
+    QString file = QFileDialog::getSaveFileName(this,"Save Error","settings.ini","Settings (*.ini);;All files (*)");
+    if(file.isEmpty())
+        return;
+    {
+        QSettings s(file,QSettings::IniFormat);
+        option->save(s);
+    }
+    QMessageBox::information(this,"","Setting Saved");
+}
