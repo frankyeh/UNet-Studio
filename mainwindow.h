@@ -117,5 +117,6 @@ private slots:
     void on_action_train_copy_view_right_triggered();
     void on_action_evaluate_copy_all_right_view_cropped_triggered();
     void on_action_evaluate_copy_all_left_view_cropped_triggered();
+    void on_action_train_reorder_output_triggered();
 };
 #endif // MAINWINDOW_H

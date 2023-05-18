@@ -4,7 +4,6 @@
 #include "zlib.h"
 #include "unet.hpp"
 
-
 bool load_from_file(UNet3d& model,const char* file_name)
 {
     tipl::io::gz_mat_read mat;
@@ -45,7 +44,7 @@ bool save_to_file(UNet3d& model,const char* file_name)
     for(auto tensor : model->parameters())
     {
         auto cpu_tensor = tensor.to(torch::kCPU);
-        mat.write((std::string("tensor")+std::to_string(id)).c_str(),cpu_tensor.data_ptr<float>(),cpu_tensor.numel(),1);
+        mat.write((std::string("tensor")+std::to_string(id)).c_str(),cpu_tensor.data_ptr<float>(),cpu_tensor.numel()/cpu_tensor.sizes().front(),cpu_tensor.sizes().front());
         ++id;
     }
     return true;

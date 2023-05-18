@@ -225,7 +225,7 @@ void MainWindow::on_action_train_save_network_triggered()
     QString fileName = QFileDialog::getSaveFileName(this,"Save network file",
                                                 settings.value("work_dir").toString() + "/" +
                                                 train_name + ".net.gz","Network files (*net.gz);;All files (*)");
-    if(!fileName.isEmpty() && save_to_file(train.output_model,fileName.toStdString().c_str()))
+    if(!fileName.isEmpty() && save_to_file(train.running ? train.output_model : train.model,fileName.toStdString().c_str()))
     {
         QMessageBox::information(this,"","Network Saved");
         settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
@@ -610,6 +610,67 @@ void MainWindow::on_save_error_clicked()
 }
 
 
+
+void MainWindow::on_action_train_reorder_output_triggered()
+{
+    if(train.running)
+    {
+        QMessageBox::critical(this,"","Cannot change output during training");
+        return;
+    }
+    std::string cur_order;
+    for(size_t i = 0;i < train.model->out_count;++i)
+    {
+        if(i)
+            cur_order += " ";
+        cur_order += std::to_string(i);
+    }
+    bool ok;
+    QString new_order_text = QInputDialog::getText(nullptr, "Input", "Enter order:", QLineEdit::Normal, cur_order.c_str(), &ok);
+    if (!ok || new_order_text.isEmpty())
+        return;
+
+    std::vector<int> new_order;
+    {
+        QStringList stringList = new_order_text.split(' ');
+        std::transform(stringList.begin(), stringList.end(), std::back_inserter(new_order),
+                       [](const QString& str) { return str.toInt(); });
+    }
+
+    train.model->to(torch::kCPU);
+
+    auto old_model = UNet3d(train.model->in_count,train.model->out_count,train.model->feature_string);
+    old_model->copy_from(*train.model);
+
+    train.model = UNet3d(train.model->in_count,new_order.size(),train.model->feature_string);
+    train.model->copy_from(*old_model);
+
+    auto tensor_from = old_model->parameters();
+    auto tensor_to = train.model->parameters();
+
+    {
+        auto tensor_buf_from = tensor_from.back().data_ptr<float>();
+        auto tensor_buf_to = tensor_to.back().data_ptr<float>();
+        for(size_t i = 0;i < new_order.size();++i)
+            tensor_buf_to[i] = tensor_buf_from[new_order[i]];
+    }
+
+    {
+        auto tensor_buf_from = tensor_from[tensor_from.size()-2].data_ptr<float>();
+        auto tensor_buf_to = tensor_to[tensor_to.size()-2].data_ptr<float>();
+        size_t total_size = tensor_to[tensor_to.size()-2].numel();
+        size_t length =  total_size/new_order.size();
+        for(size_t i = 0;i < new_order.size();++i)
+        {
+            std::copy(tensor_buf_from + length*new_order[i],
+                      tensor_buf_from + length*new_order[i] + length,
+                      tensor_buf_to + i*length);
+        }
+    }
+}
+
+
+
 void MainWindow::on_action_train_copy_view_triggered()
 {
     QImage view1,view2;
@@ -622,7 +683,6 @@ void MainWindow::on_action_train_copy_view_triggered()
     QApplication::clipboard()->setImage(concatenatedImage);
 }
 
-
 void MainWindow::on_action_train_copy_view_left_triggered()
 {
     QImage view1,view2;
@@ -631,7 +691,6 @@ void MainWindow::on_action_train_copy_view_left_triggered()
 
 }
 
-
 void MainWindow::on_action_train_copy_view_right_triggered()
 {
     QImage view1,view2;
@@ -639,8 +698,6 @@ void MainWindow::on_action_train_copy_view_right_triggered()
     QApplication::clipboard()->setImage(view2);
 
 }
-
-
 
 void MainWindow::on_action_train_open_options_triggered()
 {

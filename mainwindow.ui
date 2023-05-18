@@ -1378,15 +1378,9 @@
     <property name="title">
      <string>&amp;View</string>
     </property>
-    <addaction name="actionConsole"/>
-   </widget>
-   <widget class="QMenu" name="menuEvalute">
-    <property name="title">
-     <string>Evalute</string>
-    </property>
-    <widget class="QMenu" name="menuCopy_To_Clipboard_2">
+    <widget class="QMenu" name="menuCopy_to_Clipboard">
      <property name="title">
-      <string>Copy To Clipboard</string>
+      <string>Copy Evaluate View</string>
      </property>
      <addaction name="action_evaluate_copy_view_left"/>
      <addaction name="action_evaluate_copy_view_right"/>
@@ -1395,6 +1389,22 @@
      <addaction name="action_evaluate_copy_all_right_view_cropped"/>
      <addaction name="action_evaluate_copy_all_left_view_cropped"/>
     </widget>
+    <widget class="QMenu" name="menuCopy_Train_View">
+     <property name="title">
+      <string>Copy Train View</string>
+     </property>
+     <addaction name="action_train_copy_view"/>
+     <addaction name="action_train_copy_view_left"/>
+     <addaction name="action_train_copy_view_right"/>
+    </widget>
+    <addaction name="actionConsole"/>
+    <addaction name="menuCopy_to_Clipboard"/>
+    <addaction name="menuCopy_Train_View"/>
+   </widget>
+   <widget class="QMenu" name="menuEvalute">
+    <property name="title">
+     <string>Evalute</string>
+    </property>
     <addaction name="action_evaluate_open_images"/>
     <addaction name="action_evaluate_save_results"/>
     <addaction name="action_evaluate_clear_all"/>
@@ -1402,43 +1412,33 @@
     <addaction name="action_evaluate_open_network"/>
     <addaction name="action_evaluate_copy_trained_network"/>
     <addaction name="separator"/>
-    <addaction name="menuCopy_To_Clipboard_2"/>
-    <addaction name="separator"/>
     <addaction name="action_evaluate_option"/>
    </widget>
    <widget class="QMenu" name="menuTrain">
     <property name="title">
      <string>Train</string>
     </property>
-    <widget class="QMenu" name="menuCopy_To_Clipboard_3">
-     <property name="title">
-      <string>Copy To Clipboard</string>
-     </property>
-     <addaction name="action_train_copy_view"/>
-     <addaction name="action_train_copy_view_left"/>
-     <addaction name="action_train_copy_view_right"/>
-    </widget>
     <addaction name="action_train_open_files"/>
     <addaction name="action_train_open_labels"/>
-    <addaction name="action_train_auto_match_label_files"/>
     <addaction name="action_train_clear_all"/>
     <addaction name="separator"/>
     <addaction name="action_train_new_network"/>
     <addaction name="action_train_open_network"/>
     <addaction name="action_train_save_network"/>
     <addaction name="separator"/>
+    <addaction name="action_train_auto_match_label_files"/>
+    <addaction name="action_train_reorder_output"/>
+    <addaction name="separator"/>
     <addaction name="action_open_training_setting"/>
     <addaction name="action_save_training_setting"/>
-    <addaction name="separator"/>
-    <addaction name="menuCopy_To_Clipboard_3"/>
     <addaction name="separator"/>
     <addaction name="action_train_save_options"/>
     <addaction name="action_train_open_options"/>
     <addaction name="action_train_options"/>
    </widget>
-   <addaction name="menu_View"/>
    <addaction name="menuEvalute"/>
    <addaction name="menuTrain"/>
+   <addaction name="menu_View"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="action_open_training_setting">
@@ -1588,7 +1588,7 @@
   </action>
   <action name="action_train_copy_view">
    <property name="text">
-    <string>Both Views</string>
+    <string>Left and Right Views</string>
    </property>
   </action>
   <action name="action_evaluate_copy_view_left">
@@ -1647,6 +1647,11 @@
   <action name="action_evaluate_copy_all_right_view_cropped">
    <property name="text">
     <string>All Right View Cropped</string>
+   </property>
+  </action>
+  <action name="action_train_reorder_output">
+   <property name="text">
+    <string>Reorder Output...</string>
    </property>
   </action>
  </widget>

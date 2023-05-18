@@ -86,7 +86,7 @@ public:
                    torch::nn::Conv3d(torch::nn::Conv3dOptions(features_up[0].back(), out_count, 1)));
         register_module("output",output);
     }
-    void copy_from(UNet3dImpl& r)
+    void copy_from(const UNet3dImpl& r)
     {
         torch::NoGradGuard no_grad;
         set_requires_grad(false);

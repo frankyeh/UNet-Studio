@@ -48,17 +48,16 @@ void MainWindow::on_action_evaluate_open_images_triggered()
 
 void MainWindow::on_action_evaluate_copy_trained_network_triggered()
 {
-    if(train.output_model->feature_string.empty())
+    auto& model = train.running ? train.output_model : train.model;
+    if(model->feature_string.empty())
     {
         QMessageBox::critical(this,"Error","No trained network");
         return;
     }
     ui->evaluate_builtin_networks->setCurrentIndex(0);
-    evaluate.model = UNet3d(train.output_model->in_count,train.output_model->out_count,train.output_model->feature_string);
-    evaluate.model->set_requires_grad(false);
-    evaluate.model->set_bn_tracking_running_stats(false);
+    evaluate.model = UNet3d(model->in_count,model->out_count,model->feature_string);
+    evaluate.model->copy_from(*model);
     evaluate.model->eval();
-    evaluate.model->copy_from(*train.output_model);
     ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name = train_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
     ui->evaluate_builtin_networks->setCurrentIndex(0);
@@ -386,12 +385,19 @@ void MainWindow::on_action_evaluate_copy_view_right_triggered()
     QMessageBox::information(this,"","Copied");
 }
 
-void MainWindow::on_action_evaluate_copy_all_right_view_triggered()
+void MainWindow::copy_to_clipboard(bool left,bool cropped)
 {
     bool ok = true;
     int num_col = QInputDialog::getInt(nullptr,"", "Specify number of columns:",5,1,20,1&ok);
     if(!ok)
         return;
+    int margin = 0;
+    if(cropped)
+    {
+        margin = QInputDialog::getInt(nullptr,"", "Specify margin ",20,0,100,1&ok);
+        if(!ok)
+            return;
+    }
     std::vector<QImage> images;
     tipl::progress p("generating",true);
     for(size_t i = 0;p(i,ui->evaluate_list2->count());++i)
@@ -399,28 +405,43 @@ void MainWindow::on_action_evaluate_copy_all_right_view_triggered()
         ui->evaluate_list2->setCurrentRow(i);
         QImage view1,view2;
         get_evaluate_views(view1,view2);
-        images.push_back(view2);
+        if(cropped)
+        {
+            tipl::vector<2,int> min,max;
+            tipl::bounding_box(tipl::image<2,int32_t>(reinterpret_cast<const uint32_t*>(view2.constBits()),
+                                                      tipl::shape<2>(view2.width(),view2.height())),min,max,0,margin);
+            max -= min;
+            view1 = view1.copy(min[0],min[1],max[0],max[1]);
+            view2 = view2.copy(min[0],min[1],max[0],max[1]);
+        }
+        images.push_back(left ? view1 : view2);
     }
     QApplication::clipboard()->setImage(tipl::qt::create_mosaic(images,num_col));
+}
+
+void MainWindow::on_action_evaluate_copy_all_right_view_triggered()
+{
+    copy_to_clipboard(false,false);
 }
 
 
 void MainWindow::on_action_evaluate_copy_all_left_view_triggered()
 {
-    bool ok = true;
-    int num_col = QInputDialog::getInt(nullptr,"", "Specify number of columns:",5,1,20,1&ok);
-    if(!ok)
-        return;
-    std::vector<QImage> images;
-    tipl::progress p("generating",true);
-    for(size_t i = 0;p(i,ui->evaluate_list2->count());++i)
-    {
-        ui->evaluate_list2->setCurrentRow(i);
-        QImage view1,view2;
-        get_evaluate_views(view1,view2);
-        images.push_back(view1);
-    }
-    QApplication::clipboard()->setImage(tipl::qt::create_mosaic(images,num_col));
+    copy_to_clipboard(true,false);
+}
+
+
+
+void MainWindow::on_action_evaluate_copy_all_right_view_cropped_triggered()
+{
+    copy_to_clipboard(false,true);
+}
+
+
+void MainWindow::on_action_evaluate_copy_all_left_view_cropped_triggered()
+{
+    copy_to_clipboard(true,true);
+
 }
 
 void MainWindow::on_eval_show_contrast_panel_clicked()
