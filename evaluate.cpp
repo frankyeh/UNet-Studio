@@ -384,7 +384,7 @@ void evaluate_unet::output(void)
         {
             bool& running;
             exist_guard(bool& running_):running(running_){}
-            ~exist_guard() { running = false;status = "complete";}
+            ~exist_guard() { running = false;}
         } guard(running);
 
         try{
@@ -465,7 +465,7 @@ void evaluate_unet::output(void)
         }
         tipl::out() << error_msg << std::endl;
         aborted = true;
-
+        status = "complete";
     }));
 }
 
