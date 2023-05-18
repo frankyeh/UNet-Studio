@@ -388,8 +388,8 @@ void MainWindow::on_action_evaluate_copy_view_right_triggered()
 
 void MainWindow::on_action_evaluate_copy_all_right_view_triggered()
 {
-    bool ok;
-    int num_col = QInputDialog::getInt(nullptr,"", "Specify number of columns:",5,1,12,1&ok);
+    bool ok = true;
+    int num_col = QInputDialog::getInt(nullptr,"", "Specify number of columns:",5,1,20,1&ok);
     if(!ok)
         return;
     std::vector<QImage> images;
@@ -407,8 +407,8 @@ void MainWindow::on_action_evaluate_copy_all_right_view_triggered()
 
 void MainWindow::on_action_evaluate_copy_all_left_view_triggered()
 {
-    bool ok;
-    int num_col = QInputDialog::getInt(nullptr,"", "Specify number of columns:",5,1,12,1&ok);
+    bool ok = true;
+    int num_col = QInputDialog::getInt(nullptr,"", "Specify number of columns:",5,1,20,1&ok);
     if(!ok)
         return;
     std::vector<QImage> images;
