@@ -236,6 +236,7 @@ void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
             eval_I1_buffer_max[currentRow] = tipl::max_value_mt(eval_I1_buffer[currentRow]);
         }
         ui->eval_image_max->setMaximum(eval_I1_buffer_max[currentRow]);
+        ui->eval_image_max->setSingleStep(eval_I1_buffer_max[currentRow]/20.0f);
         ui->eval_image_max->setValue(eval_I1_buffer_max[currentRow]*ratio);
         ui->eval_pos->setMaximum(eval_I1_buffer[currentRow].shape()[ui->eval_view_dim->currentIndex()]-1);
     }
