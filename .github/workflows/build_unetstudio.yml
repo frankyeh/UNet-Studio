@@ -50,11 +50,10 @@ jobs:
       shell: cmd      
     - name: Packaging
       run: |
-        mkdir unet_studio_win
+        move UNet-Studio-Network unet_studio_win
         move install_win.bat unet_studio_win
         move build\unet_studio.exe unet_studio_win
         windeployqt --no-translations --no-system-d3d-compiler --compiler-runtime --no-opengl-sw unet_studio_win\unet_studio.exe
-        move UNet-Studio-Network unet_studio_win\network
         del *.zip
     - name: Zip Release (Update)
       uses: TheDoctor0/zip-release@0.6.0
