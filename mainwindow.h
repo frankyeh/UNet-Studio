@@ -42,6 +42,7 @@ public: //evalute
 private:
     int out_count = 1;
     bool is_label = true;
+    void copy_to_clipboard(bool left,bool cropped);
 public:
     train_unet train;
     evaluate_unet evaluate;
@@ -114,5 +115,7 @@ private slots:
     void on_action_train_save_options_triggered();
     void on_action_train_copy_view_left_triggered();
     void on_action_train_copy_view_right_triggered();
+    void on_action_evaluate_copy_all_right_view_cropped_triggered();
+    void on_action_evaluate_copy_all_left_view_cropped_triggered();
 };
 #endif // MAINWINDOW_H
