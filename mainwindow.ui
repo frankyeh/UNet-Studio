@@ -184,11 +184,14 @@
              </item>
              <item row="1" column="1">
               <widget class="QCheckBox" name="match_fov">
+               <property name="toolTipDuration">
+                <number>-6</number>
+               </property>
                <property name="text">
                 <string>match FOV</string>
                </property>
                <property name="checked">
-                <bool>true</bool>
+                <bool>false</bool>
                </property>
               </widget>
              </item>
