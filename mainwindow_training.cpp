@@ -439,7 +439,7 @@ void MainWindow::training()
     if(train.cur_epoch >= error_view_epoch)
         plot_error();
 
-    if(ui->tabWidget->currentIndex() == 0)
+    if(ui->tabWidget->currentIndex() == 1)
         ui->statusbar->showMessage(train.status.c_str());
 }
 
