@@ -44,8 +44,8 @@ void preproc_actions(tipl::image<3>& image,
         return;
     }
 
-    tipl::vector<3> target_vs(proc_strategy.match_resolution || proc_strategy.match_resolution ? model_vs : image_vs);
-    tipl::image<3> target_image(proc_strategy.match_fov || proc_strategy.match_resolution ? model_dim :
+    tipl::vector<3> target_vs(proc_strategy.match_resolution || proc_strategy.match_orientation ? model_vs : image_vs);
+    tipl::image<3> target_image(proc_strategy.match_fov || proc_strategy.match_orientation ? model_dim :
                         unet_inputsize(tipl::shape<3>(float(image.width())*image_vs[0]/target_vs[0],
                                        float(image.height())*image_vs[1]/target_vs[1],
                                        float(image.depth())*image_vs[2]/target_vs[2])));
