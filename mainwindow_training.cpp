@@ -496,35 +496,34 @@ void MainWindow::on_list2_currentRowChanged(int currentRow)
         ui->list1->setCurrentRow(currentRow);
 }
 
-void label_on_images(QImage& I,
+void label_on_images(QImage& I,float display_ratio,
                      const tipl::image<3>& I2,
-                     const tipl::shape<3>& dim,
+                     const tipl::shape<3>& raw_image_shape,
+                     unsigned char dim,
                      int slice_pos,
                      int cur_label_index,
                      int out_count)
 {
-    float display_ratio = float(I.width())/float(I2.width());
     std::vector<tipl::image<2,char> > region_masks(out_count);
-    if(I2.depth() != dim.depth())
+    if(I2.depth() != raw_image_shape.depth())
     {
         tipl::par_for(out_count,[&](size_t i)
         {
-            auto slice = I2.alias(dim.size()*i,dim).slice_at(slice_pos);
+            auto slice = tipl::volume2slice(I2.alias(raw_image_shape.size()*i,raw_image_shape),dim,slice_pos);
             tipl::image<2,char> mask(slice.shape());
             for(size_t pos = 0;pos < slice.size();++pos)
                 mask[pos] = (slice[pos] == 1.0f ? 1:0);
-
             region_masks[i] = std::move(mask);
         });
     }
     else
     {
+        auto slice = tipl::volume2slice(I2,dim,slice_pos);
         for(auto& mask : region_masks)
-            mask.resize(tipl::shape<2>(I2.width(),I2.height()));
-        size_t base = slice_pos*I2.plane_size();
-        for(size_t pos = 0;pos < I2.plane_size();++pos,++base)
+            mask.resize(slice.shape());
+        for(size_t pos = 0;pos < slice.size();++pos)
         {
-            int id = I2[base];
+            int id = slice[pos];
             if(id && id <= out_count)
                 region_masks[id-1][pos] = 1;
         }
@@ -557,8 +556,8 @@ void MainWindow::get_train_views(QImage& view1,QImage& view2)
 
     if(I2.size() == I1.size()*out_count)
     {
-        if(d == 2 && is_label && ui->train_view_contour->isChecked())
-            label_on_images(view1,I2,I1.shape(),slice_pos,ui->label_slider->value(),out_count);
+        if(is_label && ui->train_view_contour->isChecked())
+            label_on_images(view1,display_ratio,I2,I1.shape(),d,slice_pos,ui->label_slider->value(),out_count);
 
         view2 << v2c2[tipl::volume2slice_scaled(
                             I2.alias(I1.size()*ui->label_slider->value(),I1.shape()),

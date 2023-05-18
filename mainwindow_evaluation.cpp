@@ -252,9 +252,10 @@ void MainWindow::on_evaluate_list2_currentRowChanged(int currentRow)
     if(currentRow >= 0 && currentRow != ui->evaluate_list->currentRow())
         ui->evaluate_list->setCurrentRow(currentRow);
 }
-void label_on_images(QImage& I,
+void label_on_images(QImage& I,float display_ratio,
                      const tipl::image<3>& I2,
-                     const tipl::shape<3>& dim,
+                     const tipl::shape<3>& shape,
+                     unsigned char dim,
                      int slice_pos,
                      int cur_label_index,
                      int out_count);
@@ -281,10 +282,11 @@ void MainWindow::get_evaluate_views(QImage& view1,QImage& view2,float display_ra
         eval_v2c2.set_range(0,1);
         if(evaluate.is_label[currentRow] && eval_output_count == 1)
             eval_v2c2.set_range(0,evaluate.model->out_count);
-        if(d == 2 && evaluate.is_label[currentRow] && eval_output_count >= 1)
-            label_on_images(view1,
+        if(evaluate.is_label[currentRow] && eval_output_count >= 1)
+            label_on_images(view1,display_ratio,
                             eval_I2,
                             evaluate.raw_image_shape[currentRow],
+                            d,
                             slice_pos,
                             ui->eval_label_slider->value(),
                             evaluate.model->out_count);
