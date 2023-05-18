@@ -1392,6 +1392,8 @@
      <addaction name="action_evaluate_copy_view_right"/>
      <addaction name="action_evaluate_copy_all_right_view"/>
      <addaction name="action_evaluate_copy_all_left_view"/>
+     <addaction name="action_evaluate_copy_all_right_view_cropped"/>
+     <addaction name="action_evaluate_copy_all_left_view_cropped"/>
     </widget>
     <addaction name="action_evaluate_open_images"/>
     <addaction name="action_evaluate_save_results"/>
@@ -1635,6 +1637,16 @@
   <action name="action_train_copy_view_right">
    <property name="text">
     <string>Current Right View</string>
+   </property>
+  </action>
+  <action name="action_evaluate_copy_all_left_view_cropped">
+   <property name="text">
+    <string>All Left View Cropped</string>
+   </property>
+  </action>
+  <action name="action_evaluate_copy_all_right_view_cropped">
+   <property name="text">
+    <string>All Right View Cropped</string>
    </property>
   </action>
  </widget>
