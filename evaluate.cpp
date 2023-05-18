@@ -60,7 +60,6 @@ void preproc_actions(tipl::image<3>& image,
     else
     {
         tipl::affine_transform<float> arg;
-        arg.translocation[2] = (float(image.shape()[2])*image_vs[2]-float(target_image.shape()[2])*target_vs[2])*0.5f;
         if(proc_strategy.match_orientation && !template_image.empty())
         {
             tipl::out() << "rotating images to template orientation" << std::endl;
