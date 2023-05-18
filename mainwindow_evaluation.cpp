@@ -195,7 +195,7 @@ void MainWindow::evaluating()
         on_eval_pos_valueChanged(ui->eval_pos->value());
     }
 
-    if(ui->tabWidget->currentIndex() == 1)
+    if(ui->tabWidget->currentIndex() == 0)
         ui->statusbar->showMessage(evaluate.status.c_str());
 
 }
