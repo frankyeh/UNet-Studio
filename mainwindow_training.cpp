@@ -456,16 +456,12 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         tipl::vector<3> vs;
         if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),I1,I2,vs))
             I2.clear();
+        if(!is_label)
+            tipl::normalize(I2);
         if(ui->train_view_transform->isChecked())
             visual_perception_augmentation(*option,I1,I2,is_label,vs,ui->seed->value());
-        if(!I2.empty())
-        {
-            if(out_count != 1 && !ui->train_view_3d_label->isChecked())
-                tipl::expand_label_to_dimension(I2,out_count);
-            else
-                tipl::normalize(I2);
-        }
         v2c1.set_range(0,tipl::max_value_mt(I1));
+        v2c2.set_range(0,is_label ? out_count : 1);
         ui->pos->setMaximum(I1.shape()[ui->view_dim->currentIndex()]-1);
     }
     else
@@ -529,15 +525,19 @@ void label_on_images(QImage& I,float display_ratio,
         }
     }
 
-    std::vector<tipl::rgb> colors(out_count);
-    for(size_t i = 0;i < out_count;++i)
+    std::vector<tipl::rgb> colors(std::max<int>(5,out_count));
+    colors[0] = tipl::rgb(255,255,255);
+    colors[1] = tipl::rgb(80,170,255);
+    colors[2] = tipl::rgb(255,170,0);
+    colors[3] = tipl::rgb(244,126,113);
+    colors[4] = tipl::rgb(255,255,255);
+    for(size_t i = 5;i < out_count;++i)
         colors[i] = tipl::rgb(111,111,255);
 
     {
         QPainter painter(&I);
         painter.setCompositionMode(QPainter::CompositionMode_Screen);
         painter.drawImage(0,0,tipl::qt::draw_regions(region_masks,colors,
-                                                     false, // roi_fill_region
                                                      true, // roi_draw_edge
                                                      std::max<int>(1,display_ratio/5), // roi_edge_width
                                                      -1,display_ratio));
@@ -553,23 +553,15 @@ void MainWindow::get_train_views(QImage& view1,QImage& view2)
 
     int slice_pos = ui->pos->value();
     view1 << v2c1[tipl::volume2slice_scaled(I1,d,slice_pos,display_ratio)];
+    if(!I2.empty() && is_label && ui->train_view_contour->isChecked())
+        label_on_images(view1,display_ratio,I2,I1.shape(),d,slice_pos,out_count,out_count);
 
-    if(I2.size() == I1.size()*out_count)
-    {
-        if(is_label && ui->train_view_contour->isChecked())
-            label_on_images(view1,display_ratio,I2,I1.shape(),d,slice_pos,ui->label_slider->value(),out_count);
-
+    view2 = QImage();
+    if(!I2.empty())
         view2 << v2c2[tipl::volume2slice_scaled(
-                            I2.alias(I1.size()*ui->label_slider->value(),I1.shape()),
+                            I2.alias((I2.size() == I1.size()*out_count) ? I1.size()*ui->label_slider->value() : 0,I1.shape()),
                             ui->view_dim->currentIndex(),slice_pos,display_ratio)];
-    }
-    else
-    {
-        if(!I2.empty())
-            view2 << v2c2[tipl::volume2slice_scaled(I2,ui->view_dim->currentIndex(),slice_pos,display_ratio)];
-        else
-            view2 = QImage();
-    }
+
     view1 = view1.mirrored(d,d!=2);
     view2 = view2.mirrored(d,d!=2);
 }
