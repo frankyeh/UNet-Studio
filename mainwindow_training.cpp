@@ -539,7 +539,7 @@ void label_on_images(QImage& I,float display_ratio,
         painter.setCompositionMode(QPainter::CompositionMode_Screen);
         painter.drawImage(0,0,tipl::qt::draw_regions(region_masks,colors,
                                                      true, // roi_draw_edge
-                                                     std::max<int>(1,display_ratio/5), // roi_edge_width
+                                                     2, // roi_edge_width
                                                      -1,display_ratio));
     }
 }
