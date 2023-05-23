@@ -409,7 +409,10 @@ void train_unet::train(void)
         }
         tipl::out() << error_msg << std::endl;
         pause = aborted = true;
-        model->copy_from(*output_model);
+        if(param.output_model_type == 0)
+            output_model->copy_from(*model); // select the lastest model
+        else
+            model->copy_from(*output_model); // select the low error model
         status = "complete";
     }));
 }
