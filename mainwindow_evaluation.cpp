@@ -66,7 +66,7 @@ void MainWindow::on_action_evaluate_copy_trained_network_triggered()
 
 void MainWindow::on_action_evaluate_open_network_triggered()
 {
-    QString fileName = QFileDialog::getOpenFileName(this,"Open Network File",                                                settings.value("work_dir").toString() + "/" +
+    QString fileName = QFileDialog::getOpenFileName(this,"Open Network File",settings.value("work_dir").toString() + "/" +
                                                     settings.value("work_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
     if(fileName.isEmpty())
         return;
@@ -224,9 +224,6 @@ void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
 
     if(currentRow >= 0 && currentRow < eval_I1_buffer.size())
     {
-        float ratio = 1.0f;
-        if(ui->eval_image_max->maximum() != 0.0f)
-            ratio = float(ui->eval_image_max->value())/float(ui->eval_image_max->maximum());
         if(eval_I1_buffer[currentRow].empty())
         {
             tipl::vector<3> vs;
@@ -236,12 +233,12 @@ void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
         }
         ui->eval_image_max->setMaximum(eval_I1_buffer_max[currentRow]);
         ui->eval_image_max->setSingleStep(eval_I1_buffer_max[currentRow]/20.0f);
-        ui->eval_image_max->setValue(eval_I1_buffer_max[currentRow]*ratio);
         ui->eval_pos->setMaximum(eval_I1_buffer[currentRow].shape()[ui->eval_view_dim->currentIndex()]-1);
+        ui->eval_pos->setValue(std::round(pos_index*float(ui->eval_pos->maximum())));
+        ui->eval_image_max->setValue(tipl::max_value_mt(tipl::volume2slice(eval_I1_buffer[currentRow],ui->eval_view_dim->currentIndex(),ui->eval_pos->value())));
     }
     else
         ui->eval_pos->setMaximum(0);
-    ui->eval_pos->setValue(pos_index*float(ui->eval_pos->maximum()));
     on_eval_pos_valueChanged(ui->eval_pos->value());
     if(currentRow >= 0 && currentRow != ui->evaluate_list2->currentRow())
         ui->evaluate_list2->setCurrentRow(currentRow);
@@ -288,7 +285,7 @@ void MainWindow::get_evaluate_views(QImage& view1,QImage& view2,float display_ra
                             evaluate.raw_image_shape[currentRow],
                             d,
                             slice_pos,
-                            ui->eval_label_slider->value(),
+                            evaluate.model->out_count,
                             evaluate.model->out_count);
 
         ui->eval_label_slider->setMaximum(eval_output_count-1);
