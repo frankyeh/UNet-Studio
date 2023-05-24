@@ -22,7 +22,7 @@
     <item>
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="tab_2">
        <attribute name="title">
@@ -1396,6 +1396,7 @@
      <addaction name="action_train_copy_view"/>
      <addaction name="action_train_copy_view_left"/>
      <addaction name="action_train_copy_view_right"/>
+     <addaction name="action_train_copy_all_view"/>
     </widget>
     <addaction name="actionConsole"/>
     <addaction name="menuCopy_to_Clipboard"/>
@@ -1652,6 +1653,11 @@
   <action name="action_train_reorder_output">
    <property name="text">
     <string>Reorder Output...</string>
+   </property>
+  </action>
+  <action name="action_train_copy_all_view">
+   <property name="text">
+    <string>All Left and Right Views</string>
    </property>
   </action>
  </widget>

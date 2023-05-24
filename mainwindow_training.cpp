@@ -691,6 +691,39 @@ void MainWindow::on_action_train_copy_view_right_triggered()
 
 }
 
+
+
+
+void MainWindow::on_action_train_copy_all_view_triggered()
+{
+    bool ok = true;
+    int num_col = QInputDialog::getInt(nullptr,"", "Specify number of columns:",5,1,20,1&ok);
+    if(!ok)
+        return;
+    int num_image = QInputDialog::getInt(nullptr,"", "Specify number of images:",5,1,100,1&ok);
+    if(!ok)
+        return;
+    ui->train_view_transform->setChecked(true);
+    std::vector<QImage> images;
+    tipl::progress p("generating",true);
+    for(size_t i = 0;p(i,num_image);++i)
+    {
+        ui->seed->setValue(i);
+        on_list1_currentRowChanged(ui->list1->currentRow());
+        QImage view1,view2;
+        get_train_views(view1,view2);
+        QImage concatenatedImage(view1.width()+view2.width(),view1.height(),QImage::Format_RGB32);
+        QPainter painter(&concatenatedImage);
+        painter.drawImage(0, 0, view1);
+        painter.drawImage(view1.width(), 0, view2);
+        painter.end();
+        images.push_back(concatenatedImage);
+    }
+    QApplication::clipboard()->setImage(tipl::qt::create_mosaic(images,num_col));
+}
+
+
+
 void MainWindow::on_action_train_open_options_triggered()
 {
     QString file = QFileDialog::getOpenFileName(this,"Open Settings","settings.ini","Settings (*.ini);;All files (*)");
