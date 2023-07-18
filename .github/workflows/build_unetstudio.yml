@@ -83,7 +83,7 @@ jobs:
     - name: Install Qt
       run: |
         brew update
-        brew install qt5
+        brew install qt6
         brew install cmake
     - name: Download TIPL and Atlases
       run: |
