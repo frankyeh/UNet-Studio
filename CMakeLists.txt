@@ -57,13 +57,19 @@ endif()
 
 
 add_executable(unet_studio ${UNET_STUDIO_EXEC} ${UNET_STUDIO_SOURCES} ${UNET_STUDIO_CUDA} ${UNET_STUDIO_RESOURCES})
-set_target_properties(unet_studio PROPERTIES
-    MACOSX_BUNDLE_GUI_IDENTIFIER unet-studio.labsolver.org
-    MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
-    MACOSX_BUNDLE TRUE
-    WIN32_EXECUTABLE TRUE
-    LINK_FLAGS "/ICON:unet-studio.ico")
+
+if(WIN32)
+    set_target_properties(unet_studio PROPERTIES
+        WIN32_EXECUTABLE TRUE
+        LINK_FLAGS "/ICON:unet-studio.ico")
+else()
+    set_target_properties(unet_studio PROPERTIES
+        MACOSX_BUNDLE_GUI_IDENTIFIER unet-studio.labsolver.org
+        MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+        MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+        MACOSX_BUNDLE TRUE)
+endif()
+
 
 target_include_directories(unet_studio PUBLIC ${TIPL_DIR})
 target_compile_definitions(unet_studio PUBLIC TIPL_USE_QT)
