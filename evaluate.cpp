@@ -28,6 +28,26 @@ size_t linear_cuda(const tipl::image<3,float>& from,
                               tipl::reg::reg_type reg_type,
                               bool& terminated,
                               const float* bound);
+
+inline size_t linear_with_mi(const tipl::image<3,float>& from,
+                            const tipl::vector<3>& from_vs,
+                            const tipl::image<3,float>& to,
+                            const tipl::vector<3>& to_vs,
+                              tipl::affine_transform<float>& arg,
+                              tipl::reg::reg_type reg_type,
+                              bool& terminated,
+                              const float* bound = tipl::reg::reg_bound)
+{
+    float result = 0.0f;
+    if constexpr (tipl::use_cuda)
+        result = linear_cuda(from,from_vs,to,to_vs,arg,tipl::reg::reg_type(reg_type),terminated,bound);
+    if(result == 0.0f)
+        result = tipl::reg::linear_mr<tipl::reg::mutual_information>
+                (from,from_vs,to,to_vs,arg,tipl::reg::reg_type(reg_type),[&](void){return terminated;},
+                    0.01,bound != tipl::reg::narrow_bound,bound);
+    return result;
+}
+
 void preproc_actions(tipl::image<3>& image,
                      tipl::vector<3>& image_vs,
                      const tipl::image<3>& template_image,
@@ -65,7 +85,7 @@ void preproc_actions(tipl::image<3>& image,
             tipl::out() << "rotating images to template orientation" << std::endl;
             auto arg_rotated = arg;
             bool terminated = false;
-            linear_cuda(template_image,template_image_vs,image,image_vs,arg_rotated,
+            linear_with_mi(template_image,template_image_vs,image,image_vs,arg_rotated,
                                           tipl::reg::rigid_body,terminated,tipl::reg::large_bound);
             trans = tipl::transformation_matrix<float>(arg_rotated,target_image.shape(),target_vs,image.shape(),image_vs);
             tipl::image<3> rotated_image(model_dim);
