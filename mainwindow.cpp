@@ -47,15 +47,18 @@ MainWindow::MainWindow(QWidget *parent)
         QStringList device_list;
         device_list << "CPU";
         torch::set_num_threads(std::thread::hardware_concurrency());
-        if (torch::cuda::is_available())
-        {
-            for(int i = 0;i < gpu_names.size();++i)
-                device_list << gpu_names[i].c_str();
-        }
 
+        if constexpr (tipl::use_cuda)
+        {
+            if (torch::cuda::is_available())
+            {
+                for(int i = 0;i < gpu_names.size();++i)
+                    device_list << gpu_names[i].c_str();
+            }
+        }
         ui->train_device->addItems(device_list);
         ui->evaluate_device->addItems(device_list);
-        ui->train_device->setCurrentIndex(torch::cuda::is_available() ? 1:0);
+        ui->train_device->setCurrentIndex(device_list.size() > 1 ? 1:0);
         ui->evaluate_device->setCurrentIndex(ui->evaluate_device->count()-1);
     }
     // populate networks
