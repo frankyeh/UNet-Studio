@@ -19,7 +19,10 @@ int main(int argc, char *argv[])
     tipl::show_prog = true;
     console.attach();
     std::string msg;
-    check_cuda(msg);
+
+    if constexpr (tipl::use_cuda)
+        check_cuda(msg);
+
     QApplication a(argc, argv);
     MainWindow w;
     w.show();
