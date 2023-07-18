@@ -15,7 +15,7 @@
   </property>
   <property name="windowIcon">
    <iconset resource="icons.qrc">
-    <normaloff>:/icons/unet-studio.ico</normaloff>:/icons/unet-studio.ico</iconset>
+    <normaloff>:/unet-studio.ico</normaloff>:/unet-studio.ico</iconset>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
