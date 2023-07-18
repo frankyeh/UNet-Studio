@@ -85,6 +85,7 @@ jobs:
         brew update
         brew install qt6
         brew install cmake
+        brew install libtorch
     - name: Download TIPL and Atlases
       run: |
         git clone https://github.com/frankyeh/TIPL.git
