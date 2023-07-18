@@ -99,7 +99,7 @@ jobs:
         cd ..
     - name: Packaging
       run: |
-        mv unet_studio.icns build/unet_studio.app/Contents/Resources/
+        mv unet-studio.icns build/unet_studio.app/Contents/Resources/
         mv build/unet_studio.app .
         /usr/local/opt/qt@5/bin/macdeployqt unet_studio.app
         zip -r unet_studio_${{ matrix.os }}.zip unet_studio.app
