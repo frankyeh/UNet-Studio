@@ -134,7 +134,7 @@ jobs:
           "dsistudio/unetstudio:sun-${{ env.DATE_TAG }}"
           dsistudio/unetstudio:latest
 
-  macos-build-11:
+  macos-build:
     strategy:
       matrix:
         os: [macos-11,macos-12]
