@@ -1,9 +1,9 @@
-FROM dsistudio/ubuntu2204_qt6:latest as builder-stage
+FROM dsistudio/ubuntu2204_qt6_cuda:latest as builder-stage
 
 ENV DEBIAN_FRONTEND noninteractive
 
 # libtorch
-RUN apt update && apt full-upgrade -y && apt install -y --no-install-recommends python3-dev python3-pip python3-venv nvidia-cuda-toolkit nvidia-cuda-dev nvidia-cuda-toolkit-gcc
+RUN apt update && apt full-upgrade -y && apt install -y --no-install-recommends python3-dev python3-pip python3-venv
 
 # RUN pip3 install torch>=1.9.0+cpu torchvision>=0.10.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
 RUN pip3 install torch torchvision torchaudio 
