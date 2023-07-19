@@ -153,7 +153,8 @@ jobs:
         brew install caffe
     - name: Install Pytorch
       run: |
-        pip3 install torch==1.9.0 torchvision
+         /usr/bin/python3 -mpip install --upgrade pip
+         pip install torch torchvision
     - name: Download TIPL and Atlases
       run: |
         git clone https://github.com/frankyeh/TIPL.git
