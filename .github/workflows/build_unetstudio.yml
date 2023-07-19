@@ -154,7 +154,7 @@ jobs:
     - name: Install Pytorch
       run: |
          /usr/bin/python3 -mpip install --upgrade pip
-         pip install torch torchvision
+         pip3.11 install torch torchvision
     - name: Download TIPL and Atlases
       run: |
         git clone https://github.com/frankyeh/TIPL.git
