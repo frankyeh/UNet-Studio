@@ -1,4 +1,4 @@
-FROM unetstudio/ubuntu2204_qt6:latest as builder-stage
+FROM dsistudio/ubuntu2204_qt6:latest as builder-stage
 
 ENV DEBIAN_FRONTEND noninteractive
 
