@@ -12,9 +12,9 @@ set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(ZLIB REQUIRED)
-find_package(CUDA)
 find_package(Torch REQUIRED)
-if(CUDA_FOUND)
+find_package(CUDAToolkit)
+if(CUDAToolkit_FOUND)
     project(UNet_Studio VERSION "2022.01.17" LANGUAGES CUDA CXX;C)
 endif()
 set(UNET_STUDIO_SOURCES
@@ -38,7 +38,7 @@ set(UNET_STUDIO_SOURCES
         mainwindow.ui
 )
 
-if(CUDA_FOUND)
+if(CUDAToolkit_FOUND)
     set(UNET_STUDIO_CUDA
             cuda.cu)
 endif()
@@ -74,7 +74,7 @@ endif()
 target_include_directories(unet_studio PUBLIC ${TIPL_DIR})
 target_compile_definitions(unet_studio PUBLIC TIPL_USE_QT)
 
-if(CUDA_FOUND)
+if(CUDAToolkit_FOUND)
     string(REPLACE "--Werror" "" CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS})
     string(REPLACE "cross-execution-space-call" "" CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS})
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -allow-unsupported-compiler --extended-lambda")
@@ -90,7 +90,7 @@ else()
 
     target_link_libraries(unet_studio PUBLIC Qt6::Widgets ZLIB::ZLIB ${TORCH_LIBRARIES})
 
-endif(CUDA_FOUND)
+endif(CUDAToolkit_FOUND)
 
 
 
