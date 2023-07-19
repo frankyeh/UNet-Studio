@@ -70,6 +70,71 @@ jobs:
         name: ${{ github.event.inputs.release_name }}
         prerelease: false  
         
+  linux-build:
+    needs: build_prerelease
+    strategy:
+      matrix:
+        os: [ubuntu2204]
+      fail-fast: false
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2.5.0
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2.1.0
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2.2.1
+    - name: Build and push
+      uses: docker/build-push-action@v3.2.0
+      with:
+        context: .
+        file: build_packages/${{ matrix.os }}/Dockerfile
+        push: false
+        outputs: unet-studio
+    - name: Packaging
+      run: |
+        zip -r unet_studio_${{ matrix.os }}.zip unet-studio
+    - name: Create Release
+      uses: ncipollo/release-action@v1.8.9
+      with:
+        allowUpdates: true
+        artifacts: "*.zip"
+        tag: ${{ github.event.inputs.tag }}
+        name: ${{ github.event.inputs.release_name }}
+        prerelease: false
+
+  docker_build:
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2.5.0
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2.1.0
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2.2.1
+    - name: Login to DockerHub
+      uses: docker/login-action@v2.1.0
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    - name: Log in to the Container registry
+      uses: docker/login-action@v1 
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Current Time
+      run: echo "DATE_TAG=$(date "+%Y-%m-%d")" >> $GITHUB_ENV
+    - name: Build and push
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        file: build_packages/docker/Dockerfile
+        push: true
+        tags: |
+          "dsistudio/unetstudio:sun-${{ env.DATE_TAG }}"
+          dsistudio/unetstudio:latest
+
   macos-build:
     strategy:
       matrix:
@@ -99,10 +164,10 @@ jobs:
         cd ..
     - name: Packaging
       run: |
-        mv UNet-Studio-Network/* build/unet_studio.app/Contents/MacOS/
         mv build/unet_studio.app .
         /usr/local/opt/qt@5/bin/macdeployqt unet_studio.app
-        mv unet-studio.icns build/unet_studio.app/Contents/Resources/
+        mv UNet-Studio-Network/* unet_studio.app/Contents/MacOS/
+        mv unet-studio.icns unet_studio.app/Contents/Resources/
         zip -r unet_studio_${{ matrix.os }}.zip unet_studio.app
     - name: Create Release
       uses: ncipollo/release-action@v1.8.9
