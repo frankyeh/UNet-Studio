@@ -73,7 +73,7 @@ jobs:
   macos-build:
     strategy:
       matrix:
-        os: [macos-12]
+        os: [macos-12 macos-11]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     env:
@@ -102,8 +102,6 @@ jobs:
         mv UNet-Studio-Network/* build/unet_studio.app/Contents/MacOS/
         mv build/unet_studio.app .
         /usr/local/opt/qt@5/bin/macdeployqt unet_studio.app
-        ls
-        ls build/unet_studio.app/Contents/
         mv unet-studio.icns build/unet_studio.app/Contents/Resources/
         zip -r unet_studio_${{ matrix.os }}.zip unet_studio.app
     - name: Create Release
