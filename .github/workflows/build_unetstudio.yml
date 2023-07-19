@@ -161,7 +161,8 @@ jobs:
     - name: Build UNet Studio
       run: |
         mkdir -p build
-        cmake -S . -B build -DCMAKE_BUILD_TYPE:STRING=Release -DTIPL_DIR=.
+        export TORCH_DIR="$(pip show torch | grep 'Location:' | awk '{print $2}')"
+        cmake -S . -B build -DCMAKE_PREFIX_PATH=$TORCH_DIR/torch -DCMAKE_BUILD_TYPE:STRING=Release -DTIPL_DIR=.
         cmake --build ./build --parallel --config Release
         cd ..
     - name: Packaging
