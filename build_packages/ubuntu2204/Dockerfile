@@ -2,6 +2,10 @@ FROM dsistudio/ubuntu2204_qt6:latest as builder-stage
 
 ENV DEBIAN_FRONTEND noninteractive
 
+# libtorch
+RUN apt update && apt full-upgrade -y && apt install -y --no-install-recommends python3-dev python3-pip python3-venv
+RUN pip3 install torch torchvision torchaudio
+
 RUN cd /opt \
   && git clone https://github.com/frankyeh/UNet-Studio.git \
   && mv UNet-Studio src \
