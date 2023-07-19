@@ -4,8 +4,8 @@ ENV DEBIAN_FRONTEND noninteractive
 
 # libtorch
 RUN apt update && apt full-upgrade -y && apt install -y --no-install-recommends python3-dev python3-pip python3-venv
+
 RUN pip3 install torch torchvision torchaudio
-RUN TORCH_DIR="$(pip3 show torch | grep 'Location:' | awk '{print $2}')" && export TORCH_DIR
 
 RUN cd /opt \
   && git clone https://github.com/frankyeh/UNet-Studio.git \
@@ -15,7 +15,8 @@ RUN cd /opt \
   && mkdir -p /opt/src/build
 
 RUN cd /opt/src \
-  && cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH=${TORCH_DIR}/torch -DCMAKE_BUILD_TYPE:STRING=Release -DTIPL_DIR=. \
+  && export TORCH_DIR="$(pip3 show torch | grep 'Location:' | awk '{print $2}')" \
+  && cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH=$TORCH_DIR/torch -DCMAKE_BUILD_TYPE:STRING=Release -DTIPL_DIR=. \
   && cmake --build ./build --parallel --config Release
 
 RUN mkdir -p /opt/unet-studio \
