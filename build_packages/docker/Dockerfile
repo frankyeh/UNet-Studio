@@ -17,7 +17,7 @@ RUN cd /opt \
 
 RUN cd /opt/src \
   && export TORCH_DIR="$(pip3 show torch | grep 'Location:' | awk '{print $2}')" \
-  && cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH=$TORCH_DIR/torch -DCMAKE_BUILD_TYPE:STRING=Release -DTIPL_DIR=. \
+  && cmake -S . -B build -GNinja -DCMAKE_CUDA_COMPILER=$(which nvcc) -DCMAKE_PREFIX_PATH=$TORCH_DIR/torch -DCMAKE_BUILD_TYPE:STRING=Release -DTIPL_DIR=. \
   && cmake --build ./build --parallel --config Release
 
 RUN mkdir -p /opt/unet-studio \
