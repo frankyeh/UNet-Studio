@@ -71,7 +71,6 @@ jobs:
         prerelease: false  
         
   linux-build:
-    needs: build_prerelease
     strategy:
       matrix:
         os: [ubuntu2204]
