@@ -147,9 +147,12 @@ jobs:
     - name: Install Qt
       run: |
         brew update
+        brew upgrade python
         brew install qt6
         brew install cmake
         brew install caffe
+    - name: Install Pytorch
+      run: |
         pip install torch torchvision
     - name: Download TIPL and Atlases
       run: |
