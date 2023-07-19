@@ -100,7 +100,6 @@ jobs:
     - name: Packaging
       run: |
         mv UNet-Studio-Network/* build/unet_studio.app/Contents/MacOS/
-        mv dsi_studio.icns
         mv build/unet_studio.app .
         /usr/local/opt/qt@5/bin/macdeployqt unet_studio.app
         zip -r unet_studio_${{ matrix.os }}.zip unet_studio.app
