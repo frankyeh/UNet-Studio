@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND noninteractive
 
 # libtorch
 RUN apt update && apt full-upgrade -y && apt install -y --no-install-recommends python3-dev python3-pip python3-venv
-RUN pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/cpu/torch_stable.html
+RUN pip3 install torch torchvision torchaudio
 RUN python3 -m torch.utils.collect_env
 
 RUN cd /opt \
