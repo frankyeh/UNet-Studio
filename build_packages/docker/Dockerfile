@@ -5,7 +5,8 @@ ENV DEBIAN_FRONTEND noninteractive
 # libtorch
 RUN apt update && apt full-upgrade -y && apt install -y --no-install-recommends python3-dev python3-pip python3-venv
 
-RUN pip3 install torch torchvision
+# RUN pip3 install torch torchvision
+RUN pip3 install torch==1.9.0+cpu torchvision==0.10.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
 
 RUN cd /opt \
   && git clone https://github.com/frankyeh/UNet-Studio.git \
