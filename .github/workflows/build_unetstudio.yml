@@ -144,13 +144,16 @@ jobs:
       CFLAGS: -Werror
     steps:
     - uses: actions/checkout@v2.5.0
+    - name: Install Pytorch
+      run: |
+        pip install torch torchvision
+        python3 -m torch.utils.collect_env
     - name: Install Qt
       run: |
         brew update
         brew install qt6
         brew install cmake
         brew install caffe
-        pip install torch torchvision
     - name: Download TIPL and Atlases
       run: |
         git clone https://github.com/frankyeh/TIPL.git
