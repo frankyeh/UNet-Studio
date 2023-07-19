@@ -1,9 +1,9 @@
-FROM dsistudio/ubuntu2204_qt6:latest as builder-stage
+FROM dsistudio/ubuntu2204_qt6_cuda:latest as builder-stage
 
 ENV DEBIAN_FRONTEND noninteractive
 
 # libtorch
-RUN apt update && apt full-upgrade -y && apt install -y --no-install-recommends python3-dev python3-pip python3-venv nvidia-cuda-toolkit nvidia-cuda-dev nvidia-cuda-toolkit-gcc
+RUN apt update && apt full-upgrade -y && apt install -y --no-install-recommends python3-dev python3-pip python3-venv
 
 # RUN pip3 install torch>=1.9.0+cpu torchvision>=0.10.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
 RUN pip3 install torch torchvision torchaudio 
@@ -17,7 +17,7 @@ RUN cd /opt \
 
 RUN cd /opt/src \
   && export TORCH_DIR="$(pip3 show torch | grep 'Location:' | awk '{print $2}')" \
-  && cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH=$TORCH_DIR/torch -DCMAKE_BUILD_TYPE:STRING=Release -DTIPL_DIR=. \
+  && cmake -S . -B build -GNinja -DCMAKE_CUDA_COMPILER=$(which nvcc) -DCMAKE_PREFIX_PATH=$TORCH_DIR/torch -DCMAKE_BUILD_TYPE:STRING=Release -DTIPL_DIR=. \
   && cmake --build ./build --parallel --config Release
 
 RUN mkdir -p /opt/unet-studio \

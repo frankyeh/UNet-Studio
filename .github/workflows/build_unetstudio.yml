@@ -134,10 +134,10 @@ jobs:
           "dsistudio/unetstudio:sun-${{ env.DATE_TAG }}"
           dsistudio/unetstudio:latest
 
-  macos-build-11:
+  macos-build:
     strategy:
       matrix:
-        os: [macos-11]
+        os: [macos-11,macos-12]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     env:
@@ -162,52 +162,8 @@ jobs:
     - name: Build UNet Studio
       run: |
         mkdir -p build
-        export TORCH_DIR="$(pip show torch | grep 'Location:' | awk '{print $2}')"
+        export TORCH_DIR="$(pip3.11 show torch | grep 'Location:' | awk '{print $2}')"
         cmake -S . -B build -DCMAKE_PREFIX_PATH=$TORCH_DIR/torch -DCMAKE_BUILD_TYPE:STRING=Release -DTIPL_DIR=.
-        cmake --build ./build --parallel --config Release
-        cd ..
-    - name: Packaging
-      run: |
-        mv build/unet_studio.app .
-        /usr/local/opt/qt@5/bin/macdeployqt unet_studio.app
-        mv UNet-Studio-Network/* unet_studio.app/Contents/MacOS/
-        mv unet-studio.icns unet_studio.app/Contents/Resources/
-        zip -r unet_studio_${{ matrix.os }}.zip unet_studio.app
-    - name: Create Release
-      uses: ncipollo/release-action@v1.8.9
-      with:
-        allowUpdates: true
-        artifacts: "*.zip"
-        tag: ${{ github.event.inputs.tag }}
-        name: ${{ github.event.inputs.release_name }}
-        prerelease: false
-
-
-  macos-build:
-    strategy:
-      matrix:
-        os: [macos-12]
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-    env:
-      CFLAGS: -Werror
-    steps:
-    - uses: actions/checkout@v2.5.0
-    - name: Install Qt
-      run: |
-        brew update
-        brew install qt6
-        brew install cmake
-        brew install libtorch
-        brew install caffe
-    - name: Download TIPL and Atlases
-      run: |
-        git clone https://github.com/frankyeh/TIPL.git
-        git clone https://github.com/frankyeh/UNet-Studio-Network.git
-    - name: Build UNet Studio
-      run: |
-        mkdir -p build
-        cmake -S . -B build -DCMAKE_BUILD_TYPE:STRING=Release -DTIPL_DIR=.
         cmake --build ./build --parallel --config Release
         cd ..
     - name: Packaging
