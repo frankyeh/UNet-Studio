@@ -107,55 +107,8 @@ void preproc_actions(tipl::image<3>& image,
     target_image.swap(image);
 }
 
-template<typename T,typename U>
-void reduce_mt(const T& in,U& out,size_t gap = 0)
-{
-    if(gap == 0)
-        gap = out.size();
-    tipl::par_for(out.size(),[&](size_t j)
-    {
-        auto v = out[j];
-        for(size_t pos = j;pos < in.size();pos += gap)
-            v += in[pos];
-        out[j] = v;
-    });
-}
-
-tipl::image<3> get_foreground_prob(
-        tipl::image<3>& this_image,
-        float prob_threshold,
-        const tipl::shape<3>& dim)
-{
-    tipl::image<3> foreground_prob(dim);
-    auto this_image_frames = this_image.depth()/dim[2];
-    if(this_image.empty())
-        return foreground_prob;
-    // hard threshold to make sure prob is between 0 and 1
-    tipl::upper_lower_threshold(this_image,0.0f,1.0f);
-    reduce_mt(this_image,foreground_prob);
-    auto original_prob = foreground_prob;
 
 
-    {
-        tipl::image<3> foreground_posterior;
-        tipl::threshold(foreground_prob,foreground_posterior,prob_threshold,1,0);
-        tipl::morphology::defragment(foreground_posterior);
-        tipl::filter::gaussian(foreground_posterior);
-        tipl::filter::gaussian(foreground_posterior);
-        foreground_prob *= foreground_posterior;
-        tipl::upper_threshold(foreground_prob,1.0f);
-    }
-
-    tipl::par_for(this_image_frames,[&](size_t label)
-    {
-        auto I = this_image.alias(dim.size()*label,dim);
-        for(size_t pos = 0;pos < dim.size();++pos)
-            if(original_prob[pos] != 0.0f)
-                I[pos] *= foreground_prob[pos]/original_prob[pos];
-    });
-
-    return foreground_prob;
-}
 
 
 void postproc_actions(const std::string& command,
@@ -439,12 +392,18 @@ void evaluate_unet::output(void)
                     {
                         auto trans = raw_image_trans[cur_output];
                         trans.inverse();
-                        tipl::resample_mt<tipl::nearest>(from,to,trans);
+                        tipl::resample_mt(from,to,trans);
                     }
                 });
                 if(aborted)
                     return;
-                foreground_prob[cur_output] = get_foreground_prob(label_prob[cur_output],param.prob_threshold,raw_image_shape[cur_output]);
+
+                auto I = tipl::make_image(&label_prob[cur_output][0],
+                                    raw_image_shape[cur_output].expand(
+                                    label_prob[cur_output].depth()/raw_image_shape[cur_output][2]));
+                foreground_prob[cur_output] = tipl::ml3d::defragment4d(I,param.prob_threshold);
+
+
                 switch(proc_strategy.output_format)
                 {
                     case 0: // 3D label
