@@ -1,5 +1,5 @@
-#ifndef UNET3D_HPP
-#define UNET3D_HPP
+#ifndef UNET_HPP
+#define UNET_HPP
 #ifdef QT_CORE_LIB
     #undef slots
 #endif
@@ -75,4 +75,4 @@ private:
 TORCH_MODULE_IMPL(UNet3d, UNet3dImpl);
 
 
-#endif// UNET3D_HPP
+#endif// UNET_HPP
