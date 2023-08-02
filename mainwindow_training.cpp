@@ -275,22 +275,32 @@ void MainWindow::on_train_start_clicked()
     train.param.label_file_name.clear();
     train.param.test_image_file_name.clear();
     train.param.test_label_file_name.clear();
+
+
+    tipl::out() << "template-based training" << std::endl;
     for(size_t i = 0;i < image_list.size();++i)
     {
+        if(!std::filesystem::exists(image_list[i].toStdString()) ||
+           !std::filesystem::exists(label_list[i].toStdString()))
+            continue;
         if(ui->list1->item(i)->checkState() == Qt::Checked)
         {
             train.param.image_file_name.push_back(image_list[i].toStdString());
             train.param.label_file_name.push_back(label_list[i].toStdString());
         }
-        train.param.test_image_file_name.push_back(image_list[i].toStdString());
-        train.param.test_label_file_name.push_back(label_list[i].toStdString());
+        // this calculate template error
+        if(image_list.size() < 5 || train.param.test_image_file_name.empty())
+        {
+            train.param.test_image_file_name.push_back(image_list[i].toStdString());
+            train.param.test_label_file_name.push_back(label_list[i].toStdString());
+        }
     }
+
     if(train.param.image_file_name.empty())
     {
         QMessageBox::critical(this,"Error","Please specify the training data");
         return;
     }
-
 
     {
         tipl::io::gz_nifti in;
