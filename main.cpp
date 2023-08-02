@@ -16,6 +16,7 @@ int run_action_with_wildcard(tipl::program_option<tipl::out>& po)
 }
 int main(int argc, char *argv[])
 {
+    tipl::available_thread_count<0>() = std::thread::hardware_concurrency()*8;
     tipl::show_prog = true;
     console.attach();
     std::string msg;
