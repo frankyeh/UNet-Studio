@@ -486,42 +486,45 @@ bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
     if(currentRow >= label_prob.size())
         return false;
     tipl::out() << "reader header information from " << param.image_file_name[currentRow];
-    tipl::io::gz_nifti in;
+    tipl::io::gz_nifti in,out;
     if(!in.load_from_file(param.image_file_name[currentRow]))
     {
         error_msg = in.error_msg;
         return false;
     }
+    tipl::matrix<4,4,float> trans;
+    in.get_image_transformation(trans);
+    out.set_image_transformation(trans);
+
     tipl::out() << "save " << file_name;
     in.flip_swap_seq = raw_image_flip_swap[currentRow];
     if(is_label[currentRow])
     {
         tipl::image<3,unsigned char> label(label_prob[currentRow]);
         in.apply_flip_swap_seq(label,true);
-
         if(label_prob[currentRow].depth() == raw_image_shape[currentRow][2])
-            in.load_from_image(label);
+            out.load_from_image(label);
         else
-            in.load_from_image(label.alias(0,tipl::shape<4>(
+            out.load_from_image(label.alias(0,tipl::shape<4>(
                           raw_image_shape[currentRow][0],
                           raw_image_shape[currentRow][1],
                           raw_image_shape[currentRow][2],
                           label_prob[currentRow].depth()/raw_image_shape[currentRow][2])));
-        return in.save_to_file(file_name);
+        return out.save_to_file(file_name);
     }
 
     tipl::image<3> prob(label_prob[currentRow]);
     in.apply_flip_swap_seq(prob,true);
 
     if(label_prob[currentRow].depth() == raw_image_shape[currentRow][2])
-        in.load_from_image(prob);
+        out.load_from_image(prob);
     else
-        in.load_from_image(prob.alias(0,tipl::shape<4>(
+        out.load_from_image(prob.alias(0,tipl::shape<4>(
                           raw_image_shape[currentRow][0],
                           raw_image_shape[currentRow][1],
                           raw_image_shape[currentRow][2],
                           label_prob[currentRow].depth()/raw_image_shape[currentRow][2])));
-    return in.save_to_file(file_name);
+    return out.save_to_file(file_name);
 }
 
 
