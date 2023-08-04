@@ -325,8 +325,8 @@ void MainWindow::on_action_evaluate_save_results_triggered()
     auto currentRow = ui->evaluate_list2->currentRow();
     if(currentRow < 0 || currentRow >= evaluate.label_prob.size())
         return;
-    QString file = evaluate_list[ui->evaluate_list->currentRow()].remove(".nii").remove(".gz");
-    file += ".result.nii.gz";
+    QString file = evaluate_list[ui->evaluate_list->currentRow()];
+    file = file.remove(".nii").remove(".gz") + ".result.nii.gz";
     file = QFileDialog::getSaveFileName(this,"Save Image",file,"NIFTI files (*nii.gz);;All files (*)");
     if(file.isEmpty())
         return;
