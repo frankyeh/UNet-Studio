@@ -40,7 +40,7 @@ public: //evalute
     std::vector<float> eval_I1_buffer_max;
     tipl::value_to_color<float> eval_v2c1,eval_v2c2;
 private:
-    int out_count = 1;
+    int in_count = 1,out_count = 1;
     bool is_label = true;
     void copy_to_clipboard(bool left,bool cropped);
 public:
