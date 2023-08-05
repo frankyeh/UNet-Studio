@@ -250,6 +250,7 @@ void evaluate_unet::read_file(void)
     raw_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
     raw_image_trans = std::vector<tipl::transformation_matrix<float> >(param.image_file_name.size());
     raw_image_flip_swap = std::vector<std::vector<char> >(param.image_file_name.size());
+    raw_image_mask = std::vector<tipl::image<3,char> >(param.image_file_name.size());
     data_ready = std::vector<bool> (param.image_file_name.size());
     read_file_thread.reset(new std::thread([=]()
     {
@@ -285,6 +286,7 @@ void evaluate_unet::read_file(void)
                 return;
             }
             in >> network_input[i];
+            tipl::threshold(network_input[i],raw_image_mask[i],0);
             in.get_voxel_size(raw_image_vs[i]);
             raw_image_flip_swap[i] = in.flip_swap_seq;
             raw_image_shape[i] = network_input[i].shape();
@@ -394,6 +396,9 @@ void evaluate_unet::output(void)
                         trans.inverse();
                         tipl::resample_mt(from,to,trans);
                     }
+                    for(size_t j = 0;j < raw_image_mask[cur_output].size();++j)
+                        if(!raw_image_mask[cur_output][j])
+                            to[j] = 0;
                 });
                 if(aborted)
                     return;
@@ -433,6 +438,7 @@ void evaluate_unet::output(void)
 
                 network_input[cur_output] = tipl::image<3>();
                 network_output[cur_output] = tipl::image<3>();
+                raw_image_mask[cur_output] = tipl::image<3,char>();
             }
         }
         catch(const c10::Error& error)
