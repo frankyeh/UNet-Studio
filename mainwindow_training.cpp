@@ -128,6 +128,18 @@ void MainWindow::on_action_train_open_files_triggered()
     );
     if (fileNames.isEmpty())
         return;
+
+    {
+         tipl::io::gz_nifti nii;
+         if(!nii.load_from_file(fileNames[0].toStdString()))
+         {
+             QMessageBox::critical(this,"ERROR","Cannot read the NIFTI file");
+             return;
+         }
+         in_count = nii.dim(4);
+         ui->view_channel->setMaximum(in_count-1);
+    }
+
     settings.setValue("work_dir",QFileInfo(fileNames[0]).absolutePath());
     for(auto s : fileNames)
     {
@@ -188,13 +200,18 @@ void MainWindow::has_network(void)
 }
 void MainWindow::on_action_train_new_network_triggered()
 {
+    if(image_list.empty())
+    {
+        QMessageBox::critical(this,"ERROR","Please specify training images");
+        return;
+    }
     auto feature = QInputDialog::getText(this,"","Please Specify Network Structure",QLineEdit::Normal,"8x8+16x16+32x32+64x64+128x128");
     if(feature.isEmpty())
         return;
     torch::manual_seed(0);
     at::globalContext().setDeterministicCuDNN(true);
     qputenv("CUDNN_DETERMINISTIC", "1");
-    train.model = UNet3d(1,out_count,feature.toStdString());
+    train.model = UNet3d(in_count,out_count,feature.toStdString());
     ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
     ui->batch_size->setValue(1);
     has_network();
@@ -263,7 +280,7 @@ void MainWindow::on_train_start_clicked()
     if(out_count != train.model->out_count)
     {
         tipl::out() << "copy pretrained model" << std::endl;
-        auto new_model = UNet3d(1,out_count,train.model->feature_string);
+        auto new_model = UNet3d(in_count,out_count,train.model->feature_string);
         new_model->copy_from(*train.model.get());
         train.model = new_model;
     }
@@ -463,13 +480,17 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         pos_index = 0.5f;
     if(currentRow >= 0 && currentRow < image_list.size())
     {
+        tipl::shape<3> shape;
         tipl::vector<3> vs;
-        if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),I1,I2,vs))
+        if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),in_count,I1,I2,shape,vs))
             I2.clear();
         if(!is_label)
             tipl::normalize(I2);
         if(ui->train_view_transform->isChecked())
-            visual_perception_augmentation(*option,I1,I2,is_label,I1.shape(),vs,ui->seed->value());
+            visual_perception_augmentation(*option,I1,I2,is_label,shape,vs,ui->seed->value());
+        if(ui->view_channel->value())
+            std::copy(I1.begin()+shape.size()*ui->view_channel->value(),I1.begin()+shape.size()*(ui->view_channel->value()+1),I1.begin());
+        I1.resize(shape);
         v2c1.set_range(0,tipl::max_value_mt(I1));
         v2c2.set_range(0,is_label ? out_count : 1);
         ui->pos->setMaximum(I1.shape()[ui->view_dim->currentIndex()]-1);
