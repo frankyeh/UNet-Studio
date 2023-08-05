@@ -26,7 +26,7 @@ void ambient_light(image_type& image,float magnitude)
 }
 
 template<typename image_type>
-void diffuse_light(image_type& image,tipl::vector<3>& f,float magnitude)
+void diffuse_light(image_type& image,tipl::vector<3> f,float magnitude)
 {
     auto center = tipl::vector<3>(image.shape())*0.5f;
     f.normalize();
@@ -171,11 +171,11 @@ void visual_perception_augmentation(const OptionTableWidget& options,
     if(apply("cropping"))
     {
         auto cropping_size = range(options.get<float>("cropping_size_min"),
-                                   options.get<float>("cropping_size_max"));
+                                   options.get<float>("cropping_size_max"))*float(image_shape.width());
+        auto cropping_value = range(0.0f,2.0f);
         auto location = random_location(image_shape,cropping_size,1.0f - cropping_size);
         for(auto& image : input_images)
-            cropping_at(image,label,location,cropping_size*float(image.width()), //radius in voxel spacing
-                            range(0.0f,2.0f));
+            cropping_at(image,label,location,cropping_size,cropping_value);
     }
     if(apply("noise"))
     {
