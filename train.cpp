@@ -35,17 +35,30 @@ bool get_label_info(const std::string& label_name,int& out_count,bool& is_label)
 }
 bool read_image_and_label(const std::string& image_name,
                           const std::string& label_name,
-                          tipl::image<3>& image,
+                          size_t in_count,
+                          tipl::image<3>& input,
                           tipl::image<3>& label,
+                          tipl::shape<3>& image_shape,
                           tipl::vector<3>& vs)
 {
     tipl::matrix<4,4,float> image_t((tipl::identity_matrix()));
-    if(!tipl::io::gz_nifti::load_from_file(image_name.c_str(),image,vs,image_t))
-        return false;
+    {
+        tipl::io::gz_nifti nii;
+        if(!nii.load_from_file(image_name))
+            return false;
+        nii.get_image_dimension(image_shape);
+        nii.get_voxel_size(vs);
+        if(nii.dim(4) != in_count)
+            return false;
+        input.resize(tipl::shape<3>(image_shape.width(),image_shape.height(),image_shape.depth()*in_count));
+        for(int c = 0;c < in_count;++c)
+        {
+            auto I = input.alias(image_shape.size()*c,image_shape);
+            nii >> I;
+        }
+        nii.get_image_transformation(image_t);
+    }
 
-    float sd = float(tipl::standard_deviation(image));
-    if(sd != 0.0f)
-        image *= 1.0/sd;
 
     tipl::io::gz_nifti nii;
     tipl::shape<3> label_shape;
@@ -72,10 +85,10 @@ bool read_image_and_label(const std::string& image_name,
     }
     tipl::matrix<4,4,float> label_t((tipl::identity_matrix()));
     nii.get_image_transformation(label_t);
-    if(image.shape() != label_shape || label_t != image_t)
+    if(image_shape != label_shape || label_t != image_t)
     {
         tipl::out() << "spatial transform label file to image file space" << std::endl;
-        tipl::image<3> new_label(image.shape());
+        tipl::image<3> new_label(image_shape);
         tipl::resample_mt<tipl::nearest>(label,new_label,tipl::from_space(image_t).to(label_t));
         label.swap(new_label);
     }
@@ -96,16 +109,26 @@ std::vector<size_t> get_label_count(const tipl::image<3>& label,size_t out_count
     return sum;
 }
 tipl::shape<3> unet_inputsize(const tipl::shape<3>& s);
-void shifted_to_dimension(tipl::image<3>& new_image,tipl::image<3>& new_label,tipl::shape<3> model_dim)
+void preprocessing(tipl::image<3>& image,tipl::image<3>& label,tipl::shape<3> from_dim,tipl::shape<3> to_dim)
 {
-    if(new_image.shape() != model_dim)
+    if(from_dim != to_dim)
     {
-        tipl::image<3> I(model_dim),I2(model_dim);
-        auto shift = tipl::vector<3,int>(model_dim)-tipl::vector<3,int>(new_image.shape());
-        tipl::draw(new_image,I,shift);
-        tipl::draw(new_label,I2,shift);
-        new_image.swap(I);
-        new_label.swap(I2);
+        auto shift = tipl::vector<3,int>(to_dim)-tipl::vector<3,int>(from_dim);
+        shift *= 0.5f;
+        tipl::image<3> new_label(to_dim);
+        tipl::draw(label,new_label,shift);
+        new_label.swap(label);
+
+        int in_count = image.depth()/from_dim[2];
+        tipl::image<3> new_image(to_dim.multiply(tipl::shape<3>::z,in_count));
+        for(int c = 0;c < in_count;++c)
+        {
+            auto from = image.alias(c*from_dim.size(),from_dim);
+            auto to = new_image.alias(c*to_dim.size(),to_dim);
+            tipl::draw(from,to,shift);
+            tipl::normalize(to);
+        }
+        new_image.swap(image);
     }
 }
 void train_unet::read_file(void)
@@ -123,6 +146,7 @@ void train_unet::read_file(void)
     read_file_thread.reset(new std::thread([=]()
     {
         std::vector<tipl::image<3> > train_image,train_label;
+        std::vector<tipl::shape<3> > image_shape;
         std::vector<tipl::vector<3> > image_vs;
         // prepare training data
         {
@@ -132,12 +156,14 @@ void train_unet::read_file(void)
             {
                 tipl::out() << "reading " << param.image_file_name[read_id] << std::endl;
                 tipl::out() << "reading " << param.label_file_name[read_id] << std::endl;
-                tipl::image<3> new_image,new_label;
-                tipl::vector<3> new_vs;
+                tipl::image<3> input_image,input_label;
+                tipl::shape<3> input_shape;
+                tipl::vector<3> input_vs;
 
                 if(!read_image_and_label(param.image_file_name[read_id],
                                          param.label_file_name[read_id],
-                                         new_image,new_label,new_vs))
+                                         model->in_count,
+                                         input_image,input_label,input_shape,input_vs))
                 {
                     error_msg = "cannot read image or label data for ";
                     error_msg += std::filesystem::path(param.image_file_name[read_id]).filename().string();
@@ -145,14 +171,14 @@ void train_unet::read_file(void)
                     return;
                 }
 
-                shifted_to_dimension(new_image,new_label,model->dim);
-
-                tipl::normalize(new_image);
+                preprocessing(input_image,input_label,input_shape,model->dim);
                 if(!param.is_label)
-                    tipl::normalize(new_label);
-                train_image.push_back(std::move(new_image));
-                train_label.push_back(std::move(new_label));
-                image_vs.push_back(new_vs);
+                    tipl::normalize(input_label);
+
+                train_image.push_back(std::move(input_image));
+                train_label.push_back(std::move(input_label));
+                image_shape.push_back(input_shape);
+                image_vs.push_back(input_vs);
             }
             if(train_image.empty())
             {
@@ -169,11 +195,14 @@ void train_unet::read_file(void)
             {
                 tipl::out() << "reading " << param.test_image_file_name[read_id] << std::endl;
                 tipl::out() << "reading " << param.test_label_file_name[read_id] << std::endl;
-                tipl::image<3> new_image,new_label;
-                tipl::vector<3> new_vs;
+                tipl::image<3> input_image,input_label;
+                tipl::shape<3> input_shape;
+                tipl::vector<3> input_vs;
+
                 if(!read_image_and_label(param.test_image_file_name[read_id],
                                          param.test_label_file_name[read_id],
-                                         new_image,new_label,new_vs))
+                                         model->in_count,
+                                         input_image,input_label,input_shape,input_vs))
                 {
                     error_msg = "cannot read image or label data for ";
                     error_msg += std::filesystem::path(param.test_image_file_name[read_id]).filename().string();
@@ -181,22 +210,23 @@ void train_unet::read_file(void)
                     return;
                 }
 
-                shifted_to_dimension(new_image,new_label,model->dim);
+                preprocessing(input_image,input_label,input_shape,model->dim);
 
                 tipl::image<3,char> mask(model->dim);
                 if(model->out_count > 1)
                 {
                     for(size_t pos = 0;pos < mask.size();++pos)
-                        if(new_label[pos])
+                        if(input_label[pos])
                             mask[pos] = 1;
-                    expand_label_to_dimension(new_label,model->out_count);
+                    expand_label_to_dimension(input_label,model->out_count);
                 }
                 else
-                    tipl::normalize(new_label);
-                tipl::normalize(new_image);
-                test_in_tensor.push_back(torch::from_blob(&new_image[0],
+                    tipl::normalize(input_label);
+
+
+                test_in_tensor.push_back(torch::from_blob(&input_image[0],
                     {1,model->in_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device));
-                test_out_tensor.push_back(torch::from_blob(&new_label[0],
+                test_out_tensor.push_back(torch::from_blob(&input_label[0],
                     {1,model->out_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device));
                 test_mask.push_back(std::move(mask));
             }
@@ -212,7 +242,7 @@ void train_unet::read_file(void)
 
         model->voxel_size = image_vs[0];
         size_t seed_base = model->total_training_count;
-        tipl::out() << "vision simulation starts" << std::endl;
+        tipl::out() << "visual perception augmentation starts" << std::endl;
         tipl::par_for(thread_count,[&](size_t thread)
         {
             size_t seed = thread + seed_base;
@@ -231,7 +261,7 @@ void train_unet::read_file(void)
                     continue;
                 in_data[thread] = train_image[read_id];
                 out_data[thread] = train_label[read_id];
-                visual_perception_augmentation(*option,in_data[thread],out_data[thread],param.is_label,in_data[thread].shape(),image_vs[read_id],seed);
+                visual_perception_augmentation(*option,in_data[thread],out_data[thread],param.is_label,model->dim,image_vs[read_id],seed);
                 if(model->out_count > 1)
                     tipl::expand_label_to_dimension(out_data[thread],model->out_count);
                 data_ready[thread] = true;
@@ -295,7 +325,7 @@ void train_unet::train(void)
     test_error_background = test_error_foreground;
     cur_epoch = 0;
 
-    output_model = UNet3d(1,model->out_count,model->feature_string);
+    output_model = UNet3d(model->in_count,model->out_count,model->feature_string);
     output_model->to(param.device);
     output_model->copy_from(*model);
 
@@ -322,7 +352,6 @@ void train_unet::train(void)
                 using namespace std::chrono_literals;
                 std::this_thread::sleep_for(100ms);
             }
-            tipl::out() << "begin training networks" << std::endl;
             for (; cur_epoch < param.epoch && !aborted;cur_epoch++)
             {
                 if(param.learning_rate != optimizer->defaults().get_lr())
@@ -331,8 +360,9 @@ void train_unet::train(void)
                     optimizer->defaults().set_lr(param.learning_rate);
                 }
 
-                std::ostringstream out;
                 {
+                    std::ostringstream out;
+                    tipl::out() << "evaluate network performance" << std::endl;
                     model->eval();
                     out << "epoch:" << cur_epoch << " testing error:";
                     for(size_t i = 0;i < test_in_tensor.size();++i)
@@ -367,11 +397,12 @@ void train_unet::train(void)
 
                     if(param.output_model_type == 0 || best_epoch == cur_epoch)
                         output_model->copy_from(*model);
-
-                    model->train();
+                    tipl::out() << out.str();
                 }
 
+                tipl::out() << "begin training networks" << std::endl;
                 float sum_error = 0.0f;
+                model->train();
                 for(size_t b = 0;b < param.batch_size && !aborted;++b,++cur_data_index)
                 {
                     size_t data_index = cur_data_index%tensor_ready.size();
@@ -394,10 +425,10 @@ void train_unet::train(void)
                     optimizer->step();
                     optimizer->zero_grad();
                     model->total_training_count += param.batch_size;
-                    out << " training error:" << (error[cur_epoch] = sum_error/float(param.batch_size)) << std::endl;
+                    tipl::out() << " training error:" << (error[cur_epoch] = sum_error/float(param.batch_size)) << std::endl;
 
                 }
-                tipl::out() << out.str();
+
             }
         }
         catch(const c10::Error& error)
