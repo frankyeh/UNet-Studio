@@ -23,8 +23,10 @@ std::string show_structure(const UNet3d& model);
 bool get_label_info(const std::string& label_name,int& out_count,bool& is_label);
 bool read_image_and_label(const std::string& image_name,
                           const std::string& label_name,
-                          tipl::image<3>& image,
+                          size_t in_count,
+                          tipl::image<3>& input,
                           tipl::image<3>& label,
+                          tipl::shape<3>& image_shape,
                           tipl::vector<3>& vs);
 class OptionTableWidget;
 void visual_perception_augmentation(const OptionTableWidget& options,
