@@ -469,7 +469,7 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         if(!is_label)
             tipl::normalize(I2);
         if(ui->train_view_transform->isChecked())
-            visual_perception_augmentation(*option,I1,I2,is_label,vs,ui->seed->value());
+            visual_perception_augmentation(*option,I1,I2,is_label,I1.shape(),vs,ui->seed->value());
         v2c1.set_range(0,tipl::max_value_mt(I1));
         v2c2.set_range(0,is_label ? out_count : 1);
         ui->pos->setMaximum(I1.shape()[ui->view_dim->currentIndex()]-1);

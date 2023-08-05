@@ -31,6 +31,7 @@ void visual_perception_augmentation(const OptionTableWidget& options,
                           tipl::image<3>& image,
                           tipl::image<3>& label,
                           bool is_label,
+                          const tipl::shape<3>& image_shape,
                           const tipl::vector<3>& image_vs,
                           size_t random_seed);
 class train_unet{

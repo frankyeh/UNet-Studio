@@ -231,7 +231,7 @@ void train_unet::read_file(void)
                     continue;
                 in_data[thread] = train_image[read_id];
                 out_data[thread] = train_label[read_id];
-                visual_perception_augmentation(*option,in_data[thread],out_data[thread],param.is_label,image_vs[read_id],seed);
+                visual_perception_augmentation(*option,in_data[thread],out_data[thread],param.is_label,in_data[thread].shape(),image_vs[read_id],seed);
                 if(model->out_count > 1)
                     tipl::expand_label_to_dimension(out_data[thread],model->out_count);
                 data_ready[thread] = true;
