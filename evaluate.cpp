@@ -245,7 +245,7 @@ void postproc_actions(const std::string& command,
 }
 void evaluate_unet::read_file(void)
 {
-    network_input = std::vector<tipl::image<3> >(param.image_file_name.size());
+    evaluate_input = std::vector<tipl::image<3> >(param.image_file_name.size());
     raw_image_shape = std::vector<tipl::shape<3> >(param.image_file_name.size());
     raw_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
     raw_image_trans = std::vector<tipl::transformation_matrix<float> >(param.image_file_name.size());
@@ -267,7 +267,7 @@ void evaluate_unet::read_file(void)
             else
                 tipl::out() << "cannot read template file: " << proc_strategy.template_file_name << std::endl;
         }
-        for(size_t i = 0;i < network_input.size() && !aborted;++i)
+        for(size_t i = 0;i < evaluate_input.size() && !aborted;++i)
         {
             while(i > cur_prog+6)
             {
@@ -285,20 +285,20 @@ void evaluate_unet::read_file(void)
                 aborted = true;
                 return;
             }
-            in >> network_input[i];
-            tipl::threshold(network_input[i],raw_image_mask[i],0);
+            in >> evaluate_input[i];
+            tipl::threshold(evaluate_input[i],raw_image_mask[i],0);
             in.get_voxel_size(raw_image_vs[i]);
             raw_image_flip_swap[i] = in.flip_swap_seq;
-            raw_image_shape[i] = network_input[i].shape();
-            tipl::out() << "dim: " << network_input[i].shape() << " vs:" << raw_image_vs[i] << std::endl;
-            preproc_actions(network_input[i],
+            raw_image_shape[i] = evaluate_input[i].shape();
+            tipl::out() << "dim: " << evaluate_input[i].shape() << " vs:" << raw_image_vs[i] << std::endl;
+            preproc_actions(evaluate_input[i],
                           raw_image_vs[i],
                           template_image,template_image_vs,
                           raw_image_trans[i],
                           model->dim,model->voxel_size,
                           proc_strategy,error_msg);
-            tipl::lower_threshold(network_input[i],0.0f);
-            tipl::normalize(network_input[i]);
+            tipl::lower_threshold(evaluate_input[i],0.0f);
+            tipl::normalize(evaluate_input[i]);
             data_ready[i] = true;
         }
     }));
@@ -306,12 +306,12 @@ void evaluate_unet::read_file(void)
 
 void evaluate_unet::evaluate(void)
 {
-    network_output  = std::vector<tipl::image<3> >(param.image_file_name.size());
+    evaluate_output  = std::vector<tipl::image<3> >(param.image_file_name.size());
     evaluate_thread.reset(new std::thread([=](){
         try{
-            for (cur_prog = 0; cur_prog < network_input.size() && !aborted; cur_prog++)
+            for (cur_prog = 0; cur_prog < evaluate_input.size() && !aborted; cur_prog++)
             {
-                auto& cur_input = network_input[cur_prog];
+                auto& cur_input = evaluate_input[cur_prog];
                 while(!data_ready[cur_prog])
                 {
                     using namespace std::chrono_literals;
@@ -324,8 +324,8 @@ void evaluate_unet::evaluate(void)
                     continue;
                 auto out = model->forward(torch::from_blob(&cur_input[0],
                                           {1,model->in_count,int(cur_input.depth()),int(cur_input.height()),int(cur_input.width())}).to(param.device));
-                network_output[cur_prog].resize(cur_input.shape().multiply(tipl::shape<3>::z,model->out_count));
-                std::memcpy(&network_output[cur_prog][0],out.to(torch::kCPU).data_ptr<float>(),network_output[cur_prog].size()*sizeof(float));
+                evaluate_output[cur_prog].resize(cur_input.shape().multiply(tipl::shape<3>::z,model->out_count));
+                std::memcpy(&evaluate_output[cur_prog][0],out.to(torch::kCPU).data_ptr<float>(),evaluate_output[cur_prog].size()*sizeof(float));
             }
         }
         catch(const c10::Error& error)
@@ -373,14 +373,14 @@ void evaluate_unet::output(void)
                     std::this_thread::sleep_for(200ms);
                     status = "evaluating";
                 }
-                if(network_output[cur_output].empty())
+                if(evaluate_output[cur_output].empty())
                     continue;
-                tipl::shape<3> dim_from(network_input[cur_output].shape()),
+                tipl::shape<3> dim_from(evaluate_input[cur_output].shape()),
                                dim_to(raw_image_shape[cur_output]);
                 label_prob[cur_output].resize(dim_to.multiply(tipl::shape<3>::z,model->out_count));
                 tipl::par_for(model->out_count,[&](int i)
                 {
-                    auto from = network_output[cur_output].alias(dim_from.size()*i,dim_from);
+                    auto from = evaluate_output[cur_output].alias(dim_from.size()*i,dim_from);
                     auto to = label_prob[cur_output].alias(dim_to.size()*i,dim_to);
                     const auto& model_vs = model->voxel_size;
                     if(!proc_strategy.match_fov && !proc_strategy.match_resolution)
@@ -436,8 +436,8 @@ void evaluate_unet::output(void)
 
                 }
 
-                network_input[cur_output] = tipl::image<3>();
-                network_output[cur_output] = tipl::image<3>();
+                evaluate_input[cur_output] = tipl::image<3>();
+                evaluate_output[cur_output] = tipl::image<3>();
                 raw_image_mask[cur_output] = tipl::image<3,char>();
             }
         }

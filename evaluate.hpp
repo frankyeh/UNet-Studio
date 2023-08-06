@@ -27,7 +27,7 @@ public:
     EvaluateParam param;
 public:
     ProcStrategy proc_strategy;
-    std::vector<tipl::image<3> > network_input,network_output;
+    std::vector<tipl::image<3> > evaluate_input,evaluate_output;
     std::vector<tipl::shape<3> > raw_image_shape;
     std::vector<tipl::vector<3> > raw_image_vs;
     std::vector<tipl::transformation_matrix<float> > raw_image_trans;
