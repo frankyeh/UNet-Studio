@@ -185,19 +185,23 @@ void visual_perception_augmentation(const OptionTableWidget& options,
             image[i] += noise();
     }
     // lighting
+    if(apply("ambient"))
     {
         float ambient_magnitude = one()*options.get<float>("ambient_mag");
-        auto location = random_location(image_shape,0.4f,0.6f);
+        for(auto& image : input_images)
+            ambient_light(image,ambient_magnitude);
+    }
+    if(apply("diffuse"))
+    {
         auto diffuse_dir = tipl::vector<3>(one()-0.5f,one()-0.5f,one()-0.5f);
         for(auto& image : input_images)
-        {
-            if(apply("ambient"))
-                ambient_light(image,ambient_magnitude);
-            if(apply("diffuse"))
-                diffuse_light(image,diffuse_dir,options.get<float>("diffuse_mag"));
-            if(apply("specular"))
-                specular_light(image,location,options.get<float>("specular_freq"),options.get<float>("specular_mag"));
-        }
+            diffuse_light(image,diffuse_dir,options.get<float>("diffuse_mag"));
+    }
+    if(apply("specular"))
+    {
+        auto location = random_location(image_shape,0.4f,0.6f);
+        for(auto& image : input_images)
+            specular_light(image,location,options.get<float>("specular_freq"),options.get<float>("specular_mag"));
     }
 
 
