@@ -1,11 +1,6 @@
 #include "evaluate.hpp"
 #include "optiontablewidget.hpp"
 
-tipl::shape<3> unet_inputsize(const tipl::shape<3>& s)
-{
-    return tipl::shape<3>(int(std::ceil(float(s[0])/32.0f))*32,int(std::ceil(float(s[1])/32.0f))*32,int(std::ceil(float(s[2])/32.0f))*32);
-}
-
 std::vector<std::string> operations({
         "none",
         "gaussian_filter",
@@ -63,11 +58,12 @@ void preproc_actions(tipl::image<3>& images,
     if(model_dim == image_dim && image_vs == model_vs)
     {
         tipl::out() << "image resolution and dimension are the same as training data. No padding or regrinding needed.";
+        tipl::normalize(images);
         return;
     }
     auto target_vs = proc_strategy.match_resolution || proc_strategy.match_orientation ? model_vs : image_vs;
     auto target_dim = proc_strategy.match_fov || proc_strategy.match_orientation ? model_dim :
-                            unet_inputsize(tipl::shape<3>(float(image_dim.width())*image_vs[0]/target_vs[0],
+                            tipl::ml3d::round_up_size(tipl::shape<3>(float(image_dim.width())*image_vs[0]/target_vs[0],
                                 float(image_dim.height())*image_vs[1]/target_vs[1],
                                 float(image_dim.depth())*image_vs[2]/target_vs[2]));
 
