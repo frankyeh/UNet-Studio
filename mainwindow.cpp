@@ -120,15 +120,3 @@ void MainWindow::on_actionConsole_triggered()
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
