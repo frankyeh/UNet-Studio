@@ -15,6 +15,7 @@ QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
+
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -33,6 +34,10 @@ public:
     void update_evaluate_list(void);
 public:
     QStringList image_list,label_list;
+    std::vector<size_t> image_last_added_indices;
+    std::vector<std::vector<size_t> > relations;
+    std::vector<training_setting> image_settings;
+
     void update_list(void);
 public: //evalute
     QGraphicsScene eval_scene1,eval_scene2;
@@ -75,7 +80,6 @@ private slots:
     void on_action_evaluate_open_network_triggered();
     void on_action_evaluate_clear_all_triggered();
     void on_list2_currentRowChanged(int currentRow);
-    void on_action_train_auto_match_label_files_triggered();
 
     void on_evaluate_list2_currentRowChanged(int currentRow);
     void on_action_evaluate_save_results_triggered();
@@ -119,5 +123,8 @@ private slots:
     void on_action_evaluate_copy_all_left_view_cropped_triggered();
     void on_action_train_reorder_output_triggered();
     void on_action_train_copy_all_view_triggered();
+    void on_actionNot_Template_triggered();
+    void on_actionChange_Count_triggered();
+    void on_actionAdd_Relation_triggered();
 };
 #endif // MAINWINDOW_H

@@ -30,7 +30,9 @@ void MainWindow::on_action_open_training_setting_triggered()
     QSettings ini(fileName,QSettings::IniFormat);
     image_list = ini.value("image",image_list).toStringList();
     label_list = ini.value("label",label_list).toStringList();
-    update_list();
+    in_count = ini.value("in_count",in_count).toInt();
+    out_count = ini.value("out_count",out_count).toInt();
+
     ui->epoch->setValue(ini.value("epoch",ui->epoch->value()).toInt());
     ui->batch_size->setValue(ini.value("batch_size",ui->batch_size->value()).toInt());
     ui->learning_rate->setValue(ini.value("learning_rate",ui->learning_rate->value()).toFloat());
@@ -40,6 +42,7 @@ void MainWindow::on_action_open_training_setting_triggered()
     settings.setValue("work_file",QFileInfo(fileName.remove(".ini")).fileName());
 
     ui->tabWidget->setCurrentIndex(1);
+    update_list();
 
 }
 
@@ -55,6 +58,8 @@ void MainWindow::on_action_save_training_setting_triggered()
     QSettings ini(fileName,QSettings::IniFormat);
     ini.setValue("image",image_list);
     ini.setValue("label",label_list);
+    ini.setValue("in_count",in_count);
+    ini.setValue("out_count",out_count);
     ini.setValue("epoch",ui->epoch->value());
     ini.setValue("batch_size",ui->batch_size->value());
     ini.setValue("learning_rate",ui->learning_rate->value());
@@ -66,44 +71,71 @@ void MainWindow::on_action_save_training_setting_triggered()
 
 }
 
+
+void MainWindow::on_actionNot_Template_triggered()
+{
+    for(auto i : image_last_added_indices)
+        image_settings[i].is_template = false;
+    update_list();
+}
+
+
+
+void MainWindow::on_actionChange_Count_triggered()
+{
+    bool ok = true;
+    int count = QInputDialog::getInt(this,"", "Specify training count per batch :",1,1,20,1,&ok);
+    if(!ok)
+        return;
+    for(auto i : image_last_added_indices)
+        image_settings[i].count = count;
+    update_list();
+}
+
+void MainWindow::on_actionAdd_Relation_triggered()
+{
+    auto relation_str = QInputDialog::getText(this,"","Please Specify Related Labels",QLineEdit::Normal,"0 1 2 3 4");
+    if(relation_str.isEmpty())
+        return;
+    std::istringstream in(relation_str.toStdString());
+    std::vector<size_t> relation((std::istream_iterator<int>(in)),std::istream_iterator<int>());
+    if(relation.size() < 2 || tipl::max_value(relation) >= out_count)
+    {
+        QMessageBox::critical(this,"ERROR","Invalid Relation");
+        return;
+    }
+    relations.push_back(relation);
+    update_list();
+}
+
 void MainWindow::update_list(void)
 {
-    for(size_t i = 0;i < image_list.size();)
-        if(!QFileInfo(image_list[i]).exists())
-        {
-            image_list.remove(i);
-            label_list.remove(i);
-        }
-    else
-        ++i;
-
-    if(!label_list.empty() && QFileInfo(label_list[0]).exists())
-    {
-         if(get_label_info(label_list[0].toStdString(),out_count,is_label))
-         {
-             ui->output_info->setText(QString("num label: %1 type: %2").arg(out_count).arg(is_label?"label":"scalar"));
-             ui->label_slider->setMaximum(out_count-1);
-         }
-         else
-         {
-             QMessageBox::critical(this,"Error",QString("%1 is not a valid label image").arg(QFileInfo(label_list[0]).fileName()));
-             label_list[0].clear();
-         }
-    }
-
     auto index = ui->list1->currentRow();
     ui->list1->clear();
     ui->list2->clear();
     bool ready_to_train = false;
+    image_settings.resize(image_list.size());
     for(size_t i = 0;i < image_list.size();++i)
     {
-        if(!QFileInfo(label_list[i]).exists())
-            label_list[i].clear();
-        ui->list1->addItem(QFileInfo(image_list[i]).fileName());
+        auto image_list_text = QFileInfo(image_list[i]).fileName();
+        image_list_text += QString(",%1").arg(image_settings[i].count);
+        image_list_text += image_settings[i].is_template ? ",t" : ",s";
+        ui->list1->addItem(image_list_text);
         auto item = ui->list1->item(i);
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(Qt::Checked);
-        ui->list2->addItem(label_list[i].isEmpty() ? QString("(to be assigned)") : QFileInfo(label_list[i]).fileName());
+
+        auto label_text = QFileInfo(label_list[i]).fileName();
+        if(!relations.empty())
+        {
+            for(const auto& each: relations)
+            {
+                label_text += ".r";
+                for(const auto& v: each)
+                    label_text += QString::number(v);
+            }
+        }
+        ui->list2->addItem(label_list[i].isEmpty() ? QString("(to be assigned)") : label_text);
         ready_to_train = true;
     }
     ui->train_start->setEnabled(ready_to_train);
@@ -118,6 +150,10 @@ void MainWindow::update_list(void)
     ui->train_open_labels->setEnabled(image_list.size());
     ui->train_start->setEnabled(ready_to_train);
 
+    ui->view_channel->setMaximum(in_count-1);
+    ui->output_info->setText(QString("num label: %1 type: %2").arg(out_count).arg(is_label?"label":"scalar"));
+    ui->label_slider->setMaximum(out_count-1);
+
 
 }
 
@@ -128,7 +164,6 @@ void MainWindow::on_action_train_open_files_triggered()
     );
     if (fileNames.isEmpty())
         return;
-
     {
          tipl::io::gz_nifti nii;
          if(!nii.load_from_file(fileNames[0].toStdString()))
@@ -136,13 +171,14 @@ void MainWindow::on_action_train_open_files_triggered()
              QMessageBox::critical(this,"ERROR","Cannot read the NIFTI file");
              return;
          }
-         in_count = nii.dim(4);
-         ui->view_channel->setMaximum(in_count-1);
-    }
+         in_count = nii.dim(4);    
+    }    
 
     settings.setValue("work_dir",QFileInfo(fileNames[0]).absolutePath());
+    image_last_added_indices.clear();
     for(auto s : fileNames)
     {
+        image_last_added_indices.push_back(image_list.size());
         image_list << s;
         label_list << QString();
     }
@@ -156,39 +192,50 @@ void MainWindow::on_action_train_open_labels_triggered()
     );
     if (fileNames.isEmpty())
         return;
-    settings.setValue("work_dir",QFileInfo(fileNames[0]).absolutePath());
-    auto index = ui->list2->currentRow();
-    for(int i = 0;i < fileNames.size() && index < label_list.size();++i,++index)
-        label_list[index] = fileNames[i];
-    update_list();
-
-}
-
-
-void MainWindow::on_action_train_auto_match_label_files_triggered()
-{
-    if(ui->list2->currentRow() == -1)
-        return;
-    if(label_list[ui->list2->currentRow()].isEmpty())
+    int cur_out_count = 1;
+    if(!get_label_info(fileNames[0].toStdString(),cur_out_count,is_label))
     {
-        QMessageBox::critical(this,"Error","At least assign the first label file");
+        QMessageBox::critical(this,"Error",QString("%1 is not a valid label image").arg(QFileInfo(fileNames[0]).fileName()));
         return;
     }
+    settings.setValue("work_dir",QFileInfo(fileNames[0]).absolutePath());
+    if(label_list.empty())
+        out_count = cur_out_count;
+    else
+        out_count = std::max<int>(out_count,cur_out_count);
+
+    // auto complete
+    auto entry_index = ui->list2->currentRow();
+    auto index = entry_index;
+    for(int i = 0;i < fileNames.size() && index < label_list.size();++i,++index)
+        label_list[index] = fileNames[i];
+
+    image_last_added_indices.clear();
+    image_last_added_indices.push_back(entry_index);
+
     for(int index = 0;index < label_list.size();++index)
         if(label_list[index].isEmpty())
         {
             std::string result;
-            if(tipl::match_files(image_list[ui->list1->currentRow()].toStdString(),label_list[ui->list1->currentRow()].toStdString(),
-                              image_list[index].toStdString(),result) && QFileInfo(result.c_str()).exists())
+            if(tipl::match_files(image_list[entry_index].toStdString(),label_list[entry_index].toStdString(),
+                                  image_list[index].toStdString(),result) && QFileInfo(result.c_str()).exists())
+            {
                 label_list[index] = result.c_str();
+                image_last_added_indices.push_back(index);
+            }
         }
     update_list();
+
 }
+
 
 void MainWindow::on_action_train_clear_all_triggered()
 {
     image_list.clear();
     label_list.clear();
+    relations.clear();
+    in_count = out_count = 1;
+    is_label = true;
     update_list();
 }
 
@@ -205,7 +252,9 @@ void MainWindow::on_action_train_new_network_triggered()
         QMessageBox::critical(this,"ERROR","Please specify training images");
         return;
     }
-    auto feature = QInputDialog::getText(this,"","Please Specify Network Structure",QLineEdit::Normal,"8x8+16x16+32x32+64x64+128x128");
+    auto feature = QInputDialog::getText(this,"","Please Specify Network Structure",QLineEdit::Normal,
+                                         out_count <= 6 ? "8x8+16x16+32x32+64x64+128x128" :
+                                         (out_count <= 10 ? "16x16+32x32+64x64+128x128+128x128" : "32x32+64x64+128x128+128x128+256x256"));
     if(feature.isEmpty())
         return;
     torch::manual_seed(0);
@@ -213,7 +262,6 @@ void MainWindow::on_action_train_new_network_triggered()
     qputenv("CUDNN_DETERMINISTIC", "1");
     train.model = UNet3d(in_count,out_count,feature.toStdString());
     ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
-    ui->batch_size->setValue(1);
     has_network();
 
 }
@@ -251,7 +299,6 @@ void MainWindow::on_action_train_save_network_triggered()
 
 }
 #include <ATen/Context.h>
-tipl::shape<3> unet_inputsize(const tipl::shape<3>& s);
 void MainWindow::on_train_start_clicked()
 {
 
@@ -290,6 +337,7 @@ void MainWindow::on_train_start_clicked()
 
     train.param.image_file_name.clear();
     train.param.label_file_name.clear();
+    train.param.image_setting.clear();
     train.param.test_image_file_name.clear();
     train.param.test_label_file_name.clear();
 
@@ -304,6 +352,7 @@ void MainWindow::on_train_start_clicked()
         {
             train.param.image_file_name.push_back(image_list[i].toStdString());
             train.param.label_file_name.push_back(label_list[i].toStdString());
+            train.param.image_setting.push_back(image_settings[i]);
         }
         // this calculate template error
         if(image_list.size() < 5 || train.param.test_image_file_name.empty())
@@ -328,13 +377,14 @@ void MainWindow::on_train_start_clicked()
         }
         in.toLPS();
         in.get_image_dimension(train.model->dim);
-        train.model->dim = unet_inputsize(train.model->dim);
+        train.model->dim = tipl::ml3d::round_up_size(train.model->dim);
         tipl::out() << "network input sizes: " << train.model->dim << std::endl;
     }
 
     train.param.device = ui->train_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->train_device->currentIndex()-1):torch::Device(torch::kCPU);
     train.param.epoch = ui->epoch->value();
     train.param.is_label = is_label;
+    train.param.relations = relations;
     train.option = option;
     train.start();
 
@@ -690,6 +740,8 @@ void MainWindow::on_action_train_reorder_output_triggered()
                       tensor_buf_to + i*length);
         }
     }
+
+    ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
 }
 
 

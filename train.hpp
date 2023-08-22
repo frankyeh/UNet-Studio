@@ -5,9 +5,17 @@
 #include "zlib.h"
 #include "unet.hpp"
 
-struct TrainParam{
+
+struct training_setting{
+    size_t count = 1;
+    bool is_template = true;
+};
+
+struct training_param{
     std::vector<std::string> image_file_name,test_image_file_name;
     std::vector<std::string> label_file_name,test_label_file_name;
+    std::vector<training_setting> image_setting;
+    std::vector<std::vector<size_t> > relations;
     int batch_size = 1;
     int epoch = 10000;
     float learning_rate = 0.001f;
@@ -38,7 +46,7 @@ void visual_perception_augmentation(const OptionTableWidget& options,
                           size_t random_seed);
 class train_unet{
 public:
-    TrainParam param;
+    training_param param;
     OptionTableWidget* option = nullptr;
 public:
     bool aborted = false;
@@ -46,7 +54,13 @@ public:
     bool running = false;
     std::string error_msg,status;
 private:
+    std::vector<tipl::image<3> > train_image,train_label;
+    std::vector<tipl::vector<3> > train_image_vs;
+    std::vector<bool> train_image_ready;
+    std::shared_ptr<std::thread> read_train_images;
+private:
     std::vector<tipl::image<3> > in_data,out_data;
+    std::vector<size_t> in_data_read_id;
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;
     std::vector<torch::Tensor> test_in_tensor,test_out_tensor;
@@ -55,6 +69,7 @@ private:
     void read_file(void);
 private:
     std::vector<torch::Tensor> in_tensor,out_tensor;
+    std::vector<size_t> in_tensor_read_id;
     std::vector<bool> tensor_ready;
     std::shared_ptr<std::thread> prepare_tensor_thread;
     void prepare_tensor(void);

@@ -1471,8 +1471,8 @@
       <string>Settings</string>
      </property>
      <addaction name="actionNot_Template"/>
-     <addaction name="actionPartial_Learning"/>
      <addaction name="actionChange_Count"/>
+     <addaction name="actionAdd_Relation"/>
     </widget>
     <addaction name="action_train_open_files"/>
     <addaction name="action_train_open_labels"/>
@@ -1719,14 +1719,14 @@
     <string>Not Template</string>
    </property>
   </action>
-  <action name="actionPartial_Learning">
-   <property name="text">
-    <string>Partial Learning...</string>
-   </property>
-  </action>
   <action name="actionChange_Count">
    <property name="text">
     <string>Change Count...</string>
+   </property>
+  </action>
+  <action name="actionAdd_Relation">
+   <property name="text">
+    <string>Add Relation...</string>
    </property>
   </action>
  </widget>

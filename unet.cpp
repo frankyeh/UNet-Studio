@@ -12,25 +12,26 @@ UNet3dImpl::UNet3dImpl(int32_t in_count_,
             out_count(out_count_),
             feature_string(feature_string_)
 {
-    auto features = parse_feature_string();
+    std::vector<int> ks;
+    auto features = parse_feature_string(ks);
     std::vector<std::vector<int> > features_down(std::move(features.first));
     std::vector<std::vector<int> > features_up(std::move(features.second));
 
     for(int level=0; level< features_down.size(); level++)
     {
         encoding.push_back(
-            ConvBlock(features_down[level],
+            ConvBlock(features_down[level],ks[level],
                       level == 0 ? torch::nn::Sequential() : torch::nn::Sequential(torch::nn::MaxPool3d(torch::nn::MaxPool3dOptions(2).stride(2)))));
         register_module(std::string("encode")+std::to_string(level),encoding.back());
     }
     for(int level=features_down.size()-2; level>=0; level--)
     {
         up.push_front(
-            ConvBlock({features_up[level+1].back(),features_down[level].back()},
+            ConvBlock({features_up[level+1].back(),features_down[level].back()},ks[level],
                       torch::nn::Sequential(torch::nn::Upsample(torch::nn::UpsampleOptions().scale_factor(std::vector<double>({2, 2, 2})).mode(torch::kNearest)))));
         register_module("up"+std::to_string(level),up.front());
         decoding.push_front(
-            ConvBlock(features_up[level]));
+            ConvBlock(features_up[level],ks[level]));
         register_module(std::string("decode")+std::to_string(level),decoding.front());
     }
 
@@ -54,14 +55,14 @@ torch::Tensor UNet3dImpl::forward(torch::Tensor inputTensor)
     return output->forward(inputTensor);
 }
 
-torch::nn::Sequential UNet3dImpl::ConvBlock(const std::vector<int>& rhs,torch::nn::Sequential s)
+torch::nn::Sequential UNet3dImpl::ConvBlock(const std::vector<int>& rhs,size_t ks,torch::nn::Sequential s)
 {
     int count = 0;
     for(auto next_count : rhs)
     {
         if(count)
         {
-            s->push_back(torch::nn::Conv3d(torch::nn::Conv3dOptions(count, next_count, kernel_size).padding((kernel_size-1)/2)));
+            s->push_back(torch::nn::Conv3d(torch::nn::Conv3dOptions(count, next_count, ks).padding((ks-1)/2)));
             s->push_back(torch::nn::ReLU());
             auto bn = torch::nn::BatchNorm3d(next_count);
             s->push_back(bn);

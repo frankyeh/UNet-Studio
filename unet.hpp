@@ -16,7 +16,6 @@ public:
     int in_count = 1;
     int out_count = 1;
     std::string feature_string;
-    int kernel_size = 3;
 public:
     uint32_t total_training_count = 0;
     tipl::vector<3> voxel_size = {1.0f,1.0f,1.0f};
@@ -25,13 +24,18 @@ public:
     std::vector<torch::nn::BatchNorm3d> bn_layers;
     torch::nn::Sequential output;
 public:
-    auto parse_feature_string(void) const
+    auto parse_feature_string(std::vector<int>& kernel_size) const
     {
         std::vector<std::vector<int> > features_down;
         std::vector<std::vector<int> > features_up;
         int input_feature = in_count;
         for(auto feature_string_per_level : tipl::split(feature_string,'+'))
         {
+            auto level_feature_string = tipl::split(feature_string_per_level,',');
+            if(level_feature_string.size() == 2)
+                kernel_size.push_back(std::stoi(level_feature_string.back()));
+            else
+                kernel_size.push_back(3);
             features_down.push_back(std::vector<int>({input_feature}));
             for(auto s : tipl::split(feature_string_per_level,'x'))
                 features_down.back().push_back(input_feature = std::stoi(s));
@@ -70,7 +74,7 @@ public:
     }
     void print_layers(void);
 private:
-    torch::nn::Sequential ConvBlock(const std::vector<int>& rhs,torch::nn::Sequential s = torch::nn::Sequential());
+    torch::nn::Sequential ConvBlock(const std::vector<int>& rhs,size_t ks,torch::nn::Sequential s = torch::nn::Sequential());
 };
 TORCH_MODULE_IMPL(UNet3d, UNet3dImpl);
 

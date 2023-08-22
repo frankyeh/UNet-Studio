@@ -133,7 +133,8 @@ bool save_to_file(UNet3d& model,const char* file_name)
 std::string show_structure(const UNet3d& model)
 {
     std::ostringstream out;
-    auto features = model->parse_feature_string();
+    std::vector<int> ks;
+    auto features = model->parse_feature_string(ks);
     std::vector<std::vector<int> > features_down(std::move(features.first));
     std::vector<std::vector<int> > features_up(std::move(features.second));
 
