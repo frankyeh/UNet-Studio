@@ -67,6 +67,22 @@ void lens_distortion(image_type& displaced,float magnitude)
     });
 }
 
+template<typename image_type>
+void create_distortion_at(image_type& displaced,const tipl::vector<3,int>& center,float radius,float magnitude)
+{
+    auto radius_5 = radius*magnitude;
+    auto pi_2_radius = std::acos(-1)/radius;
+    tipl::for_each_neighbors(tipl::pixel_index<3>(center.begin(),displaced.shape()),displaced.shape(),radius,[&](const auto& pos)
+    {
+        tipl::vector<3> dir(pos);
+        dir -= center;
+        auto length = dir.length();
+        if(length > radius)
+            return;
+        dir *= -radius_5*std::sin(length*pi_2_radius)/length;
+        displaced[pos.index()] += dir;
+    });
+}
 
 
 
@@ -168,6 +184,7 @@ void visual_perception_augmentation(const OptionTableWidget& options,
             }
         }
     }
+
     if(apply("cropping"))
     {
         auto cropping_size = range(options.get<float>("cropping_size_min"),
@@ -233,6 +250,19 @@ void visual_perception_augmentation(const OptionTableWidget& options,
         tipl::image<3,tipl::vector<3> > displaced(image_shape);
         if(options.get<float>("lens_distortion") != 0.0f)
             lens_distortion(displaced,one()*options.get<float>("lens_distortion"));
+        if(apply("distortion"))
+        {
+            size_t num = size_t(range(1.0f,options.get<int>("distortion_count")+1.0f));
+            for(size_t i = 0;i < num;++i)
+                create_distortion_at(displaced,random_location(image_shape,0.3f,0.7f),
+                                             float(image_shape[0])*range(
+                                                options.get<float>("distortion_radius_min"),
+                                                options.get<float>("distortion_radius_max")), // radius
+                                                range(
+                                                options.get<float>("distortion_mag_min"),
+                                                options.get<float>("distortion_mag_max")));  //magnitude
+        }
+
 
         bool has_perspective = options.get<float>("perspective") > 0.0f;
         bool has_lens_distortion = options.get<float>("lens_distortion") > 0.0f;
