@@ -24,10 +24,7 @@ jobs:
         tar -xf "libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip" -C libtorch --strip-components 1
     - name: Install Zlib
       run: |
-        powershell -Command "(Invoke-WebRequest -Uri https://raw.githubusercontent.com/horta/zlib.install/master/install.bat -OutFile install_zlib.bat)"; 
-        powershell -Command "(gc install_zlib.bat) -replace '1.2.12', '1.2.13' | Out-File -encoding ASCII install_zlib.bat"
-        ./install_zlib.bat
-        del install_zlib.bat
+        ./build_packages/install_zlib.bat
         del "C:/Program Files/zlib/lib/zlib.lib"
         del "C:/Program Files/zlib/bin/zlib.dll"
     - name: Install Qt
