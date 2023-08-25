@@ -71,16 +71,6 @@ void MainWindow::on_action_save_training_setting_triggered()
 
 }
 
-
-void MainWindow::on_actionNot_Template_triggered()
-{
-    for(auto i : image_last_added_indices)
-        image_settings[i].is_template = false;
-    update_list();
-}
-
-
-
 void MainWindow::on_actionChange_Count_triggered()
 {
     bool ok = true;
@@ -182,7 +172,14 @@ void MainWindow::on_action_train_open_files_triggered()
         image_list << s;
         label_list << QString();
     }
+    if(fileNames.size() > 3)
+    {
+        image_settings.resize(image_list.size());
+        for(auto i : image_last_added_indices)
+            image_settings[i].is_template = false;
+    }
     update_list();
+
 }
 
 void MainWindow::on_action_train_open_labels_triggered()
@@ -355,7 +352,7 @@ void MainWindow::on_train_start_clicked()
             train.param.image_setting.push_back(image_settings[i]);
         }
         // this calculate template error
-        if(image_list.size() < 5 || train.param.test_image_file_name.empty())
+        if(image_settings[i].is_template)
         {
             train.param.test_image_file_name.push_back(image_list[i].toStdString());
             train.param.test_label_file_name.push_back(label_list[i].toStdString());
