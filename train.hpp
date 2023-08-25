@@ -80,6 +80,7 @@ public:
     size_t cur_epoch = 0;
     std::vector<float> error;
     std::vector<std::vector<float> > test_error_foreground,test_error_background;
+    void update_epoch_count();
 public:
     UNet3d model,output_model;
     ~train_unet(void)
