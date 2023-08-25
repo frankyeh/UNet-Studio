@@ -52,7 +52,8 @@ void preprocess_label(UNet3d& model,tipl::image<3>& train_label,const training_p
             relation_mask[v+1] = 1;
             relation_pose.push_back(v*model->dim.size());
         }
-        float added_weight = 0.5f/float(param.relations.size());
+        float added_weight = 0.5f/float(param.
+                                        relations.size());
         for(size_t i = 0;i < train_label.size();++i)
         {
             int label = int(train_label[i]);
@@ -210,7 +211,7 @@ void train_unet::read_file(void)
     test_data_ready = false;
     test_in_tensor.clear();
     test_out_tensor.clear();
-    test_mask.clear();
+    test_out_mask.clear();
 
     read_file_thread.reset(new std::thread([=]()
     {
@@ -246,20 +247,27 @@ void train_unet::read_file(void)
 
                 preprocessing(input_image,input_label,input_shape,model->dim);
 
-                tipl::image<3,char> mask(model->dim);
-                tipl::threshold(input_label,mask,0);
 
                 if(model->out_count > 1)
                     preprocess_label(model,input_label,param);
                 else
                     tipl::normalize(input_label);
 
+                tipl::image<3,char> mask(model->dim.multiply(tipl::shape<3>::z,model->out_count));
+                {
+                    auto I = mask.alias(0,model->dim);
+                    tipl::threshold(input_label,I,0);
+                    for(size_t i = 1;i < model->out_count;++i)
+                        std::copy(mask.begin(),mask.begin()+model->dim.size(),mask.begin()+model->dim.size()*i);
+                }
+
 
                 test_in_tensor.push_back(torch::from_blob(&input_image[0],
                     {1,model->in_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device));
                 test_out_tensor.push_back(torch::from_blob(&input_label[0],
                     {1,model->out_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device));
-                test_mask.push_back(std::move(mask));
+                test_out_mask.push_back(torch::from_blob(&mask[0],
+                    {1,model->out_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])},torch::kUInt8).to(param.device));
             }
             if(test_in_tensor.empty())
             {
@@ -267,7 +275,7 @@ void train_unet::read_file(void)
                 aborted = true;
                 return;
             }
-            tipl::out() << "a total of " << test_mask.size() << " testing dataset" << std::endl;
+            tipl::out() << "a total of " << test_out_tensor.size() << " testing dataset" << std::endl;
             test_data_ready = true;
         }
 
@@ -432,29 +440,12 @@ void train_unet::train(void)
                     out << "epoch:" << cur_epoch << " testing error:";
                     for(size_t i = 0;i < test_in_tensor.size();++i)
                     {
-                        tipl::image<3> dif_map(model->dim.multiply(tipl::shape<3>::z,model->out_count));
-                        std::memcpy(&dif_map[0],(model->forward(test_in_tensor[i])-test_out_tensor[i]).to(torch::kCPU).data_ptr<float>(),dif_map.size()*sizeof(float));
-
-                        auto thread_count = std::min<int>(8,std::thread::hardware_concurrency());
-                        std::vector<double> sum_foreground(thread_count);
-                        std::vector<double> sum_background(thread_count);
-                        const auto& mask = test_mask[i];
-                        tipl::par_for(thread_count,[&](size_t thread_id)
-                        {
-                            for(size_t out_base = 0;out_base < dif_map.size();out_base += mask.size())
-                            for(size_t pos = thread_id;pos < mask.size();pos += thread_count)
-                            {
-                                float v = dif_map[out_base+pos];
-                                v *= v;
-                                if(mask[pos])
-                                    sum_foreground[thread_id] += v;
-                                else
-                                    sum_background[thread_id] += v;
-                            }
-                        });
-                        test_error_foreground[i][cur_epoch] = tipl::sum(sum_foreground)/float(dif_map.size());
-                        test_error_background[i][cur_epoch] = tipl::sum(sum_background)/float(dif_map.size());
-                        out << test_error_foreground[i][cur_epoch] << " " << test_error_background[i][cur_epoch] << " ";
+                        auto f = model->forward(test_in_tensor[i]);
+                        float mse_foreground = torch::mse_loss(f.masked_select(test_out_mask[i].gt(0)),test_out_tensor[i].masked_select(test_out_mask[i].gt(0))).item().toFloat();
+                        float mse_background = torch::mse_loss(f.masked_select(test_out_mask[i].le(0)),test_out_tensor[i].masked_select(test_out_mask[i].le(0))).item().toFloat();
+                        test_error_foreground[i][cur_epoch] = mse_foreground;
+                        test_error_background[i][cur_epoch] = mse_background;
+                        out << mse_foreground << " " << mse_background << " ";
                     }
                     if(test_error_foreground[0][best_epoch] + test_error_background[0][best_epoch] <=
                        test_error_foreground[0][cur_epoch]  + test_error_background[0][cur_epoch])
@@ -497,7 +488,9 @@ void train_unet::train(void)
                     optimizer->step();
                     optimizer->zero_grad();
                     model->total_training_count += param.batch_size;
-                    out << " training error:" << (error[cur_epoch] = sum_error/float(param.batch_size)) << std::endl;
+
+                    float previous_error = cur_epoch > 0 ? error[cur_epoch-1]:sum_error/float(param.batch_size);
+                    out << " training error:" << (error[cur_epoch] = previous_error*0.95 + sum_error/float(param.batch_size)*0.05f) << std::endl;
                     tipl::out() << out.str();
                     tipl::out() << source_str;
 

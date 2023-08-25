@@ -63,8 +63,7 @@ private:
     std::vector<size_t> in_data_read_id;
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;
-    std::vector<torch::Tensor> test_in_tensor,test_out_tensor;
-    std::vector<tipl::image<3,char> > test_mask;
+    std::vector<torch::Tensor> test_in_tensor,test_out_tensor,test_out_mask;
     bool test_data_ready = false;
     void read_file(void);
 private:
