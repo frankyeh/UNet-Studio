@@ -307,9 +307,11 @@ void MainWindow::on_train_start_clicked()
     train.param.batch_size = ui->batch_size->value();
     train.param.learning_rate = ui->learning_rate->value();
     train.param.output_model_type = ui->training_output->currentIndex();
+    train.param.epoch = ui->epoch->value();
 
     if(train.running)
     {
+        train.update_epoch_count();
         train.pause = !train.pause;
         return;
     }
@@ -364,7 +366,11 @@ void MainWindow::on_train_start_clicked()
         QMessageBox::critical(this,"Error","Please specify the training data");
         return;
     }
-
+    if(train.param.test_image_file_name.empty())
+    {
+        train.param.test_image_file_name.push_back(train.param.image_file_name[0]);
+        train.param.test_label_file_name.push_back(train.param.label_file_name[0]);
+    }
     {
         tipl::io::gz_nifti in;
         if(!in.load_from_file(train.param.image_file_name[0]))
@@ -379,7 +385,6 @@ void MainWindow::on_train_start_clicked()
     }
 
     train.param.device = ui->train_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->train_device->currentIndex()-1):torch::Device(torch::kCPU);
-    train.param.epoch = ui->epoch->value();
     train.param.is_label = is_label;
     train.param.relations = relations;
     train.option = option;
@@ -474,7 +479,7 @@ void MainWindow::training()
     ui->batch_size->setEnabled(!train.running || train.pause);
     ui->learning_rate->setEnabled(!train.running || train.pause);
     ui->training_output->setEnabled(!train.running || train.pause);
-    ui->epoch->setEnabled(!train.running);
+    ui->epoch->setEnabled(!train.running || train.pause);
 
     ui->action_train_open_files->setEnabled(!train.running);
     ui->train_open_files->setEnabled(!train.running);
