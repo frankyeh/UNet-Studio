@@ -1470,7 +1470,6 @@
      <property name="title">
       <string>Settings</string>
      </property>
-     <addaction name="actionNot_Template"/>
      <addaction name="actionChange_Count"/>
      <addaction name="actionAdd_Relation"/>
     </widget>
@@ -1712,11 +1711,6 @@
   <action name="action_train_copy_all_view">
    <property name="text">
     <string>All Left and Right Views</string>
-   </property>
-  </action>
-  <action name="actionNot_Template">
-   <property name="text">
-    <string>Not Template</string>
    </property>
   </action>
   <action name="actionChange_Count">
