@@ -269,12 +269,6 @@ void train_unet::read_file(void)
                 test_out_mask.push_back(torch::from_blob(&mask[0],
                     {1,model->out_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])},torch::kUInt8).to(param.device));
             }
-            if(test_in_tensor.empty())
-            {
-                error_msg = "no test data";
-                aborted = true;
-                return;
-            }
             tipl::out() << "a total of " << test_out_tensor.size() << " testing dataset" << std::endl;
             test_data_ready = true;
         }
@@ -303,7 +297,7 @@ void train_unet::read_file(void)
                     read_id = template_indices[seed % template_indices.size()];
                 else
                 if(template_indices.empty())
-                    read_id = non_template_indices[seed % template_indices.size()];
+                    read_id = non_template_indices[seed % non_template_indices.size()];
                 else
                 {
                     if(b < template_indices.size())
@@ -389,14 +383,22 @@ void train_unet::prepare_tensor(void)
         tipl::out() << error_msg << std::endl;
     }));
 }
-
-void train_unet::train(void)
+void train_unet::update_epoch_count()
 {
-    error = std::vector<float>(param.epoch);
-    test_error_foreground = std::vector<std::vector<float> >(param.test_image_file_name.size());
+    error.resize(param.epoch);
     for(auto& each : test_error_foreground)
         each.resize(param.epoch);
+    for(auto& each : test_error_background)
+        each.resize(param.epoch);
+
+}
+void train_unet::train(void)
+{
+    error.clear();
+    test_error_foreground = std::vector<std::vector<float> >(param.test_image_file_name.size());
     test_error_background = test_error_foreground;
+    update_epoch_count();
+
     cur_epoch = 0;
 
     output_model = UNet3d(model->in_count,model->out_count,model->feature_string);
@@ -435,6 +437,7 @@ void train_unet::train(void)
                 }
                 std::ostringstream out;
 
+                if(!test_in_tensor.empty())
                 {
                     model->eval();
                     out << "epoch:" << cur_epoch << " testing error:";
@@ -450,7 +453,6 @@ void train_unet::train(void)
                     if(test_error_foreground[0][best_epoch] + test_error_background[0][best_epoch] <=
                        test_error_foreground[0][cur_epoch]  + test_error_background[0][cur_epoch])
                         best_epoch = cur_epoch;
-
                     if(param.output_model_type == 0 || best_epoch == cur_epoch)
                         output_model->copy_from(*model);
                 }
