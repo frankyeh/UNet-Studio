@@ -43,74 +43,33 @@ inline size_t linear_with_mi(const tipl::image<3,float>& from,
     return result;
 }
 
-void preproc_actions(tipl::image<3>& images,
-                     const tipl::shape<3>& image_dim,
-                     const tipl::vector<3>& image_vs,
-                     const tipl::image<3>& template_image,
-                     const tipl::vector<3>& template_image_vs,
-                     tipl::transformation_matrix<float>& trans,
-                     const tipl::shape<3>& model_dim,
-                     const tipl::vector<3>& model_vs,
-                     const ProcStrategy& proc_strategy,
-                     std::string& error_msg)
+inline void rotate_to_template(tipl::image<3>& images,
+                         const tipl::shape<3>& image_dim,
+                         const tipl::vector<3>& image_vs,
+                         const tipl::image<3>& template_image,
+                         const tipl::vector<3>& template_image_vs,
+                         const tipl::shape<3>& model_dim,
+                         const tipl::vector<3>& model_vs,
+                         tipl::transformation_matrix<float>& trans)
 {
+    tipl::affine_transform<float> arg_rotated;
+    auto image0 = images.alias(0,image_dim);
+    bool terminated = false;
+    linear_with_mi(template_image,template_image_vs,image0,image_vs,arg_rotated,
+                                  tipl::reg::rigid_body,terminated,tipl::reg::large_bound);
+    trans = tipl::transformation_matrix<float>(arg_rotated,model_dim,model_vs,image_dim,image_vs);
+
     int in_channel = images.depth()/image_dim[2];
-    if(model_dim == image_dim && image_vs == model_vs)
+    tipl::image<3> target_images(model_dim.multiply(tipl::shape<3>::z,in_channel));
+    tipl::par_for(in_channel,[&](int c)
     {
-        tipl::out() << "image resolution and dimension are the same as training data. No padding or regrinding needed.";
-        tipl::normalize(images);
-        return;
-    }
-    auto target_vs = proc_strategy.match_resolution || proc_strategy.match_orientation ? model_vs : image_vs;
-    auto target_dim = proc_strategy.match_fov || proc_strategy.match_orientation ? model_dim :
-                            tipl::ml3d::round_up_size(tipl::shape<3>(float(image_dim.width())*image_vs[0]/target_vs[0],
-                                float(image_dim.height())*image_vs[1]/target_vs[1],
-                                float(image_dim.depth())*image_vs[2]/target_vs[2]));
-
-    tipl::image<3> target_images(target_dim.multiply(tipl::shape<3>::z,in_channel));
-    if(!proc_strategy.match_fov && !proc_strategy.match_resolution)
-    {
-        auto shift = tipl::vector<3,int>(target_dim)-tipl::vector<3,int>(image_dim);
-        shift[0] /= 2;
-        shift[1] /= 2;
-        tipl::par_for(in_channel,[&](int c)
-        {
-            auto image = images.alias(image_dim.size()*c,image_dim);
-            auto target_image = target_images.alias(target_dim.size()*c,target_dim);
-            tipl::draw(image,target_image,shift);
-            tipl::normalize(target_image);
-        });
-
-    }
-    else
-    {
-        tipl::affine_transform<float> arg;
-        if(proc_strategy.match_orientation && !template_image.empty())
-        {
-            auto image0 = images.alias(0,image_dim);
-            tipl::out() << "rotating images to template orientation" << std::endl;
-            auto arg_rotated = arg;
-            bool terminated = false;
-            linear_with_mi(template_image,template_image_vs,image0,image_vs,arg_rotated,
-                                          tipl::reg::rigid_body,terminated,tipl::reg::large_bound);
-            trans = tipl::transformation_matrix<float>(arg_rotated,target_dim,target_vs,image_dim,image_vs);
-        }
-        else
-            trans = tipl::transformation_matrix<float>(arg,target_dim,target_vs,image_dim,image_vs);
-
-        tipl::par_for(in_channel,[&](int c)
-        {
-            auto image = images.alias(image_dim.size()*c,image_dim);
-            auto target_image = target_images.alias(target_dim.size()*c,target_dim);
-            tipl::resample_mt(image,target_image,trans);
-            tipl::normalize(target_image);
-        });
-
-    }
+        auto image = images.alias(image_dim.size()*c,image_dim);
+        auto target_image = target_images.alias(model_dim.size()*c,model_dim);
+        tipl::resample_mt(image,target_image,trans);
+        tipl::normalize(target_image);
+    });
     target_images.swap(images);
 }
-
-
 
 
 
@@ -315,13 +274,20 @@ void evaluate_unet::read_file(void)
                     return;
                 }
             }
-            preproc_actions(evaluate_input[i],
-                            raw_image_shape[i],
-                            raw_image_vs[i],
-                            template_image,template_image_vs,
-                            raw_image_trans[i],
-                            model->dim,model->voxel_size,
-                            proc_strategy,error_msg);
+            if(!template_image.empty())
+                rotate_to_template(evaluate_input[i],
+                                   raw_image_shape[i],
+                                   raw_image_vs[i],
+                                   template_image,template_image_vs,
+                                   model->dim,model->voxel_size,
+                                   raw_image_trans[i]);
+            else
+                tipl::ml3d::preproc_actions(evaluate_input[i],
+                                raw_image_shape[i],
+                                raw_image_vs[i],
+                                model->dim,model->voxel_size,
+                                raw_image_trans[i],
+                                proc_strategy.match_resolution,proc_strategy.match_fov);
             tipl::lower_threshold(evaluate_input[i],0.0f);
             data_ready[i] = true;
         }
