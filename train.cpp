@@ -440,10 +440,14 @@ void train_unet::train(void)
                     auto output = model->forward(in_tensor[data_index]);
                     if(param.label_weight.size() == model->out_count)
                     {
+                        source_str += " w";
                         at::Tensor loss;
                         for(size_t i = 0;i < model->out_count;++i)
                             if(param.label_weight[i] != 0.0f)
                             {
+                                source_str += std::to_string(i);
+                                source_str += ",";
+                                source_str += std::to_string(int(param.label_weight[i]*100.0f));
                                 auto l = torch::mse_loss(output.select(1,i),out_tensor[data_index].select(1,i))*param.label_weight[i];
                                 if(loss.defined())
                                     loss += l;
