@@ -47,6 +47,8 @@ public: //evalute
 private:
     int in_count = 1,out_count = 1;
     bool is_label = true;
+    std::vector<int> label_count;
+    std::vector<float> label_weight;
     void copy_to_clipboard(bool left,bool cropped);
 public:
     train_unet train;
@@ -125,5 +127,6 @@ private slots:
     void on_action_train_copy_all_view_triggered();
     void on_actionChange_Count_triggered();
     void on_actionAdd_Relation_triggered();
+    void on_actionApply_Label_Weights_triggered();
 };
 #endif // MAINWINDOW_H
