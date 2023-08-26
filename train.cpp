@@ -1,38 +1,5 @@
 #include "train.hpp"
 #include "optiontablewidget.hpp"
-bool get_label_info(const std::string& label_name,int& out_count,bool& is_label)
-{
-    tipl::io::gz_nifti nii;
-    if(!nii.load_from_file(label_name))
-        return false;
-    if(nii.dim(4) != 1)
-        out_count = nii.dim(4);
-    if(nii.is_integer())
-    {
-        is_label = true;
-        if(nii.dim(4) == 1)
-        {
-            tipl::image<3,short> labels;
-            nii >> labels;
-            out_count = tipl::max_value(labels);
-        }
-    }
-    else
-    {
-        tipl::image<3,float> labels;
-        nii >> labels;
-        is_label = tipl::is_label_image(labels);
-        if(nii.dim(4) == 1)
-            out_count = (is_label ? tipl::max_value(labels) : 1);
-    }
-
-    if(out_count > 128)
-    {
-        out_count = 1;
-        is_label = false;
-    }
-    return true;
-}
 
 void preprocess_label(UNet3d& model,tipl::image<3>& train_label,const training_param& param)
 {
@@ -282,7 +249,6 @@ void train_unet::read_file(void)
             else
                 non_template_indices.insert(non_template_indices.end(),param.image_setting[i].count,i);
 
-
         model->voxel_size = train_image_vs[0];
         tipl::out() << "visual perception augmentation starts" << std::endl;
         tipl::par_for(thread_count,[&](size_t thread)
@@ -292,20 +258,16 @@ void train_unet::read_file(void)
             int non_template_base = 0;
             while(!aborted)
             {
-                int read_id = 0;
-                if(non_template_indices.empty())
-                    read_id = template_indices[seed % template_indices.size()];
-                else
-                if(template_indices.empty())
-                    read_id = non_template_indices[seed % non_template_indices.size()];
-                else
+                while(b >= param.batch_size)
                 {
-                    if(b < template_indices.size())
-                        read_id = template_indices[b];
-                    else
-                        read_id = non_template_indices[(non_template_base+b-template_indices.size())%non_template_indices.size()];
+                    b -= param.batch_size;
+                    non_template_base += std::max<int>(0,int(param.batch_size)-int(template_indices.size()));
                 }
-
+                int read_id = 0;
+                if(non_template_indices.empty() || b < template_indices.size())
+                    read_id = template_indices[b % template_indices.size()];
+                else
+                    read_id = non_template_indices[(non_template_base+b-template_indices.size())%non_template_indices.size()];
 
                 while(!train_image_ready[read_id] || data_ready[thread] || pause)
                 {
@@ -327,11 +289,6 @@ void train_unet::read_file(void)
                 data_ready[thread] = true;
                 seed += thread_count;
                 b += thread_count;
-                if(b >= param.batch_size)
-                {
-                    b = thread;
-                    non_template_base += std::max<int>(0,int(param.batch_size)-int(template_indices.size()));
-                }
             }
         });
     }));
@@ -405,6 +362,7 @@ void train_unet::train(void)
     output_model->to(param.device);
     output_model->copy_from(*model);
 
+
     train_thread.reset(new std::thread([=](){
         struct exist_guard
         {
@@ -424,10 +382,11 @@ void train_unet::train(void)
             {
                 if(aborted)
                     return;
-                status = "tensor allocation";
+                status = "test tensor allocation";
                 using namespace std::chrono_literals;
                 std::this_thread::sleep_for(100ms);
             }
+
             for (; cur_epoch < param.epoch && !aborted;cur_epoch++)
             {
                 if(param.learning_rate != optimizer->defaults().get_lr())
@@ -475,14 +434,29 @@ void train_unet::train(void)
                     if(b)
                         source_str += ",";
                     source_str += std::to_string(in_tensor_read_id[data_index]);
-                    source_str += param.image_setting[in_tensor_read_id[data_index]].is_template ? ".t":".s";
+                    source_str += param.image_setting[in_tensor_read_id[data_index]].is_template ? "t":"s";
 
                     status = "training";
+                    auto output = model->forward(in_tensor[data_index]);
+                    if(param.label_weight.size() == model->out_count)
+                    {
+                        at::Tensor loss;
+                        for(size_t i = 0;i < model->out_count;++i)
+                            if(param.label_weight[i] != 0.0f)
+                            {
+                                auto l = torch::mse_loss(output.select(1,i),out_tensor[data_index].select(1,i))*param.label_weight[i];
+                                if(loss.defined())
+                                    loss += l;
+                                else
+                                    loss = l;
+                            }
+                        output = loss;
+                    }
+                    else
+                        output = torch::mse_loss(output,out_tensor[data_index]);
 
-                    auto loss = torch::mse_loss(model->forward(in_tensor[data_index]),out_tensor[data_index]);
-
-                    sum_error += loss.item().toFloat();
-                    loss.backward();
+                    sum_error += output.item().toFloat();
+                    output.backward();
                     tensor_ready[data_index] = false;
                 }
 

@@ -16,6 +16,7 @@ struct training_param{
     std::vector<std::string> label_file_name,test_label_file_name;
     std::vector<training_setting> image_setting;
     std::vector<std::vector<size_t> > relations;
+    std::vector<float> label_weight;
     int batch_size = 1;
     int epoch = 10000;
     float learning_rate = 0.001f;
@@ -28,7 +29,6 @@ struct training_param{
 bool save_to_file(UNet3d& model,const char* file_name);
 bool load_from_file(UNet3d& model,const char* file_name);
 std::string show_structure(const UNet3d& model);
-bool get_label_info(const std::string& label_name,int& out_count,bool& is_label);
 bool read_image_and_label(const std::string& image_name,
                           const std::string& label_name,
                           size_t in_count,
