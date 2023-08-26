@@ -1,6 +1,7 @@
 Reduction/Cropping/cropping/Off:25%:50%:75%:On/0/Apply signal cropping
 Reduction/├Minimum Size/cropping_size_min/float:0.0:1.0:0.05:2/0.1/minimum size of cropping in proportion to image width
 Reduction/└Maximum Size/cropping_size_max/float:0.0:1.0:0.05:2/0.2/maximum size of cropping in proportion to image width
+Reduction/Truncation Z/truncation_z/Off:25%:50%:75%:On/1/Apply signal cropping
 Reduction/Downsample X/downsample_x/Off:25%:50%:75%:On/2/apply downsample of data
 Reduction/└Ratio/downsample_x_ratio/float:0.0:1.0:0.1:2/0.5/the downsameple ratio
 Reduction/Downsample Y/downsample_y/Off:25%:50%:75%:On/2/apply downsample of data
@@ -25,12 +26,13 @@ Camera Transform/Zoom In/scaling_down/float:0.05:1.0:0.05:2/0.8/lower limit of s
 Camera Transform/Aspect Ratio/aspect_ratio/float:1.0:2.0:0.05:2/1.25/upper limit of relative scaling at axis
 Camera Transform/Perspective/perspective/float:0.0:0.5:0.05:2/0.1/upper limit of perspective transform
 Camera Transform/Lens Distortion/lens_distortion/float:0.0:0.5:0.01:2/0.1/upper limit of lens distortion
-Camera Transform/Distortion/distortion/Off:20%:40%:60%:80%:On/1/apply nonlinear deformation
+Camera Transform/Distortion/distortion/Off:25%:50%:75%:On/1/apply nonlinear deformation
 Camera Transform/├Foci Count/distortion_count/int:1:10:1/3/number of distortion foci
 Camera Transform/├Minimum Radius/distortion_radius_min/float:0.1:0.5:0.1:2/0.1/minimum distortion radius
 Camera Transform/├Maximum Radius/distortion_radius_max/float:0.1:1.0:0.1:2/0.5/maximum distortion radius
 Camera Transform/├Minimum Magnitude/distortion_mag_min/float:0.0:0.5:0.05:2/0.05/minimum distortion magnitude
 Camera Transform/└Maximum Magnitude/distortion_mag_max/float:0.0:0.5:0.05:2/0.1/maximum distortion magnitude
+Background/Zero Background/zero_background/Off:25%:50%:75%:On/1/Set background to zero
 Background/Rubber-Stamping/rubber_stamping/Off:25%:50%:75%:On/2/Add background
 Background/└Magnitude/rubber_stamping_mag/float:0.0:1.0:0.1:2/1.0/The magnitude of background images
 Background/Perlin Texture/perlin_texture/Off:25%:50%:75%:On/2/Add Perlin noise
