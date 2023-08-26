@@ -194,6 +194,27 @@ void visual_perception_augmentation(const OptionTableWidget& options,
         for(auto& image : input_images)
             cropping_at(image,label,location,cropping_size,cropping_value);
     }
+    if(apply("truncation_z"))
+    {
+        int num_top_slices = int(std::fabs(one()*0.5f*float(label.depth())));
+        int num_bottom_slices = int(std::fabs(one()*0.5f*float(label.depth())));
+        auto truncate_buttom = [](auto& image,size_t num_slices)
+        {
+            std::fill(image.begin(),image.begin()+num_slices*image.plane_size(),0);
+        };
+        auto truncate_top = [](auto& image,size_t num_slices)
+        {
+            std::fill(image.end()-num_slices*image.plane_size(),image.end(),0);
+        };
+        truncate_top(label,num_top_slices);
+        truncate_buttom(label,num_bottom_slices);
+        for(auto& image : input_images)
+        {
+            truncate_top(image,num_top_slices);
+            truncate_buttom(image,num_bottom_slices);
+        }
+    }
+
     if(apply("noise"))
     {
         tipl::uniform_dist<float> noise(0.0f,options.get<float>("noise_mag"),random_seed);
@@ -302,6 +323,14 @@ void visual_perception_augmentation(const OptionTableWidget& options,
     // background
     if(!output_label.empty() && is_label)
     {
+        if(apply("zero_background"))
+        {
+            for(auto& image : output_images)
+                for(size_t pos = 0;pos < output_label.size();++pos)
+                    if(!output_label[pos])
+                        image[pos] = 0;
+            goto end;
+        }
         auto blend_fun = [&](float& src,float blend)
         {
             src += blend*std::max<float>(0.1f,1.0f-src);
@@ -380,7 +409,7 @@ void visual_perception_augmentation(const OptionTableWidget& options,
 
     }
 
-
+    end:
 
     input.swap(output);
     output_label.swap(label);
