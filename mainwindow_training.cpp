@@ -182,6 +182,47 @@ void MainWindow::on_action_train_open_files_triggered()
 
 }
 
+bool get_label_info(const std::string& label_name,std::vector<int>& out_count,bool& is_label)
+{
+    tipl::io::gz_nifti nii;
+    if(!nii.load_from_file(label_name))
+        return false;
+    if(nii.dim(4) != 1)
+        out_count.resize(nii.dim(4));
+    if(nii.is_integer())
+    {
+        is_label = true;
+        if(nii.dim(4) == 1)
+        {
+            tipl::image<3,short> labels;
+            nii >> labels;
+            out_count.resize(tipl::max_value(labels));
+            for(size_t i = 0;i < labels.size();++i)
+                if(labels[i])
+                    out_count[labels[i]-1]++;
+        }
+    }
+    else
+    {
+        tipl::image<3,float> labels;
+        nii >> labels;
+        is_label = tipl::is_label_image(labels);
+        if(nii.dim(4) == 1)
+            out_count.resize(is_label ? tipl::max_value(labels) : 1);
+        for(size_t i = 0;i < labels.size();++i)
+            if(labels[i] != 0.0f)
+                out_count[int(labels[i])-1]++;
+    }
+
+    if(out_count.size() > 128)
+    {
+        out_count.resize(1);
+        is_label = false;
+    }
+    return true;
+}
+
+
 void MainWindow::on_action_train_open_labels_triggered()
 {
     QStringList fileNames = QFileDialog::getOpenFileNames(
@@ -189,17 +230,14 @@ void MainWindow::on_action_train_open_labels_triggered()
     );
     if (fileNames.isEmpty())
         return;
-    int cur_out_count = 1;
-    if(!get_label_info(fileNames[0].toStdString(),cur_out_count,is_label))
+    settings.setValue("work_dir",QFileInfo(fileNames[0]).absolutePath());
+
+    if(!get_label_info(fileNames[0].toStdString(),label_count,is_label))
     {
         QMessageBox::critical(this,"Error",QString("%1 is not a valid label image").arg(QFileInfo(fileNames[0]).fileName()));
         return;
     }
-    settings.setValue("work_dir",QFileInfo(fileNames[0]).absolutePath());
-    if(label_list.empty())
-        out_count = cur_out_count;
-    else
-        out_count = std::max<int>(out_count,cur_out_count);
+    out_count = std::max<int>(out_count,label_count.size());
 
     // auto complete
     auto entry_index = ui->list2->currentRow();
@@ -295,6 +333,39 @@ void MainWindow::on_action_train_save_network_triggered()
     }
 
 }
+
+
+void MainWindow::on_actionApply_Label_Weights_triggered()
+{
+    QString default_weight = "0.1 0.1 0.1 0.1 0.1";
+    if(!label_count.empty())
+    {
+        std::vector<float> v(label_count.size());
+        for(size_t i = 0;i < v.size();++i)
+            v[i] += 1.0f/(1.0f+float(label_count[i]));
+        tipl::multiply_constant(v,1.0f/tipl::sum(v));
+        std::string str;
+        for(auto& each : v)
+        {
+            if(!str.empty())
+                str += " ";
+            str += std::to_string(float(std::max<int>(1,each*100.0f))/100.0f);
+            while(str.back() == '0')
+                str.pop_back();
+        }
+        default_weight = str.c_str();
+    }
+
+    default_weight = QInputDialog::getText(this,"","Please Specify Label Weight",QLineEdit::Normal,default_weight);
+    if(default_weight.isEmpty())
+        return;
+    std::istringstream in(default_weight.toStdString());
+    label_weight = std::vector<float>((std::istream_iterator<float>(in)),std::istream_iterator<float>());
+    tipl::multiply_constant(label_weight,1.0f/(tipl::sum(label_weight)));
+}
+
+
+
 #include <ATen/Context.h>
 void MainWindow::on_train_start_clicked()
 {
@@ -308,6 +379,8 @@ void MainWindow::on_train_start_clicked()
     train.param.learning_rate = ui->learning_rate->value();
     train.param.output_model_type = ui->training_output->currentIndex();
     train.param.epoch = ui->epoch->value();
+    train.param.label_weight = label_weight;
+
 
     if(train.running)
     {
@@ -315,7 +388,6 @@ void MainWindow::on_train_start_clicked()
         train.pause = !train.pause;
         return;
     }
-
 
     if(train.model->feature_string.empty())
     {
