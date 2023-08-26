@@ -1472,6 +1472,7 @@
      </property>
      <addaction name="actionChange_Count"/>
      <addaction name="actionAdd_Relation"/>
+     <addaction name="actionApply_Label_Weights"/>
     </widget>
     <addaction name="action_train_open_files"/>
     <addaction name="action_train_open_labels"/>
@@ -1721,6 +1722,11 @@
   <action name="actionAdd_Relation">
    <property name="text">
     <string>Add Relation...</string>
+   </property>
+  </action>
+  <action name="actionApply_Label_Weights">
+   <property name="text">
+    <string>Apply Label Weights...</string>
    </property>
   </action>
  </widget>
