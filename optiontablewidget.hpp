@@ -76,7 +76,7 @@ class OptionTableWidget;
 class TreeModel : public QAbstractItemModel
 {
     Q_OBJECT
-private:
+public:
     std::shared_ptr<OptionItem> root;
     std::map<QString,OptionItem*> root_mapping;
     std::map<QString,OptionItem*> name_data_mapping;
