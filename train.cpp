@@ -1,5 +1,4 @@
 #include "train.hpp"
-#include "optiontablewidget.hpp"
 
 void preprocess_label(UNet3d& model,tipl::image<3>& train_label,const training_param& param)
 {
@@ -91,7 +90,6 @@ bool read_image_and_label(const std::string& image_name,
     nii.get_image_transformation(label_t);
     if(image_shape != label_shape || label_t != image_t)
     {
-        tipl::out() << "spatial transform label file to image file space" << std::endl;
         tipl::image<3> new_label(image_shape);
         tipl::resample_mt<tipl::nearest>(label,new_label,tipl::from_space(image_t).to(label_t));
         label.swap(new_label);
@@ -151,8 +149,6 @@ void train_unet::read_file(void)
         {
             status = "reading training data";
             tipl::shape<3> image_shape;
-            tipl::out() << "reading training images: " << std::filesystem::path(param.image_file_name[read_id]).filename()
-                        << " " << std::filesystem::path(param.label_file_name[read_id]).filename() << std::endl;
             if(!read_image_and_label(param.image_file_name[read_id],param.label_file_name[read_id],
                                      model->in_count,train_image[read_id],train_label[read_id],image_shape,train_image_vs[read_id]))
             {
@@ -195,8 +191,6 @@ void train_unet::read_file(void)
                         return;
                 }
 
-                tipl::out() << "reading test images: " << std::filesystem::path(param.test_image_file_name[read_id]).filename()
-                            << " " << std::filesystem::path(param.test_label_file_name[read_id]).filename() << std::endl;
                 tipl::image<3> input_image,input_label;
                 tipl::shape<3> input_shape;
                 tipl::vector<3> input_vs;
@@ -245,12 +239,11 @@ void train_unet::read_file(void)
         std::vector<size_t> non_template_indices;
         for(size_t i = 0;i < param.image_setting.size();++i)
             if(param.image_setting[i].is_template)
-                template_indices.insert(template_indices.end(),param.image_setting[i].count,i);
+                template_indices.insert(template_indices.end(),i);
             else
-                non_template_indices.insert(non_template_indices.end(),param.image_setting[i].count,i);
+                non_template_indices.insert(non_template_indices.end(),i);
 
         model->voxel_size = train_image_vs[0];
-        tipl::out() << "visual perception augmentation starts" << std::endl;
         tipl::par_for(thread_count,[&](size_t thread)
         {
             int seed = thread + model->total_training_count;
@@ -283,7 +276,7 @@ void train_unet::read_file(void)
                 in_data[thread] = train_image[read_id];
                 out_data[thread] = train_label[read_id];
                 in_data_read_id[thread] = read_id;
-                visual_perception_augmentation(*option,in_data[thread],out_data[thread],param.is_label,model->dim,train_image_vs[read_id],seed);
+                visual_perception_augmentation(options,in_data[thread],out_data[thread],param.is_label,model->dim,train_image_vs[read_id],seed);
                 if(model->out_count > 1)
                     preprocess_label(model,out_data[thread],param);
                 data_ready[thread] = true;

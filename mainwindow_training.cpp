@@ -30,9 +30,12 @@ void MainWindow::on_action_open_training_setting_triggered()
     QSettings ini(fileName,QSettings::IniFormat);
     image_list = ini.value("image",image_list).toStringList();
     label_list = ini.value("label",label_list).toStringList();
+    auto settings_template = ini.value("settings_template").toStringList();
+    for(size_t i = 0;i < settings_template.size() && i < image_settings.size();++i)
+        image_settings[i].is_template = settings_template[i].toInt();
+
     in_count = ini.value("in_count",in_count).toInt();
     out_count = ini.value("out_count",out_count).toInt();
-
     ui->epoch->setValue(ini.value("epoch",ui->epoch->value()).toInt());
     ui->batch_size->setValue(ini.value("batch_size",ui->batch_size->value()).toInt());
     ui->learning_rate->setValue(ini.value("learning_rate",ui->learning_rate->value()).toFloat());
@@ -58,6 +61,12 @@ void MainWindow::on_action_save_training_setting_triggered()
     QSettings ini(fileName,QSettings::IniFormat);
     ini.setValue("image",image_list);
     ini.setValue("label",label_list);
+
+    QStringList settings_template;
+    for(auto each : image_settings)
+        settings_template.push_back(QString::number(each.is_template ? 1:0));
+    ini.setValue("settings_template",settings_template);
+
     ini.setValue("in_count",in_count);
     ini.setValue("out_count",out_count);
     ini.setValue("epoch",ui->epoch->value());
@@ -69,17 +78,6 @@ void MainWindow::on_action_save_training_setting_triggered()
     settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
     settings.setValue("work_file",QFileInfo(fileName.remove(".ini")).fileName());
 
-}
-
-void MainWindow::on_actionChange_Count_triggered()
-{
-    bool ok = true;
-    int count = QInputDialog::getInt(this,"", "Specify training count per batch :",1,1,20,1,&ok);
-    if(!ok)
-        return;
-    for(auto i : image_last_added_indices)
-        image_settings[i].count = count;
-    update_list();
 }
 
 void MainWindow::on_actionAdd_Relation_triggered()
@@ -108,7 +106,6 @@ void MainWindow::update_list(void)
     for(size_t i = 0;i < image_list.size();++i)
     {
         auto image_list_text = QFileInfo(image_list[i]).fileName();
-        image_list_text += QString(",%1").arg(image_settings[i].count);
         image_list_text += image_settings[i].is_template ? ",t" : ",s";
         ui->list1->addItem(image_list_text);
         auto item = ui->list1->item(i);
@@ -443,6 +440,8 @@ void MainWindow::on_train_start_clicked()
         train.param.test_image_file_name.push_back(train.param.image_file_name[0]);
         train.param.test_label_file_name.push_back(train.param.label_file_name[0]);
     }
+
+    if(train.model->total_training_count == 0)
     {
         tipl::io::gz_nifti in;
         if(!in.load_from_file(train.param.image_file_name[0]))
@@ -459,9 +458,10 @@ void MainWindow::on_train_start_clicked()
     train.param.device = ui->train_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->train_device->currentIndex()-1):torch::Device(torch::kCPU);
     train.param.is_label = is_label;
     train.param.relations = relations;
-    train.option = option;
+    train.options.clear();
+    for(auto& each : option->treemodel->name_data_mapping)
+        train.options[each.first.toStdString()] = each.second->getValue().toFloat();
     train.start();
-
     ui->train_prog->setMaximum(ui->epoch->value());
     ui->train_prog->setValue(1);
     timer->start();
@@ -611,7 +611,12 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         if(!is_label)
             tipl::normalize(I2);
         if(ui->train_view_transform->isChecked())
-            visual_perception_augmentation(*option,I1,I2,is_label,shape,vs,ui->seed->value());
+        {
+            std::unordered_map<std::string,float> options;
+            for(auto& each : option->treemodel->name_data_mapping)
+                options[each.first.toStdString()] = each.second->getValue().toFloat();
+            visual_perception_augmentation(options,I1,I2,is_label,shape,vs,ui->seed->value());
+        }
         if(ui->view_channel->value())
             std::copy(I1.begin()+shape.size()*ui->view_channel->value(),I1.begin()+shape.size()*(ui->view_channel->value()+1),I1.begin());
         I1.resize(shape);

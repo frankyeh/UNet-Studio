@@ -7,7 +7,6 @@
 
 
 struct training_setting{
-    size_t count = 1;
     bool is_template = true;
 };
 
@@ -36,8 +35,7 @@ bool read_image_and_label(const std::string& image_name,
                           tipl::image<3>& label,
                           tipl::shape<3>& image_shape,
                           tipl::vector<3>& vs);
-class OptionTableWidget;
-void visual_perception_augmentation(const OptionTableWidget& options,
+void visual_perception_augmentation(std::unordered_map<std::string,float>& options,
                           tipl::image<3>& image,
                           tipl::image<3>& label,
                           bool is_label,
@@ -47,7 +45,7 @@ void visual_perception_augmentation(const OptionTableWidget& options,
 class train_unet{
 public:
     training_param param;
-    OptionTableWidget* option = nullptr;
+    std::unordered_map<std::string,float> options;
 public:
     bool aborted = false;
     bool pause = false;

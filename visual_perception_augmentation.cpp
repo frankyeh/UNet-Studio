@@ -1,5 +1,4 @@
 #include "TIPL/tipl.hpp"
-#include "optiontablewidget.hpp"
 
 template<typename image_type,typename label_type,typename vector_type>
 void cropping_at(image_type& image,label_type& label,const vector_type& pos,int radius,float cropping_value)
@@ -133,7 +132,7 @@ float perlin_texture(float x, float y, float z,const std::vector<int>& p)
     return lerp(w, y1, y2);
 }
 
-void visual_perception_augmentation(const OptionTableWidget& options,
+void visual_perception_augmentation(std::unordered_map<std::string,float>& options,
                           tipl::image<3>& input,
                           tipl::image<3>& label,
                           bool is_label,
@@ -147,7 +146,7 @@ void visual_perception_augmentation(const OptionTableWidget& options,
     auto range = [&one](float from,float to){return one()*(to-from)*0.5f+(to+from)*0.5f;};
     auto apply = [&one,&options](const char* name)
     {
-        int index = options.get<int>(name);
+        int index = int(options[name]);
         if(index == 0)
             return false;
         if(index >= 4)
@@ -174,9 +173,9 @@ void visual_perception_augmentation(const OptionTableWidget& options,
         bool downsample_z = apply("downsample_z");
         if(downsample_x || downsample_y || downsample_z)
         {
-            tipl::image<3> low_reso_image(tipl::shape<3>(float(image_shape[0])*(downsample_x ? options.get<float>("downsample_x_ratio"): 1.0f),
-                                                        float(image_shape[1])*(downsample_y ? options.get<float>("downsample_y_ratio"): 1.0f),
-                                                        float(image_shape[2])*(downsample_z ? options.get<float>("downsample_z_ratio"): 1.0f)));
+            tipl::image<3> low_reso_image(tipl::shape<3>(float(image_shape[0])*(downsample_x ? options["downsample_x_ratio"]: 1.0f),
+                                                        float(image_shape[1])*(downsample_y ? options["downsample_y_ratio"]: 1.0f),
+                                                        float(image_shape[2])*(downsample_z ? options["downsample_z_ratio"]: 1.0f)));
             for(auto& image : input_images)
             {
                 tipl::scale(image,low_reso_image);
@@ -187,8 +186,8 @@ void visual_perception_augmentation(const OptionTableWidget& options,
 
     if(apply("cropping"))
     {
-        auto cropping_size = range(options.get<float>("cropping_size_min"),
-                                   options.get<float>("cropping_size_max"))*float(image_shape.width());
+        auto cropping_size = range(options["cropping_size_min"],
+                                   options["cropping_size_max"])*float(image_shape.width());
         auto cropping_value = range(0.0f,2.0f);
         auto location = random_location(image_shape,cropping_size,1.0f - cropping_size);
         for(auto& image : input_images)
@@ -217,7 +216,7 @@ void visual_perception_augmentation(const OptionTableWidget& options,
 
     if(apply("noise"))
     {
-        tipl::uniform_dist<float> noise(0.0f,options.get<float>("noise_mag"),random_seed);
+        tipl::uniform_dist<float> noise(0.0f,options["noise_mag"],random_seed);
         for(auto& image : input_images)
         for(size_t i = 0;i < image.size();++i)
             image[i] += noise();
@@ -225,7 +224,7 @@ void visual_perception_augmentation(const OptionTableWidget& options,
     // lighting
     if(apply("ambient"))
     {
-        float ambient_magnitude = one()*options.get<float>("ambient_mag");
+        float ambient_magnitude = one()*options["ambient_mag"];
         for(auto& image : input_images)
             ambient_light(image,ambient_magnitude);
     }
@@ -233,13 +232,13 @@ void visual_perception_augmentation(const OptionTableWidget& options,
     {
         auto diffuse_dir = tipl::vector<3>(one()-0.5f,one()-0.5f,one()-0.5f);
         for(auto& image : input_images)
-            diffuse_light(image,diffuse_dir,options.get<float>("diffuse_mag"));
+            diffuse_light(image,diffuse_dir,options["diffuse_mag"]);
     }
     if(apply("specular"))
     {
         auto location = random_location(image_shape,0.4f,0.6f);
         for(auto& image : input_images)
-            specular_light(image,location,options.get<float>("specular_freq"),options.get<float>("specular_mag"));
+            specular_light(image,location,options["specular_freq"],options["specular_mag"]);
     }
 
 
@@ -247,46 +246,46 @@ void visual_perception_augmentation(const OptionTableWidget& options,
     // rigid motion + view port
     tipl::image<3> output_label(image_shape);
     {
-        auto resolution = range(1.0f/options.get<float>("scaling_up"),1.0f/options.get<float>("scaling_down"));
+        auto resolution = range(1.0f/options["scaling_up"],1.0f/options["scaling_down"]);
         tipl::affine_transform<float> transform = {
-                    one()*float(options.get<float>("translocation_ratio"))*image_shape[0]*image_vs[0],
-                    one()*float(options.get<float>("translocation_ratio"))*image_shape[1]*image_vs[1],
-                    one()*float(options.get<float>("translocation_ratio"))*image_shape[2]*image_vs[2],
-                    one()*options.get<float>("rotation_x"),
-                    one()*options.get<float>("rotation_y"),
-                    one()*options.get<float>("rotation_z"),
-                    resolution*range(1.0f/options.get<float>("aspect_ratio"),options.get<float>("aspect_ratio")),
-                    resolution*range(1.0f/options.get<float>("aspect_ratio"),options.get<float>("aspect_ratio")),
-                    resolution*range(1.0f/options.get<float>("aspect_ratio"),options.get<float>("aspect_ratio")),
+                    one()*float(options["translocation_ratio"])*image_shape[0]*image_vs[0],
+                    one()*float(options["translocation_ratio"])*image_shape[1]*image_vs[1],
+                    one()*float(options["translocation_ratio"])*image_shape[2]*image_vs[2],
+                    one()*options["rotation_x"],
+                    one()*options["rotation_y"],
+                    one()*options["rotation_z"],
+                    resolution*range(1.0f/options["aspect_ratio"],options["aspect_ratio"]),
+                    resolution*range(1.0f/options["aspect_ratio"],options["aspect_ratio"]),
+                    resolution*range(1.0f/options["aspect_ratio"],options["aspect_ratio"]),
                     0.0f,0.0f,0.0f};
         auto trans = tipl::transformation_matrix<float>(transform,image_shape,image_vs,image_shape,image_vs);
 
 
-        tipl::vector<3> perspective((one()-0.5f)*options.get<float>("perspective")/float(image_shape[0]),
-                                    (one()-0.5f)*options.get<float>("perspective")/float(image_shape[1]),
-                                    (one()-0.5f)*options.get<float>("perspective")/float(image_shape[2]));
+        tipl::vector<3> perspective((one()-0.5f)*options["perspective"]/float(image_shape[0]),
+                                    (one()-0.5f)*options["perspective"]/float(image_shape[1]),
+                                    (one()-0.5f)*options["perspective"]/float(image_shape[2]));
         auto center = tipl::vector<3>(image_shape)/2.0f;
 
 
         tipl::image<3,tipl::vector<3> > displaced(image_shape);
-        if(options.get<float>("lens_distortion") != 0.0f)
-            lens_distortion(displaced,one()*options.get<float>("lens_distortion"));
+        if(options["lens_distortion"] != 0.0f)
+            lens_distortion(displaced,one()*options["lens_distortion"]);
         if(apply("distortion"))
         {
-            size_t num = size_t(range(1.0f,options.get<int>("distortion_count")+1.0f));
+            size_t num = size_t(range(1.0f,options["distortion_count"]+1.0f));
             for(size_t i = 0;i < num;++i)
                 create_distortion_at(displaced,random_location(image_shape,0.3f,0.7f),
                                              float(image_shape[0])*range(
-                                                options.get<float>("distortion_radius_min"),
-                                                options.get<float>("distortion_radius_max")), // radius
+                                                options["distortion_radius_min"],
+                                                options["distortion_radius_max"]), // radius
                                                 range(
-                                                options.get<float>("distortion_mag_min"),
-                                                options.get<float>("distortion_mag_max")));  //magnitude
+                                                options["distortion_mag_min"],
+                                                options["distortion_mag_max"]));  //magnitude
         }
 
 
-        bool has_perspective = options.get<float>("perspective") > 0.0f;
-        bool has_lens_distortion = options.get<float>("lens_distortion") > 0.0f;
+        bool has_perspective = options["perspective"] > 0.0f;
+        bool has_lens_distortion = options["lens_distortion"] > 0.0f;
 
         tipl::par_for(tipl::begin_index(image_shape),tipl::end_index(image_shape),
             [&](const tipl::pixel_index<3>& index)
@@ -358,7 +357,7 @@ void visual_perception_augmentation(const OptionTableWidget& options,
                 {
                     tipl::resample_mt(image,background,tipl::transformation_matrix<float>(args[iter],image_shape,image_vs,image_shape,image_vs));
                     tipl::lower_threshold(background,0.0f);
-                    tipl::normalize(background,options.get<float>("rubber_stamping_mag"));
+                    tipl::normalize(background,options["rubber_stamping_mag"]);
                     for(size_t i = 0;i < image_out.size();++i)
                         if(!output_label[i])
                             blend_fun(image_out[i],background[i]);
@@ -394,7 +393,7 @@ void visual_perception_augmentation(const OptionTableWidget& options,
                 background[pos] = v-std::floor(v);
             });
 
-            tipl::normalize(background,options.get<float>("perlin_texture_mag"));
+            tipl::normalize(background,options["perlin_texture_mag"]);
             for(auto& image : output_images)
             for(size_t i = 0;i < image.size();++i)
                 if(!output_label[i])
