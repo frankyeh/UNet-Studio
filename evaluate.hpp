@@ -20,10 +20,8 @@ struct ProcStrategy{
     unsigned char output_format = 0;
 };
 
-class OptionTableWidget;
 class evaluate_unet{
 public:
-    OptionTableWidget* option = nullptr;
     EvaluateParam param;
 public:
     ProcStrategy proc_strategy;

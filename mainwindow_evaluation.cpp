@@ -115,7 +115,6 @@ void MainWindow::on_evaluate_clicked()
     ui->evaluate_progress->setEnabled(true);
     ui->evaluate_progress->setMaximum(evaluate_list.size());
     ui->evaluate_list2->clear();
-    evaluate.option = eval_option;
     evaluate.proc_strategy.match_resolution = ui->match_resolution->isChecked() | ui->match_orientation->isChecked();
     evaluate.proc_strategy.match_fov = ui->match_fov->isChecked() | ui->match_orientation->isChecked();
     evaluate.proc_strategy.match_orientation = ui->match_orientation->isChecked();

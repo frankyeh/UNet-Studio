@@ -1,5 +1,4 @@
 #include "evaluate.hpp"
-#include "optiontablewidget.hpp"
 
 std::vector<std::string> operations({
         "none",
