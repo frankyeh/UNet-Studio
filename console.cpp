@@ -62,7 +62,6 @@ Console::~Console()
     delete ui;
 }
 
-int run_action_with_wildcard(tipl::program_option<tipl::out>& po);
 void Console::on_run_cmd_clicked()
 {
     tipl::program_option<tipl::out> po;
@@ -78,7 +77,6 @@ void Console::on_run_cmd_clicked()
         std::cout << "ERROR: invalid command, use --help for more detail" << std::endl;
         return;
     }
-    run_action_with_wildcard(po);
 }
 
 
