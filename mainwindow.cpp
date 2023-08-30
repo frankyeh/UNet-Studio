@@ -7,8 +7,8 @@
 #include <QMessageBox>
 #include "console.h"
 #include "TIPL/tipl.hpp"
-
-extern QSettings settings;
+#include <QSettings>
+QSettings settings("settings.ini",QSettings::IniFormat);
 extern std::vector<std::string> gpu_names;
 void gen_list(std::vector<std::string>& network_list);
 MainWindow::MainWindow(QWidget *parent)

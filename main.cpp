@@ -2,20 +2,19 @@
 #include "zlib.h"
 #include "unet.hpp"
 #include "TIPL/tipl.hpp"
-#include <QApplication>
-#include <QSettings>
-#include <QTextEdit>
 #include "console.h"
-QSettings settings("settings.ini",QSettings::IniFormat);
+
+#ifdef TIPL_USE_QT
+#include <QApplication>
+#endif
+
+tipl::program_option<tipl::out> po;
 extern console_stream console;
 void check_cuda(std::string& error_msg);
 
-int run_action_with_wildcard(tipl::program_option<tipl::out>& po)
-{
-    return 1;
-}
 int main(int argc, char *argv[])
 {
+    po.parse(argc,argv);
     tipl::available_thread_count<0>() = std::thread::hardware_concurrency()*8;
     tipl::show_prog = true;
     console.attach();
@@ -24,10 +23,14 @@ int main(int argc, char *argv[])
     if constexpr (tipl::use_cuda)
         check_cuda(msg);
 
+#ifdef TIPL_USE_QT
     QApplication a(argc, argv);
     MainWindow w;
     w.show();
     return a.exec();
+#else
+    return 0;
+#endif
 }
 
 
