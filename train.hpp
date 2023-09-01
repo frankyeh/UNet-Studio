@@ -66,7 +66,6 @@ private:
     std::shared_ptr<std::thread> prepare_tensor_thread;
     void prepare_tensor(void);
 private:
-    std::shared_ptr<torch::optim::Optimizer> optimizer;
     std::shared_ptr<std::thread> train_thread;
     void train(void);
 public:
