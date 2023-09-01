@@ -79,15 +79,21 @@ MainWindow::MainWindow(QWidget *parent)
     eval_timer = new QTimer(this);
     eval_timer->setInterval(1500);
     connect(eval_timer, SIGNAL(timeout()), this, SLOT(evaluating()));
-
+    qApp->installEventFilter(this);
 }
 
 MainWindow::~MainWindow()
 {
     settings.setValue("eval_network",ui->evaluate_builtin_networks->currentText());
+    qApp->removeEventFilter(this);
     delete ui;
 }
-
+extern console_stream console;
+bool MainWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    console.show_output();
+    return false;
+}
 void MainWindow::on_eval_view_dim_currentIndexChanged(int index)
 {
     auto currentRow = ui->evaluate_list->currentRow();
