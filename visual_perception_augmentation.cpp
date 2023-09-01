@@ -1,3 +1,4 @@
+#include <unordered_map>
 #include "TIPL/tipl.hpp"
 
 template<typename image_type,typename label_type,typename vector_type>
