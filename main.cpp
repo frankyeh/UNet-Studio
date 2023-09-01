@@ -1,36 +1,52 @@
-#include "mainwindow.h"
 #include "zlib.h"
 #include "unet.hpp"
 #include "TIPL/tipl.hpp"
-#include "console.h"
 
-#ifdef TIPL_USE_QT
+
 #include <QApplication>
-#endif
+#include "mainwindow.h"
+#include "console.h"
 
 tipl::program_option<tipl::out> po;
 extern console_stream console;
 void check_cuda(std::string& error_msg);
 
+int tra(void);
+int run_cmd(void)
+{
+    if (!po.check("action"))
+        return 1;
+    if(po.get("action") == std::string("train"))
+        return tra();
+    return 1;
+}
+
 int main(int argc, char *argv[])
 {
-    po.parse(argc,argv);
     tipl::available_thread_count<0>() = std::thread::hardware_concurrency()*8;
+    if(argc > 2)
+    {
+        if(!po.parse(argc,argv))
+        {
+            tipl::out() << po.error_msg << std::endl;
+            return 1;
+        }
+        return run_cmd();
+    }
+
     tipl::show_prog = true;
     console.attach();
-    std::string msg;
-
     if constexpr (tipl::use_cuda)
-        check_cuda(msg);
-
-#ifdef TIPL_USE_QT
+    {
+        std::string msg;
+        if(torch::hasCUDA())
+            check_cuda(msg);
+    }
     QApplication a(argc, argv);
     MainWindow w;
     w.show();
     return a.exec();
-#else
-    return 0;
-#endif
+
 }
 
 
