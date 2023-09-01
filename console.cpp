@@ -62,9 +62,10 @@ Console::~Console()
     delete ui;
 }
 
+extern tipl::program_option<tipl::out> po;
+int run_cmd(void);
 void Console::on_run_cmd_clicked()
 {
-    tipl::program_option<tipl::out> po;
     if(ui->cmd_line->text().startsWith("unet_studio "))
         ui->cmd_line->setText(ui->cmd_line->text().remove("unet_studio "));
     if(!po.parse(ui->cmd_line->text().toStdString()))
@@ -74,9 +75,10 @@ void Console::on_run_cmd_clicked()
     }
     if (!po.has("action"))
     {
-        std::cout << "ERROR: invalid command, use --help for more detail" << std::endl;
+        std::cout << "ERROR: invalid command" << std::endl;
         return;
     }
+    run_cmd();
 }
 
 
