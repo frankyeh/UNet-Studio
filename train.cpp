@@ -145,28 +145,7 @@ void train_unet::read_file(void)
     train_image_ready = std::vector<bool>(param.image_file_name.size(),false);
     train_image_is_template = std::vector<bool>(param.image_file_name.size(),true);
 
-    if(param.image_file_name.empty())
-    {
-        error_msg = "please specify the training data";
-        aborted = true;
-        return;
-    }
 
-    if(model->total_training_count == 0)
-    {
-        tipl::io::gz_nifti in;
-        if(!in.load_from_file(param.image_file_name[0]))
-        {
-            error_msg = "Invalid NIFTI format";
-            error_msg += param.image_file_name[0];
-            aborted = true;
-            return;
-        }
-        in.toLPS();
-        in.get_image_dimension(model->dim);
-        model->dim = tipl::ml3d::round_up_size(model->dim);
-        tipl::out() << "set network input sizes: " << model->dim << std::endl;
-    }
 
 
     {
@@ -224,12 +203,6 @@ void train_unet::read_file(void)
     {
         //prepare test data
         {
-            if(param.test_image_file_name.empty())
-            {
-                param.test_image_file_name.push_back(param.image_file_name[0]);
-                param.test_label_file_name.push_back(param.label_file_name[0]);
-            }
-            tipl::progress prog("read test data");
             for(int read_id = 0;read_id < param.test_image_file_name.size() && !aborted;++read_id)
             {
                 while(pause)
@@ -292,7 +265,7 @@ void train_unet::read_file(void)
             else
                 non_template_indices.insert(non_template_indices.end(),i);
 
-        model->voxel_size = train_image_vs[0];
+
         tipl::par_for(thread_count,[&](size_t thread)
         {
             int seed = thread + model->total_training_count;
@@ -383,28 +356,6 @@ void train_unet::prepare_tensor(void)
     }));
 }
 
-bool train_unet::save_error_to(const char* file_name)
-{
-    std::ofstream out(file_name);
-    if(!out)
-        return false;
-    out << "trainning_error\t";
-    for(size_t j = 0;j < test_error_foreground.size();++j)
-        out << "test_foreground_error\ttest_background_error\t";
-    out << std::endl;
-    for(size_t i = 0;i < error.size() && i < cur_epoch;++i)
-    {
-        out << error[i] << "\t";
-        for(size_t j = 0;j < test_error_foreground.size();++j)
-        {
-            out << test_error_foreground[j][i] << "\t";
-            out << test_error_background[j][i] << "\t";
-        }
-        out << std::endl;
-    }
-    return true;
-}
-
 void train_unet::update_epoch_count()
 {
     error.resize(param.epoch);
@@ -416,26 +367,7 @@ void train_unet::update_epoch_count()
 }
 void train_unet::train(void)
 {
-    error.clear();
-    test_error_foreground = std::vector<std::vector<float> >(param.test_image_file_name.size());
-    test_error_background = test_error_foreground;
-    update_epoch_count();
-
-    cur_epoch = 0;
-
-    output_model = UNet3d(model->in_count,model->out_count,model->feature_string);
-    output_model->to(param.device);
-    output_model->copy_from(*model);
-
-
-    std::string line(80,' ');
-    line[80/3] = '|';
-    line[80*2/3] = '|';
-    line.back() = '|';
-
-
     train_thread.reset(new std::thread([=](){
-        auto to_chart = [](float error)->int{return int(std::max<float>(0.0f,std::min<float>(79.0f,(-std::log10(error))*80.0f/3.0f)));};
         struct exist_guard
         {
             bool& running;
@@ -445,10 +377,7 @@ void train_unet::train(void)
 
         try{
 
-            size_t cur_data_index = 0;
-            size_t best_epoch = 0;
-
-            optimizer.reset(new torch::optim::Adam(model->parameters(), torch::optim::AdamOptions(param.learning_rate)));
+            std::shared_ptr<torch::optim::Optimizer> optimizer(new torch::optim::Adam(model->parameters(), torch::optim::AdamOptions(param.learning_rate)));
 
             while(!test_data_ready || pause)
             {
@@ -459,9 +388,11 @@ void train_unet::train(void)
                 std::this_thread::sleep_for(100ms);
             }
 
-            tipl::out() << "1                        0.1                        0.01                   0.001";
-            tipl::out() << "|-------------------------|--------------------------|-------------------------|";
-            for (; cur_epoch < param.epoch && !aborted;cur_epoch++)
+            tipl::out()     << "1                        0.1                        0.01                   0.001";
+            tipl::out()     << "|-------------------------|--------------------------|-------------------------|";
+            std::string line = "|                         |                          |                         |";
+            auto to_chart = [](float error)->int{return int(std::max<float>(0.0f,std::min<float>(79.0f,(-std::log10(error))*80.0f/3.0f)));};
+            for (size_t cur_data_index = 0; cur_epoch < param.epoch && !aborted;cur_epoch++)
             {
                 float mse_foreground = 0.0f,mse_background = 0.0f;
                 if(param.learning_rate != optimizer->defaults().get_lr())
@@ -480,9 +411,6 @@ void train_unet::train(void)
                         test_error_foreground[i][cur_epoch] = mse_foreground;
                         test_error_background[i][cur_epoch] = mse_background;
                     }
-                    if(test_error_foreground[0][best_epoch] + test_error_background[0][best_epoch] <=
-                       test_error_foreground[0][cur_epoch]  + test_error_background[0][cur_epoch])
-                        best_epoch = cur_epoch;
                     output_model->copy_from(*model);
                 }
 
@@ -576,18 +504,59 @@ void train_unet::train(void)
 void train_unet::start(void)
 {
     tipl::progress p("starting training");
+    // reset
     status = "initializing";
-    stop();
-    pause = aborted = false;
-    running = true;
+    {
+        stop();
+        pause = aborted = false;
+        running = true;
+        error_msg.clear();
+        error.clear();
+        cur_epoch = 0;
+    }
 
-    error_msg.clear();
-    read_file();
-    prepare_tensor();
+    if(param.image_file_name.empty())
+    {
+        error_msg = "please specify the training data";
+        aborted = true;
+        return;
+    }
+    if(param.test_image_file_name.empty())
+    {
+        param.test_image_file_name.push_back(param.image_file_name[0]);
+        param.test_label_file_name.push_back(param.label_file_name[0]);
+    }
+
+    if(model->total_training_count == 0)
+    {
+        tipl::io::gz_nifti in;
+        if(!in.load_from_file(param.image_file_name[0]))
+        {
+            error_msg = "Invalid NIFTI format";
+            error_msg += param.image_file_name[0];
+            aborted = true;
+            return;
+        }
+        in.toLPS();
+        in.get_image_dimension(model->dim);
+        in.get_voxel_size(model->voxel_size);
+        model->dim = tipl::ml3d::round_up_size(model->dim);
+        model->voxel_size = model->voxel_size[0];
+        tipl::out() << "set network input sizes: " << model->dim << " with resolution:" << model->voxel_size <<std::endl;
+    }
+
+    test_error_foreground = std::vector<std::vector<float> >(param.test_image_file_name.size());
+    test_error_background = test_error_foreground;
+    update_epoch_count();
 
     model->to(param.device);
     model->train();
+    output_model = UNet3d(model->in_count,model->out_count,model->feature_string);
+    output_model->to(param.device);
+    output_model->copy_from(*model);
 
+    read_file();
+    prepare_tensor();    
     train();
 
     if(!tipl::show_prog)
@@ -621,7 +590,27 @@ void train_unet::stop(void)
     pause = aborted = true;
     join();
 }
-
+bool train_unet::save_error_to(const char* file_name)
+{
+    std::ofstream out(file_name);
+    if(!out)
+        return false;
+    out << "trainning_error\t";
+    for(size_t j = 0;j < test_error_foreground.size();++j)
+        out << "test_foreground_error\ttest_background_error\t";
+    out << std::endl;
+    for(size_t i = 0;i < error.size() && i < cur_epoch;++i)
+    {
+        out << error[i] << "\t";
+        for(size_t j = 0;j < test_error_foreground.size();++j)
+        {
+            out << test_error_foreground[j][i] << "\t";
+            out << test_error_background[j][i] << "\t";
+        }
+        out << std::endl;
+    }
+    return true;
+}
 
 bool get_label_info(const std::string& label_name,std::vector<int>& out_count,bool& is_label);
 
