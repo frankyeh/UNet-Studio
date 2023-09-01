@@ -37,7 +37,7 @@ jobs:
     - name: Install TIPL
       run: |
         git clone https://github.com/frankyeh/TIPL.git
-        git clone https://github.com/frankyeh/UNet-Studio-Network.git
+        git clone https://github.com/frankyeh/UNet-Studio-Data.git
     - name: Build UNet Studio
       run: |
         for /f "usebackq delims=#" %%a in (`"%programfiles(x86)%\Microsoft Visual Studio\Installer\vswhere" -latest -property installationPath`) do call "%%a\Common7\Tools\VsDevCmd.bat" -arch=x64
@@ -47,7 +47,7 @@ jobs:
       shell: cmd      
     - name: Packaging
       run: |
-        move UNet-Studio-Network unet_studio_win
+        move UNet-Studio-Data unet_studio_win
         move install_win.bat unet_studio_win
         move build\unet_studio.exe unet_studio_win
         windeployqt --no-translations --no-system-d3d-compiler --compiler-runtime --no-opengl-sw unet_studio_win\unet_studio.exe
@@ -179,7 +179,7 @@ jobs:
     - name: Download TIPL and Atlases
       run: |
         git clone https://github.com/frankyeh/TIPL.git
-        git clone https://github.com/frankyeh/UNet-Studio-Network.git
+        git clone https://github.com/frankyeh/UNet-Studio-Data.git
     - name: Build UNet Studio
       run: |
         mkdir -p build
@@ -191,7 +191,7 @@ jobs:
       run: |
         mv build/unet_studio.app .
         /usr/local/opt/qt@6/bin/macdeployqt unet_studio.app
-        mv UNet-Studio-Network/* unet_studio.app/Contents/MacOS/
+        mv UNet-Studio-Data/* unet_studio.app/Contents/MacOS/
         mv unet-studio.icns unet_studio.app/Contents/Resources/
         zip -r unet_studio_${{ matrix.os }}.zip unet_studio.app
     - name: Create Release

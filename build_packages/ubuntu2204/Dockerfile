@@ -24,10 +24,10 @@ RUN mkdir -p /opt/unet-studio \
   && cd /opt/unet-studio \
   && mv /opt/src/build/unet_studio . \
   && chmod 755 unet_studio \
-  && git clone https://github.com/frankyeh/UNet-Studio-Network.git \
-  && rm -fr UNet-Studio-Network/.git \
-  && mv UNet-Studio-Network/* . \
-  && rm -fr UNet-Studio-Network
+  && git clone https://github.com/frankyeh/UNet-Studio-Data.git \
+  && rm -fr UNet-Studio-Data/.git \
+  && mv UNet-Studio-Data/* . \
+  && rm -fr UNet-Studio-Data
 
 ENV PATH="$PATH:/opt/unet-studio" 
 
