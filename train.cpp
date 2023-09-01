@@ -1,4 +1,7 @@
 #include "train.hpp"
+extern tipl::program_option<tipl::out> po;
+bool load_from_file(UNet3d& model,const char* file_name);
+bool save_to_file(UNet3d& model,const char* file_name);
 
 void preprocess_label(UNet3d& model,tipl::image<3>& train_label,const training_param& param)
 {
@@ -140,6 +143,49 @@ void train_unet::read_file(void)
     train_label = std::vector<tipl::image<3> >(param.image_file_name.size());
     train_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
     train_image_ready = std::vector<bool>(param.image_file_name.size(),false);
+    train_image_is_template = std::vector<bool>(param.image_file_name.size(),true);
+
+    if(param.image_file_name.empty())
+    {
+        error_msg = "please specify the training data";
+        aborted = true;
+        return;
+    }
+
+    if(model->total_training_count == 0)
+    {
+        tipl::io::gz_nifti in;
+        if(!in.load_from_file(param.image_file_name[0]))
+        {
+            error_msg = "Invalid NIFTI format";
+            error_msg += param.image_file_name[0];
+            aborted = true;
+            return;
+        }
+        in.toLPS();
+        in.get_image_dimension(model->dim);
+        model->dim = tipl::ml3d::round_up_size(model->dim);
+        tipl::out() << "set network input sizes: " << model->dim << std::endl;
+    }
+
+
+    {
+        tipl::progress p("checking training images",true);
+        for(size_t i = 0;p(i,param.image_file_name.size());++i)
+        {
+            tipl::io::gz_nifti in;
+            if(!in.load_from_file(param.image_file_name[i].c_str()))
+            {
+                error_msg = "invalid NIFTI file: ";
+                error_msg += param.image_file_name[i];
+                aborted = true;
+                return;
+            }
+            train_image_is_template[i] = in.is_mni();
+        }
+    }
+
+    // read training data
     read_train_images.reset(new std::thread([=]()
     {
         // prepare training data
@@ -164,12 +210,10 @@ void train_unet::read_file(void)
         }
     }));
 
-
     in_data = std::vector<tipl::image<3> >(thread_count);
     in_data_read_id = std::vector<size_t>(thread_count);
     out_data = std::vector<tipl::image<3> >(thread_count);
     data_ready = std::vector<bool>(thread_count,false);
-
 
     test_data_ready = false;
     test_in_tensor.clear();
@@ -180,6 +224,11 @@ void train_unet::read_file(void)
     {
         //prepare test data
         {
+            if(param.test_image_file_name.empty())
+            {
+                param.test_image_file_name.push_back(param.image_file_name[0]);
+                param.test_label_file_name.push_back(param.label_file_name[0]);
+            }
             tipl::progress prog("read test data");
             for(int read_id = 0;read_id < param.test_image_file_name.size() && !aborted;++read_id)
             {
@@ -237,8 +286,8 @@ void train_unet::read_file(void)
 
         std::vector<size_t> template_indices;
         std::vector<size_t> non_template_indices;
-        for(size_t i = 0;i < param.image_setting.size();++i)
-            if(param.image_setting[i].is_template)
+        for(size_t i = 0;i < train_image_is_template.size();++i)
+            if(train_image_is_template[i])
                 template_indices.insert(template_indices.end(),i);
             else
                 non_template_indices.insert(non_template_indices.end(),i);
@@ -276,7 +325,7 @@ void train_unet::read_file(void)
                 in_data[thread] = train_image[read_id];
                 out_data[thread] = train_label[read_id];
                 in_data_read_id[thread] = read_id;
-                visual_perception_augmentation(options,in_data[thread],out_data[thread],param.is_label,model->dim,train_image_vs[read_id],seed);
+                visual_perception_augmentation(param.options,in_data[thread],out_data[thread],param.is_label,model->dim,train_image_vs[read_id],seed);
                 if(model->out_count > 1)
                     preprocess_label(model,out_data[thread],param);
                 data_ready[thread] = true;
@@ -333,6 +382,29 @@ void train_unet::prepare_tensor(void)
         tipl::out() << error_msg << std::endl;
     }));
 }
+
+bool train_unet::save_error_to(const char* file_name)
+{
+    std::ofstream out(file_name);
+    if(!out)
+        return false;
+    out << "trainning_error\t";
+    for(size_t j = 0;j < test_error_foreground.size();++j)
+        out << "test_foreground_error\ttest_background_error\t";
+    out << std::endl;
+    for(size_t i = 0;i < error.size() && i < cur_epoch;++i)
+    {
+        out << error[i] << "\t";
+        for(size_t j = 0;j < test_error_foreground.size();++j)
+        {
+            out << test_error_foreground[j][i] << "\t";
+            out << test_error_background[j][i] << "\t";
+        }
+        out << std::endl;
+    }
+    return true;
+}
+
 void train_unet::update_epoch_count()
 {
     error.resize(param.epoch);
@@ -356,7 +428,14 @@ void train_unet::train(void)
     output_model->copy_from(*model);
 
 
+    std::string line(80,' ');
+    line[80/3] = '|';
+    line[80*2/3] = '|';
+    line.back() = '|';
+
+
     train_thread.reset(new std::thread([=](){
+        auto to_chart = [](float error)->int{return int(std::max<float>(0.0f,std::min<float>(79.0f,(-std::log10(error))*80.0f/3.0f)));};
         struct exist_guard
         {
             bool& running;
@@ -380,33 +459,31 @@ void train_unet::train(void)
                 std::this_thread::sleep_for(100ms);
             }
 
+            tipl::out() << "1                        0.1                        0.01                   0.001";
+            tipl::out() << "|-------------------------|--------------------------|-------------------------|";
             for (; cur_epoch < param.epoch && !aborted;cur_epoch++)
             {
+                float mse_foreground = 0.0f,mse_background = 0.0f;
                 if(param.learning_rate != optimizer->defaults().get_lr())
                 {
                     tipl::out() << "set learning rate to " << param.learning_rate << std::endl;
                     optimizer->defaults().set_lr(param.learning_rate);
                 }
-                std::ostringstream out;
-
                 if(!test_in_tensor.empty())
                 {
                     model->eval();
-                    out << "epoch:" << cur_epoch << " testing error:";
                     for(size_t i = 0;i < test_in_tensor.size();++i)
                     {
                         auto f = model->forward(test_in_tensor[i]);
-                        float mse_foreground = torch::mse_loss(f.masked_select(test_out_mask[i].gt(0)),test_out_tensor[i].masked_select(test_out_mask[i].gt(0))).item().toFloat();
-                        float mse_background = torch::mse_loss(f.masked_select(test_out_mask[i].le(0)),test_out_tensor[i].masked_select(test_out_mask[i].le(0))).item().toFloat();
+                        mse_foreground = torch::mse_loss(f.masked_select(test_out_mask[i].gt(0)),test_out_tensor[i].masked_select(test_out_mask[i].gt(0))).item().toFloat();
+                        mse_background = torch::mse_loss(f.masked_select(test_out_mask[i].le(0)),test_out_tensor[i].masked_select(test_out_mask[i].le(0))).item().toFloat();
                         test_error_foreground[i][cur_epoch] = mse_foreground;
                         test_error_background[i][cur_epoch] = mse_background;
-                        out << mse_foreground << " " << mse_background << " ";
                     }
                     if(test_error_foreground[0][best_epoch] + test_error_background[0][best_epoch] <=
                        test_error_foreground[0][cur_epoch]  + test_error_background[0][cur_epoch])
                         best_epoch = cur_epoch;
-                    if(param.output_model_type == 0 || best_epoch == cur_epoch)
-                        output_model->copy_from(*model);
+                    output_model->copy_from(*model);
                 }
 
                 std::string source_str;
@@ -427,7 +504,7 @@ void train_unet::train(void)
                     if(b)
                         source_str += ",";
                     source_str += std::to_string(in_tensor_read_id[data_index]);
-                    source_str += param.image_setting[in_tensor_read_id[data_index]].is_template ? "t":"s";
+                    source_str += train_image_is_template[in_tensor_read_id[data_index]] ? "t":"s";
 
                     status = "training";
                     auto output = model->forward(in_tensor[data_index]);
@@ -459,12 +536,28 @@ void train_unet::train(void)
                     model->total_training_count += param.batch_size;
 
                     float previous_error = cur_epoch > 0 ? error[cur_epoch-1]:sum_error/float(param.batch_size);
-                    out << " training error:" << (error[cur_epoch] = previous_error*0.95 + sum_error/float(param.batch_size)*0.05f) << std::endl;
-                    tipl::out() << out.str();
-                    tipl::out() << source_str;
+                    error[cur_epoch] = previous_error*0.95 + sum_error/float(param.batch_size)*0.05f;
+                    auto out = line;
+                    out[to_chart(error[cur_epoch])] = 'T';
+                    out[to_chart(mse_foreground)] = 'F';
+                    out[to_chart(mse_background)] = 'B';
+
+                    std::string out2("|epoch:");
+                    out2 += std::to_string(cur_epoch);
+                    std::copy(out2.begin(),out2.end(),out.begin());
+
+                    tipl::out() << out;
 
                 }
 
+            }
+
+            if(po.has("network"))
+            {
+                if(!save_to_file(model,po.get("network").c_str()))
+                    error_msg = "ERROR: failed to save network";
+                if(!save_error_to(po.get("error","error.txt").c_str()))
+                    error_msg = "ERROR: failed to save error";
             }
         }
         catch(const c10::Error& error)
@@ -476,29 +569,32 @@ void train_unet::train(void)
         }
         tipl::out() << error_msg << std::endl;
         pause = aborted = true;
-        if(param.output_model_type == 0)
-            output_model->copy_from(*model); // select the lastest model
-        else
-            model->copy_from(*output_model); // select the low error model
+        output_model->copy_from(*model);
         status = "complete";
     }));
 }
 void train_unet::start(void)
 {
-    stop();
+    tipl::progress p("starting training");
     status = "initializing";
-    model->to(param.device);
-    model->train();
+    stop();
     pause = aborted = false;
     running = true;
+
     error_msg.clear();
     read_file();
     prepare_tensor();
+
+    model->to(param.device);
+    model->train();
+
     train();
+
+    if(!tipl::show_prog)
+        join();
 }
-void train_unet::stop(void)
+void train_unet::join(void)
 {
-    pause = aborted = true;
     if(read_train_images.get())
     {
         read_train_images->join();
@@ -520,4 +616,139 @@ void train_unet::stop(void)
         train_thread.reset();
     }
 }
+void train_unet::stop(void)
+{
+    pause = aborted = true;
+    join();
+}
 
+
+bool get_label_info(const std::string& label_name,std::vector<int>& out_count,bool& is_label);
+
+int tra(void)
+{
+    static train_unet train;
+    if(train.running)
+    {
+        tipl::out() << "terminating training...";
+        train.stop();
+    }
+
+    tipl::progress p("start training");
+
+    // loading training data
+    {
+        train.param.image_file_name.clear();
+        train.param.label_file_name.clear();
+        if(!po.get_files("image",train.param.image_file_name) ||
+           !po.get_files("label",train.param.label_file_name))
+            return 1;
+
+        if(train.param.image_file_name.size() != train.param.label_file_name.size())
+        {
+            tipl::out() << "ERROR: different number of files found for image and label";
+            return 1;
+        }
+        if(train.param.image_file_name.empty())
+        {
+            tipl::out() << "ERROR: no available training images";
+            return 1;
+        }
+
+    }
+
+
+
+
+    if(!po.has("network"))
+    {
+        tipl::out() << "ERROR: please specify --network";
+        return 1;
+    }
+    std::string network = po.get("network");
+    if(!tipl::ends_with(network,"net.gz"))
+        network += ".net.gz";
+    if(std::filesystem::exists(network))
+    {
+        tipl::out() << "loading existing network " << network;
+        if(!load_from_file(train.model,network.c_str()))
+        {
+            tipl::out() << "ERROR: failed to load model from " << network;
+            return 1;
+        }
+        tipl::out() << train.model->get_info();
+        if(po.get("out_count",train.model->out_count) != train.model->out_count)
+        {
+            tipl::out() << "changing output channel" << std::endl;
+            auto new_model = UNet3d(train.model->in_count,po.get("out_count",train.model->out_count),train.model->feature_string);
+            new_model->copy_from(*train.model.get());
+            train.model = new_model;
+        }
+    }
+    else
+    {
+        std::vector<int> label_count;
+        if(!get_label_info(train.param.label_file_name[0].c_str(),label_count,train.param.is_label))
+        {
+            tipl::out() << "ERROR: cannot open the label file" << train.param.label_file_name[0];
+            return 1;
+        }
+        size_t in_count = po.get("in_count",1);
+        size_t out_count = po.get("out_count",label_count.size());
+        std::string feature_string = po.get("feature_string",
+                out_count <= 6 ? "8x8+16x16+32x32+64x64+128x128" :
+                (out_count <= 10 ? "16x16+32x32+64x64+128x128+128x128" : "32x32+64x64+128x128+128x128+256x256"));
+        try{
+            tipl::out() << "create new network with structure " << feature_string;
+            train.model = UNet3d(in_count,out_count,feature_string);
+        }
+        catch(...)
+        {
+            tipl::out() << "ERROR: invalid network structure ";
+            return 1;
+        }
+    }
+
+
+    train.param.batch_size = po.get("batch_size",train.param.batch_size);
+    train.param.learning_rate = po.get("learning_rate",train.param.learning_rate);
+    train.param.epoch = po.get("epoch",train.param.epoch);
+
+    train.param.is_label = po.get("is_label",train.param.is_label ? 1:0);
+    train.param.device = torch::Device(po.get("device",torch::hasCUDA() ? "cuda:0" :
+                                                       (torch::hasHIP() ? "hip:0" :
+                                                       (torch::hasMPS() ? "mps:0": "cpu"))));
+
+
+
+    // setting up the parameters for visual perception augmentation
+    {
+        std::ifstream options(po.get("option","settings.ini"));
+        if(!options)
+        {
+            tipl::out() << "ERROR: cannot find option file " << po.get("option","setting.ini");
+            return 1;
+        }
+        std::string line;
+        while(std::getline(options,line))
+            if(line == "[Options]")
+                break;
+        while(std::getline(options,line))
+        {
+            auto name_value = tipl::split(line,'=');
+            if(name_value.size() != 2)
+                continue;
+            train.param.options[name_value[0]] = po.get(name_value[0].c_str(),std::stof(name_value[1]));
+        }
+    }
+
+
+    train.start();
+
+    if(!train.error_msg.empty())
+    {
+        tipl::out() << "ERROR: " << train.error_msg;
+        return 1;
+    }
+    return 0;
+}

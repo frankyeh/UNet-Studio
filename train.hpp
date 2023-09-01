@@ -6,21 +6,17 @@
 #include "unet.hpp"
 
 
-struct training_setting{
-    bool is_template = true;
-};
 
 struct training_param{
     std::vector<std::string> image_file_name,test_image_file_name;
     std::vector<std::string> label_file_name,test_label_file_name;
-    std::vector<training_setting> image_setting;
     std::vector<std::vector<size_t> > relations;
     std::vector<float> label_weight;
-    int batch_size = 1;
-    int epoch = 10000;
-    float learning_rate = 0.001f;
-    int output_model_type = 0;
+    int batch_size = 8;
+    int epoch = 4000;
+    float learning_rate = 0.00025f;
     bool is_label = true;
+    std::unordered_map<std::string,float> options;
     torch::Device device = torch::kCPU;
 };
 
@@ -45,7 +41,6 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
 class train_unet{
 public:
     training_param param;
-    std::unordered_map<std::string,float> options;
 public:
     bool aborted = false;
     bool pause = false;
@@ -54,7 +49,7 @@ public:
 private:
     std::vector<tipl::image<3> > train_image,train_label;
     std::vector<tipl::vector<3> > train_image_vs;
-    std::vector<bool> train_image_ready;
+    std::vector<bool> train_image_ready,train_image_is_template;
     std::shared_ptr<std::thread> read_train_images;
 private:
     std::vector<tipl::image<3> > in_data,out_data;
@@ -79,12 +74,14 @@ public:
     std::vector<float> error;
     std::vector<std::vector<float> > test_error_foreground,test_error_background;
     void update_epoch_count();
+    bool save_error_to(const char* file_name);
 public:
     UNet3d model,output_model;
     ~train_unet(void)
     {
         stop();
     }
+    void join(void);
     void start(void);
     void stop(void);
 
