@@ -36,7 +36,6 @@ public:
     QStringList image_list,label_list;
     std::vector<size_t> image_last_added_indices;
     std::vector<std::vector<size_t> > relations;
-    std::vector<training_setting> image_settings;
 
     void update_list(void);
 public: //evalute
@@ -59,6 +58,7 @@ public:
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+    bool eventFilter(QObject *obj, QEvent *event) override;
 private slots:
 
     void training(void);
