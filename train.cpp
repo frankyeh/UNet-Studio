@@ -479,11 +479,13 @@ void train_unet::train(void)
                 }
 
             }
-
-            if(po.has("network"))
+            tipl::out() << "training completed";
+            if(!aborted && po.has("network"))
             {
+                tipl::out() << "save network";
                 if(!save_to_file(model,po.get("network").c_str()))
                     error_msg = "ERROR: failed to save network";
+                tipl::out() << "save errors";
                 if(!save_error_to(po.get("error","error.txt").c_str()))
                     error_msg = "ERROR: failed to save error";
             }
