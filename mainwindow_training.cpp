@@ -30,9 +30,6 @@ void MainWindow::on_action_open_training_setting_triggered()
     QSettings ini(fileName,QSettings::IniFormat);
     image_list = ini.value("image",image_list).toStringList();
     label_list = ini.value("label",label_list).toStringList();
-    auto settings_template = ini.value("settings_template").toStringList();
-    for(size_t i = 0;i < settings_template.size() && i < image_settings.size();++i)
-        image_settings[i].is_template = settings_template[i].toInt();
 
     in_count = ini.value("in_count",in_count).toInt();
     out_count = ini.value("out_count",out_count).toInt();
@@ -61,12 +58,6 @@ void MainWindow::on_action_save_training_setting_triggered()
     QSettings ini(fileName,QSettings::IniFormat);
     ini.setValue("image",image_list);
     ini.setValue("label",label_list);
-
-    QStringList settings_template;
-    for(auto each : image_settings)
-        settings_template.push_back(QString::number(each.is_template ? 1:0));
-    ini.setValue("settings_template",settings_template);
-
     ini.setValue("in_count",in_count);
     ini.setValue("out_count",out_count);
     ini.setValue("epoch",ui->epoch->value());
@@ -102,12 +93,9 @@ void MainWindow::update_list(void)
     ui->list1->clear();
     ui->list2->clear();
     bool ready_to_train = false;
-    image_settings.resize(image_list.size());
     for(size_t i = 0;i < image_list.size();++i)
     {
-        auto image_list_text = QFileInfo(image_list[i]).fileName();
-        image_list_text += image_settings[i].is_template ? ",t" : ",s";
-        ui->list1->addItem(image_list_text);
+        ui->list1->addItem(QFileInfo(image_list[i]).fileName());
         auto item = ui->list1->item(i);
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(Qt::Checked);
@@ -168,12 +156,6 @@ void MainWindow::on_action_train_open_files_triggered()
         image_last_added_indices.push_back(image_list.size());
         image_list << s;
         label_list << QString();
-    }
-    if(fileNames.size() > 3)
-    {
-        image_settings.resize(image_list.size());
-        for(auto i : image_last_added_indices)
-            image_settings[i].is_template = false;
     }
     update_list();
 
@@ -364,20 +346,23 @@ void MainWindow::on_actionApply_Label_Weights_triggered()
 
 
 #include <ATen/Context.h>
+extern tipl::program_option<tipl::out> po;
 void MainWindow::on_train_start_clicked()
 {
 
 
     tipl::progress p("initiate training");
-
-
-    // those parameters can be modified using training pause
     train.param.batch_size = ui->batch_size->value();
     train.param.learning_rate = ui->learning_rate->value();
-    train.param.output_model_type = ui->training_output->currentIndex();
     train.param.epoch = ui->epoch->value();
-    train.param.label_weight = label_weight;
+    train.param.is_label = is_label;
 
+    train.param.label_weight = label_weight;
+    train.param.relations = relations;
+
+    train.param.options.clear();
+    for(auto& each : option->treemodel->name_data_mapping)
+        train.param.options[each.first.toStdString()] = each.second->getValue().toFloat();
 
     if(train.running)
     {
@@ -394,7 +379,7 @@ void MainWindow::on_train_start_clicked()
     }
     if(out_count != train.model->out_count)
     {
-        tipl::out() << "copy pretrained model" << std::endl;
+        tipl::out() << "different output channel noted. padding model output..." << std::endl;
         auto new_model = UNet3d(in_count,out_count,train.model->feature_string);
         new_model->copy_from(*train.model.get());
         train.model = new_model;
@@ -405,12 +390,10 @@ void MainWindow::on_train_start_clicked()
 
     train.param.image_file_name.clear();
     train.param.label_file_name.clear();
-    train.param.image_setting.clear();
     train.param.test_image_file_name.clear();
     train.param.test_label_file_name.clear();
 
 
-    tipl::out() << "template-based training" << std::endl;
     for(size_t i = 0;i < image_list.size();++i)
     {
         if(!std::filesystem::exists(image_list[i].toStdString()) ||
@@ -420,49 +403,11 @@ void MainWindow::on_train_start_clicked()
         {
             train.param.image_file_name.push_back(image_list[i].toStdString());
             train.param.label_file_name.push_back(label_list[i].toStdString());
-            train.param.image_setting.push_back(image_settings[i]);
         }
-        // this calculate template error
-        if(image_settings[i].is_template)
-        {
-            train.param.test_image_file_name.push_back(image_list[i].toStdString());
-            train.param.test_label_file_name.push_back(label_list[i].toStdString());
-        }
-    }
-
-    if(train.param.image_file_name.empty())
-    {
-        QMessageBox::critical(this,"Error","Please specify the training data");
-        return;
-    }
-    if(train.param.test_image_file_name.empty())
-    {
-        train.param.test_image_file_name.push_back(train.param.image_file_name[0]);
-        train.param.test_label_file_name.push_back(train.param.label_file_name[0]);
-    }
-
-    if(train.model->total_training_count == 0)
-    {
-        tipl::io::gz_nifti in;
-        if(!in.load_from_file(train.param.image_file_name[0]))
-        {
-            QMessageBox::critical(this,"Error","Invalid NIFTI format");
-            return;
-        }
-        in.toLPS();
-        in.get_image_dimension(train.model->dim);
-        train.model->dim = tipl::ml3d::round_up_size(train.model->dim);
-        tipl::out() << "network input sizes: " << train.model->dim << std::endl;
     }
 
     train.param.device = ui->train_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->train_device->currentIndex()-1):torch::Device(torch::kCPU);
-    train.param.is_label = is_label;
-    train.param.relations = relations;
-    train.options.clear();
-    for(auto& each : option->treemodel->name_data_mapping)
-        train.options[each.first.toStdString()] = each.second->getValue().toFloat();
     train.start();
-    ui->train_prog->setMaximum(ui->epoch->value());
     ui->train_prog->setValue(1);
     timer->start();
     ui->train_start->setText(train.pause ? "Resume":"Pause");
@@ -550,7 +495,6 @@ void MainWindow::training()
     ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
     ui->batch_size->setEnabled(!train.running || train.pause);
     ui->learning_rate->setEnabled(!train.running || train.pause);
-    ui->training_output->setEnabled(!train.running || train.pause);
     ui->epoch->setEnabled(!train.running || train.pause);
 
     ui->action_train_open_files->setEnabled(!train.running);
@@ -578,6 +522,7 @@ void MainWindow::training()
     if(train.running)
     {
         ui->train_prog->setEnabled(!train.pause);
+        ui->train_prog->setMaximum(ui->epoch->value());
         ui->train_prog->setValue(train.cur_epoch+1);
         ui->train_prog->setFormat(QString( "epoch: %1/%2 error: %3" ).arg(train.cur_epoch).arg(ui->train_prog->maximum()).arg(train.cur_epoch ? std::to_string(train.error[train.cur_epoch-1]).c_str():"pending"));
     }
@@ -742,22 +687,7 @@ void MainWindow::on_save_error_clicked()
     QString file = QFileDialog::getSaveFileName(this,"Save Error",settings.value("on_save_error_clicked").toString(),"Text values (*.txt);;All files (*)");
     if(file.isEmpty())
         return;
-    std::ofstream out(file.toStdString());
-    out << "trainning_error\t";
-    for(size_t j = 0;j < train.test_error_foreground.size();++j)
-        out << "test_foreground_error\ttest_background_error\t";
-    out << std::endl;
-    for(size_t i = 0;i < train.error.size() && i < train.cur_epoch;++i)
-    {
-        out << train.error[i] << "\t";
-        for(size_t j = 0;j < train.test_error_foreground.size();++j)
-        {
-            out << train.test_error_foreground[j][i] << "\t";
-            out << train.test_error_background[j][i] << "\t";
-        }
-        out << std::endl;
-    }
-    if(out.is_open())
+    if(train.save_error_to(file.toStdString().c_str()))
         QMessageBox::information(this,"","Saved");
 }
 
