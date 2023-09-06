@@ -36,6 +36,15 @@ void MainWindow::on_action_open_training_setting_triggered()
     ui->epoch->setValue(ini.value("epoch",ui->epoch->value()).toInt());
     ui->batch_size->setValue(ini.value("batch_size",ui->batch_size->value()).toInt());
     ui->learning_rate->setValue(ini.value("learning_rate",ui->learning_rate->value()).toFloat());
+
+    if(!ini.value("network_dir").toString().isEmpty())
+    {
+        auto fileName = ini.value("network_dir").toString() + "/" + ini.value("network_file").toString() + ".net.gz";
+        if(QFileInfo(fileName).exists())
+            load_network(fileName);
+    }
+
+
     option->load(ini);
 
     settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
@@ -63,6 +72,11 @@ void MainWindow::on_action_save_training_setting_triggered()
     ini.setValue("epoch",ui->epoch->value());
     ini.setValue("batch_size",ui->batch_size->value());
     ini.setValue("learning_rate",ui->learning_rate->value());
+    if(train.model->total_training_count)
+    {
+        ini.setValue("network_dir",settings.value("network_dir").toString());
+        ini.setValue("network_file",settings.value("network_file").toString());
+    }
     option->save(ini);
     ini.sync();
 
@@ -279,38 +293,39 @@ void MainWindow::on_action_train_new_network_triggered()
     has_network();
 
 }
-void MainWindow::on_action_train_open_network_triggered()
+void MainWindow::load_network(QString fileName)
 {
-    QString fileName = QFileDialog::getOpenFileName(this,"Open network file",
-                                                settings.value("work_dir").toString() + "/" +
-                                                settings.value("work_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
-    if(fileName.isEmpty())
-        return;
-
     if(!load_from_file(train.model,fileName.toStdString().c_str()))
     {
         QMessageBox::critical(this,"Error","Invalid file format");
         return;
     }
-    settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
-    settings.setValue("work_file",train_name = QFileInfo(fileName.remove(".net.gz")).fileName());
-
+    settings.setValue("network_dir",QFileInfo(fileName).absolutePath());
+    settings.setValue("network_file",train_name = QFileInfo(fileName.remove(".net.gz")).fileName());
     ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
-
     has_network();
+}
+void MainWindow::on_action_train_open_network_triggered()
+{
+    QString fileName = QFileDialog::getOpenFileName(this,"Open network file",
+                                                settings.value("network_dir").toString() + "/" +
+                                                settings.value("network_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
+    if(fileName.isEmpty())
+        return;
+    load_network(fileName);
+
 }
 void MainWindow::on_action_train_save_network_triggered()
 {
     QString fileName = QFileDialog::getSaveFileName(this,"Save network file",
-                                                settings.value("work_dir").toString() + "/" +
+                                                settings.value("network_dir").toString() + "/" +
                                                 train_name + ".net.gz","Network files (*net.gz);;All files (*)");
     if(!fileName.isEmpty() && save_to_file(train.running ? train.output_model : train.model,fileName.toStdString().c_str()))
     {
         QMessageBox::information(this,"","Network Saved");
-        settings.setValue("work_dir",QFileInfo(fileName).absolutePath());
-        settings.setValue("work_file",train_name = QFileInfo(fileName.remove(".net.gz")).fileName());
+        settings.setValue("network_dir",QFileInfo(fileName).absolutePath());
+        settings.setValue("network_file",train_name = QFileInfo(fileName.remove(".net.gz")).fileName());
     }
-
 }
 
 
@@ -335,12 +350,10 @@ void MainWindow::on_actionApply_Label_Weights_triggered()
         default_weight = str.c_str();
     }
 
-    default_weight = QInputDialog::getText(this,"","Please Specify Label Weight",QLineEdit::Normal,default_weight);
+    default_weight = QInputDialog::getText(this,"","Specify back propagation weights for each label",QLineEdit::Normal,default_weight);
     if(default_weight.isEmpty())
         return;
-    std::istringstream in(default_weight.toStdString());
-    label_weight = std::vector<float>((std::istream_iterator<float>(in)),std::istream_iterator<float>());
-    tipl::multiply_constant(label_weight,1.0f/(tipl::sum(label_weight)));
+    train.param.set_weight(default_weight.toStdString());
 }
 
 
@@ -356,8 +369,6 @@ void MainWindow::on_train_start_clicked()
     train.param.learning_rate = ui->learning_rate->value();
     train.param.epoch = ui->epoch->value();
     train.param.is_label = is_label;
-
-    train.param.label_weight = label_weight;
     train.param.relations = relations;
 
     train.param.options.clear();
@@ -536,7 +547,7 @@ void MainWindow::training()
         plot_error();
 
     if(ui->tabWidget->currentIndex() == 1)
-        ui->statusbar->showMessage(train.status.c_str());
+        ui->statusbar->showMessage((train.reading_status+"/"+train.augmentation_status+"/"+train.training_status).c_str());
 }
 
 std::vector<size_t> get_label_count(const tipl::image<3>& label,size_t out_count);

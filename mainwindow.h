@@ -47,7 +47,6 @@ private:
     int in_count = 1,out_count = 1;
     bool is_label = true;
     std::vector<int> label_count;
-    std::vector<float> label_weight;
     void copy_to_clipboard(bool left,bool cropped);
 public:
     train_unet train;
@@ -55,6 +54,7 @@ public:
     QString train_name,eval_name;
     QTimer *timer,*eval_timer;
     void has_network(void);
+    void load_network(QString filename);
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
