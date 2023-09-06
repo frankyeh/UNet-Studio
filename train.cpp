@@ -2,6 +2,7 @@
 extern tipl::program_option<tipl::out> po;
 bool load_from_file(UNet3d& model,const char* file_name);
 bool save_to_file(UNet3d& model,const char* file_name);
+using namespace std::chrono_literals;
 
 void preprocess_label(UNet3d& model,tipl::image<3>& train_label,const training_param& param)
 {
@@ -142,7 +143,7 @@ void train_unet::read_file(void)
     train_image = std::vector<tipl::image<3> >(param.image_file_name.size());
     train_label = std::vector<tipl::image<3> >(param.image_file_name.size());
     train_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
-    train_image_ready = std::vector<bool>(param.image_file_name.size(),false);
+    train_image_ready = train_image_needed = std::vector<bool>(param.image_file_name.size(),false);
     train_image_is_template = std::vector<bool>(param.image_file_name.size(),true);
 
     in_data = std::vector<tipl::image<3> >(thread_count);
@@ -167,7 +168,6 @@ void train_unet::read_file(void)
             {
                 while(pause)
                 {
-                    using namespace std::chrono_literals;
                     std::this_thread::sleep_for(100ms);
                     if(aborted)
                         return;
@@ -221,16 +221,21 @@ void train_unet::read_file(void)
             test_data_ready = true;
         }
         // prepare training data
-        for(int read_id = 0;read_id < param.image_file_name.size() && !aborted;++read_id)
+        for(size_t total_read = 0;total_read < param.image_file_name.size() && !aborted;++total_read)
         {
             while(pause)
             {
-                using namespace std::chrono_literals;
                 std::this_thread::sleep_for(100ms);
                 if(aborted)
                     return;
             }
-
+            size_t read_id = std::find(train_image_ready.begin(),train_image_ready.end(),false)-train_image_ready.begin();
+            for(size_t i = read_id+1;i < train_image_ready.size();++i)
+                if(!train_image_ready[i] && train_image_needed[i])
+                {
+                    read_id = i;
+                    break;
+                }
             reading_status = "reading ";
             reading_status += std::filesystem::path(param.image_file_name[read_id]).filename().string();
             reading_status += " and ";
@@ -283,27 +288,23 @@ void train_unet::read_file(void)
                 non_template_indices.insert(non_template_indices.end(),i);
 
 
+
+
+
         tipl::par_for(thread_count,[&](size_t thread)
         {
             int seed = thread + model->total_training_count;
-            int b = thread;
-            int non_template_base = 0;
+            std::mt19937 gen(thread);
+            std::uniform_int_distribution<int> template_gen(0, std::max<int>(1,template_indices.size())-1);
+            std::uniform_int_distribution<int> non_template_gen(0, std::max<int>(1,non_template_indices.size())-1);
             while(!aborted)
             {
-                while(b >= param.batch_size)
-                {
-                    b -= param.batch_size;
-                    non_template_base += std::max<int>(0,int(param.batch_size)-int(template_indices.size()));
-                }
-                int read_id = 0;
-                if(non_template_indices.empty() || b < template_indices.size())
-                    read_id = template_indices[b % template_indices.size()];
-                else
-                    read_id = non_template_indices[(non_template_base+b-template_indices.size())%non_template_indices.size()];
-
+                int read_id =
+                (non_template_indices.empty() || seed % param.batch_size < template_indices.size()) ?
+                    template_indices[template_gen(gen)] : non_template_indices[non_template_gen(gen)];
                 while(!train_image_ready[read_id] || data_ready[thread] || pause)
                 {
-                    using namespace std::chrono_literals;
+                    train_image_needed[read_id] = true;
                     std::this_thread::sleep_for(100ms);
                     if(aborted)
                         return;
@@ -320,7 +321,6 @@ void train_unet::read_file(void)
                     preprocess_label(model,out_data[thread],param);
                 data_ready[thread] = true;
                 seed += thread_count;
-                b += thread_count;
             }
             augmentation_status = "augmentation completed";
         });
@@ -344,7 +344,6 @@ void train_unet::prepare_tensor(void)
                     size_t data_index = i%data_ready.size();
                     while(!data_ready[data_index] || tensor_ready[thread] || pause)
                     {
-                        using namespace std::chrono_literals;
                         std::this_thread::sleep_for(100ms);
                         if(aborted)
                             return;
@@ -398,10 +397,9 @@ void train_unet::train(void)
 
             while(!test_data_ready || pause)
             {
+                std::this_thread::sleep_for(100ms);
                 if(aborted)
                     return;
-                using namespace std::chrono_literals;
-                std::this_thread::sleep_for(100ms);
             }
 
             tipl::out()     << "1                        0.1                        0.01                   0.001";
@@ -438,10 +436,9 @@ void train_unet::train(void)
                     size_t data_index = cur_data_index%tensor_ready.size();
                     while(!tensor_ready[data_index] || pause)
                     {
+                        std::this_thread::sleep_for(100ms);
                         if(aborted)
                             return;
-                        using namespace std::chrono_literals;
-                        std::this_thread::sleep_for(100ms);
                     }
 
                     if(b)
@@ -451,7 +448,7 @@ void train_unet::train(void)
 
 
                     auto output = model->forward(in_tensor[data_index]);
-                    const auto& weight = train_image_is_template[in_tensor_read_id[data_index]] ? param.template_label_weight : param.subject_label_weight;
+                    auto weight = train_image_is_template[in_tensor_read_id[data_index]] ? param.template_label_weight : param.subject_label_weight;
                     if(weight.size() == model->out_count)
                     {
                         training_status += "w";
