@@ -364,7 +364,6 @@ void MainWindow::on_train_start_clicked()
 {
 
 
-    tipl::progress p("initiate training");
     train.param.batch_size = ui->batch_size->value();
     train.param.learning_rate = ui->learning_rate->value();
     train.param.epoch = ui->epoch->value();
@@ -381,7 +380,7 @@ void MainWindow::on_train_start_clicked()
         train.pause = !train.pause;
         return;
     }
-
+    tipl::progress p("initiate training");
     if(train.model->feature_string.empty())
     {
         on_action_train_new_network_triggered();
