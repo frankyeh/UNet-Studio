@@ -72,7 +72,7 @@ public:
 private:
     std::vector<tipl::image<3> > train_image,train_label;
     std::vector<tipl::vector<3> > train_image_vs;
-    std::vector<bool> train_image_ready,train_image_is_template;
+    std::vector<bool> train_image_ready,train_image_needed,train_image_is_template;
     std::vector<torch::Tensor> test_in_tensor,test_out_tensor,test_out_mask;
     bool test_data_ready = false;
     std::shared_ptr<std::thread> read_images;
