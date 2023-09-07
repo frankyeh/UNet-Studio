@@ -426,6 +426,16 @@ void train_unet::train(void)
                         test_error_background[i][cur_epoch] = mse_background;
                     }
                     output_model->copy_from(*model);
+                    if(po.has("network") && (cur_epoch > 1 && cur_epoch % 500 == 1))
+                    {
+                        tipl::out() << "save network " << po.get("network");
+                        if(!save_to_file(output_model,po.get("network").c_str()))
+                        {
+                            error_msg = "ERROR: failed to save network";
+                            aborted = true;
+                            break;
+                        }
+                    }
                 }
 
                 float sum_error = 0.0f;
@@ -490,17 +500,20 @@ void train_unet::train(void)
                     std::copy(out2.begin(),out2.end(),out.begin());
 
                     tipl::out() << out;
-
                 }
 
+
             }
-            tipl::out() << "training completed";
-            if(!aborted && po.has("network"))
+            tipl::out() << (training_status = "training completed");
+            if(po.has("network"))
             {
-                tipl::out() << "save network";
+                tipl::out() << "save network " << po.get("network");
                 if(!save_to_file(model,po.get("network").c_str()))
+                {
                     error_msg = "ERROR: failed to save network";
-                tipl::out() << "save errors";
+                    aborted = true;
+                }
+                tipl::out() << "save errors " << po.get("error","error.txt");
                 if(!save_error_to(po.get("error","error.txt").c_str()))
                     error_msg = "ERROR: failed to save error";
             }
@@ -515,7 +528,6 @@ void train_unet::train(void)
         tipl::out() << error_msg << std::endl;
         pause = aborted = true;
         output_model->copy_from(*model);
-        training_status = "training completed";
     }));
 }
 void train_unet::start(void)
