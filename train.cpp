@@ -1,3 +1,5 @@
+#include <QFile>
+#include <QTextStream>
 #include "train.hpp"
 extern tipl::program_option<tipl::out> po;
 bool load_from_file(UNet3d& model,const char* file_name);
@@ -742,22 +744,20 @@ int tra(void)
 
     // setting up the parameters for visual perception augmentation
     {
-        std::ifstream options(po.get("option","settings.ini"));
-        if(!options)
+        QFile data(":/options.txt");
+        if (!data.open(QIODevice::ReadOnly | QIODevice::Text))
         {
-            tipl::out() << "ERROR: cannot find option file " << po.get("option","setting.ini");
+            tipl::out() << "ERROR: cannot load options";
             return 1;
         }
-        std::string line;
-        while(std::getline(options,line))
-            if(line == "[Options]")
-                break;
-        while(std::getline(options,line))
+        QTextStream in(&data);
+        QString last_root;
+        while (!in.atEnd())
         {
-            auto name_value = tipl::split(line,'=');
-            if(name_value.size() != 2)
+            QStringList list = in.readLine().split('/');
+            if(list.size() < 5)
                 continue;
-            train.param.options[name_value[0]] = po.get(name_value[0].c_str(),std::stof(name_value[1]));
+            train.param.options[list[2].toStdString()] = po.get(list[2].toStdString().c_str(),list[4].toFloat());
         }
     }
 
