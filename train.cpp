@@ -291,8 +291,7 @@ void train_unet::read_file(void)
 
 
 
-
-
+        augmentation_status = "augmenting images";
         tipl::par_for(thread_count,[&](size_t thread)
         {
             int seed = thread + model->total_training_count;
@@ -311,8 +310,6 @@ void train_unet::read_file(void)
                     if(aborted)
                         return;
                 }
-                augmentation_status = std::string("augmenting ") + std::to_string(read_id) +
-                        ":" +std::filesystem::path(param.image_file_name[read_id]).filename().string();
                 if(!train_image[read_id].size())
                     continue;
                 in_data[thread] = train_image[read_id];
@@ -324,8 +321,9 @@ void train_unet::read_file(void)
                 data_ready[thread] = true;
                 seed += thread_count;
             }
-            augmentation_status = "augmentation completed";
+
         });
+        augmentation_status = "augmentation completed";
     }));
 }
 
