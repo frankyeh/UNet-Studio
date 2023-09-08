@@ -40,7 +40,9 @@ set(UNET_STUDIO_SOURCES
 
 if(CUDAToolkit_FOUND)
     set(UNET_STUDIO_CUDA
-            cuda.cu)
+            cuda.cu
+            visual_perception_augmentation.cu
+)
 endif()
 
 set(UNET_STUDIO_RESOURCES icons.qrc)
