@@ -84,6 +84,27 @@ void create_distortion_at(image_type& displaced,const tipl::vector<3,int>& cente
     });
 }
 
+template<typename image_type>
+void accumulate_transforms(image_type& displaced,bool has_lens_distortion,bool has_perspective,
+                           const tipl::vector<3>& perspective,
+                           const tipl::transformation_matrix<float>& trans)
+{
+    auto center = tipl::vector<3>(displaced.shape())/2.0f;
+    tipl::par_for(tipl::begin_index(displaced),tipl::end_index(displaced),
+        [&](const tipl::pixel_index<3>& index)
+    {
+        // pos now in the "retina" space
+        tipl::vector<3> pos(index);
+        if(has_lens_distortion)
+            pos += displaced[index.index()];
+        if(has_perspective)
+            pos /= (perspective*(pos-center)+1.0f);
+        // rigid motion + zoom + aspect ratio
+        trans(pos);
+        displaced[index.index()] = pos;
+    });
+}
+
 
 
 inline float lerp(float t, float a, float b)	{return a + t * (b - a);}
@@ -260,8 +281,6 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
                     resolution*range(1.0f/options["aspect_ratio"],options["aspect_ratio"]),
                     0.0f,0.0f,0.0f};
         auto trans = tipl::transformation_matrix<float>(transform,image_shape,image_vs,image_shape,image_vs);
-
-
         tipl::vector<3> perspective((one()-0.5f)*options["perspective"]/float(image_shape[0]),
                                     (one()-0.5f)*options["perspective"]/float(image_shape[1]),
                                     (one()-0.5f)*options["perspective"]/float(image_shape[2]));
@@ -285,32 +304,21 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
         }
 
 
-        bool has_perspective = options["perspective"] > 0.0f;
-        bool has_lens_distortion = options["lens_distortion"] > 0.0f;
+        accumulate_transforms(displaced,options["lens_distortion"] > 0.0f,options["perspective"] > 0.0f,perspective,trans);
 
-        tipl::par_for(tipl::begin_index(image_shape),tipl::end_index(image_shape),
-            [&](const tipl::pixel_index<3>& index)
+
+        tipl::par_for(displaced.size(),[&](size_t index)
         {
-            // pos now in the "retina" space
-            tipl::vector<3> pos(index);
-            if(has_lens_distortion)
-                pos += displaced[index.index()];
-            if(has_perspective)
-                pos /= (perspective*(pos-center)+1.0f);
-            // rigid motion + zoom + aspect ratio
-            trans(pos);
-
-
+            auto pos = displaced[index];
             tipl::interpolator::linear<3> interp;
             if(!interp.get_location(image_shape,pos))
                 return;
-
             if(is_label)
-                tipl::estimate<tipl::nearest>(label,pos,output_label[index.index()]);
+                tipl::estimate<tipl::nearest>(label,pos,output_label[index]);
             else
-                interp.estimate(label,output_label[index.index()]);
+                interp.estimate(label,output_label[index]);
             for(int c = 0;c < input_images.size();++c)
-                interp.estimate(input_images[c],output_images[c][index.index()]);
+                interp.estimate(input_images[c],output_images[c][index]);
         });
 
     }
@@ -326,9 +334,7 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
         if(apply("zero_background"))
         {
             for(auto& image : output_images)
-                for(size_t pos = 0;pos < output_label.size();++pos)
-                    if(!output_label[pos])
-                        image[pos] = 0;
+                tipl::preserve(image,output_label);
             goto end;
         }
         auto blend_fun = [&](float& src,float blend)
@@ -350,9 +356,7 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
             {
                 auto& image = input_images[c];
                 auto& image_out = output_images[c];
-                for(size_t pos = 0;pos < label.size();++pos)
-                    if(label[pos])
-                        image[pos] = 0;
+                tipl::masking(image,label);
                 tipl::image<3> background(image_shape);
                 for(size_t iter = 0;iter < 5;++iter)
                 {
