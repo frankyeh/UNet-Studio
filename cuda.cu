@@ -83,5 +83,3 @@ size_t linear_cuda(const tipl::image<3,float>& from,
             (from,from_vs,to,to_vs,arg,reg_type,[&](void){return terminated;},
                 0.01,bound != tipl::reg::narrow_bound,bound);
 }
-
-
