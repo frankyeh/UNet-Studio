@@ -138,6 +138,14 @@ void preprocessing(tipl::image<3>& image,tipl::image<3>& label,tipl::shape<3> fr
         new_image.swap(image);
     }
 }
+
+void visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& options,
+                          tipl::image<3>& input,
+                          tipl::image<3>& label,
+                          bool is_label,
+                          const tipl::shape<3>& image_shape,
+                          const tipl::vector<3>& image_vs,
+                          size_t random_seed);
 void train_unet::read_file(void)
 {
     int thread_count = std::min<int>(8,std::thread::hardware_concurrency());
@@ -289,7 +297,9 @@ void train_unet::read_file(void)
             else
                 non_template_indices.insert(non_template_indices.end(),i);
 
-
+        tipl::out() << "gpu count: " << torch::cuda::device_count();
+        if(tipl::use_cuda && torch::cuda::device_count() > 1)
+            tipl::out() << "using gpu for visual perception augmentation";
 
         augmentation_status = "augmenting images";
         tipl::par_for(thread_count,[&](size_t thread)
@@ -315,7 +325,13 @@ void train_unet::read_file(void)
                 in_data[thread] = train_image[read_id];
                 out_data[thread] = train_label[read_id];
                 in_data_read_id[thread] = read_id;
-                visual_perception_augmentation(param.options,in_data[thread],out_data[thread],param.is_label,model->dim,train_image_vs[read_id],seed);
+                if constexpr (tipl::use_cuda)
+                {
+                    if(torch::cuda::device_count() > 1)
+                        visual_perception_augmentation_cuda(param.options,in_data[thread],out_data[thread],param.is_label,model->dim,train_image_vs[read_id],seed);
+                }
+                if(torch::cuda::device_count() <= 1 || !tipl::use_cuda)
+                    visual_perception_augmentation(param.options,in_data[thread],out_data[thread],param.is_label,model->dim,train_image_vs[read_id],seed);
                 if(model->out_count > 1)
                     preprocess_label(model,out_data[thread],param);
                 data_ready[thread] = true;
