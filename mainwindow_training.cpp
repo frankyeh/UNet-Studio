@@ -320,7 +320,7 @@ void MainWindow::on_action_train_save_network_triggered()
     QString fileName = QFileDialog::getSaveFileName(this,"Save network file",
                                                 settings.value("network_dir").toString() + "/" +
                                                 train_name + ".net.gz","Network files (*net.gz);;All files (*)");
-    if(!fileName.isEmpty() && save_to_file(train.running ? train.output_model : train.model,fileName.toStdString().c_str()))
+    if(!fileName.isEmpty() && save_to_file(train.get_model(),fileName.toStdString().c_str()))
     {
         QMessageBox::information(this,"","Network Saved");
         settings.setValue("network_dir",QFileInfo(fileName).absolutePath());

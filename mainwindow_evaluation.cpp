@@ -48,7 +48,8 @@ void MainWindow::on_action_evaluate_open_images_triggered()
 
 void MainWindow::on_action_evaluate_copy_trained_network_triggered()
 {
-    auto& model = train.running ? train.output_model : train.model;
+
+    auto& model = train.get_model();
     if(model->feature_string.empty())
     {
         QMessageBox::critical(this,"Error","No trained network");

@@ -97,9 +97,13 @@ public:
     std::vector<std::vector<float> > test_error_foreground,test_error_background;
     void update_epoch_count();
     bool save_error_to(const char* file_name);
-
+private:
+    UNet3d output_model;
+    bool need_output_model = false;
 public:
-    UNet3d model,output_model;
+    UNet3d& get_model(void);
+public:
+    UNet3d model;
     ~train_unet(void)
     {
         stop();

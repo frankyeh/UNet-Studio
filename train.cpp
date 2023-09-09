@@ -148,7 +148,7 @@ void visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& 
                           size_t random_seed);
 void train_unet::read_file(void)
 {
-    int thread_count = std::min<int>(8,std::thread::hardware_concurrency());
+    int thread_count = po.get("thread_count",std::min<int>(8,std::thread::hardware_concurrency()));
 
     train_image = std::vector<tipl::image<3> >(param.image_file_name.size());
     train_label = std::vector<tipl::image<3> >(param.image_file_name.size());
@@ -302,7 +302,7 @@ void train_unet::read_file(void)
             tipl::out() << "using gpu for visual perception augmentation";
 
         augmentation_status = "augmenting images";
-        tipl::par_for(thread_count,[&](size_t thread)
+        tipl::par_for(in_data.size(),[&](size_t thread)
         {
             int seed = thread + model->total_training_count;
             std::mt19937 gen(thread);
@@ -335,7 +335,7 @@ void train_unet::read_file(void)
                 if(model->out_count > 1)
                     preprocess_label(model,out_data[thread],param);
                 data_ready[thread] = true;
-                seed += thread_count;
+                seed += in_data.size();
             }
 
         });
@@ -345,14 +345,14 @@ void train_unet::read_file(void)
 
 void train_unet::prepare_tensor(void)
 {
-    const int thread_count = std::min<int>(8,std::thread::hardware_concurrency());
+    int thread_count = po.get("thread_count",std::min<int>(8,std::thread::hardware_concurrency()));
     in_tensor = std::vector<torch::Tensor>(thread_count);
     in_tensor_read_id = std::vector<size_t>(thread_count);
     out_tensor = std::vector<torch::Tensor>(thread_count);
     tensor_ready = std::vector<bool>(thread_count,false);
     prepare_tensor_thread.reset(new std::thread([=](){
         try{
-            tipl::par_for(thread_count,[&](size_t thread)
+            tipl::par_for(in_tensor.size(),[&](size_t thread)
             {
                 size_t i = thread;
                 while(!aborted)
@@ -371,7 +371,7 @@ void train_unet::prepare_tensor(void)
                     in_tensor_read_id[thread] = in_data_read_id[data_index];
                     tensor_ready[thread] = true;
                     data_ready[data_index] = false;
-                    i += thread_count;
+                    i += in_tensor.size();
                 }
             });
         }
@@ -424,35 +424,26 @@ void train_unet::train(void)
             auto to_chart = [](float error)->int{return int(std::max<float>(0.0f,std::min<float>(79.0f,(-std::log10(error))*80.0f/3.0f)));};
             for (size_t cur_data_index = 0; cur_epoch < param.epoch && !aborted;cur_epoch++)
             {
-                float mse_foreground = 0.0f,mse_background = 0.0f;
                 if(param.learning_rate != optimizer->defaults().get_lr())
                 {
                     tipl::out() << "set learning rate to " << param.learning_rate << std::endl;
                     optimizer->defaults().set_lr(param.learning_rate);
                 }
+                /*
                 if(!test_in_tensor.empty())
                 {
-                    model->eval();
+                    output_model->eval();
                     for(size_t i = 0;i < test_in_tensor.size();++i)
                     {
-                        auto f = model->forward(test_in_tensor[i]);
+                        float mse_foreground = 0.0f,mse_background = 0.0f;
+                        auto f = output_model->forward(test_in_tensor[i]);
                         mse_foreground = torch::mse_loss(f.masked_select(test_out_mask[i].gt(0)),test_out_tensor[i].masked_select(test_out_mask[i].gt(0))).item().toFloat();
                         mse_background = torch::mse_loss(f.masked_select(test_out_mask[i].le(0)),test_out_tensor[i].masked_select(test_out_mask[i].le(0))).item().toFloat();
                         test_error_foreground[i][cur_epoch] = mse_foreground;
                         test_error_background[i][cur_epoch] = mse_background;
                     }
-                    output_model->copy_from(*model);
-                    if(po.has("network") && (cur_epoch > 1 && cur_epoch % 500 == 1))
-                    {
-                        tipl::out() << "save network " << po.get("network");
-                        if(!save_to_file(output_model,po.get("network").c_str()))
-                        {
-                            error_msg = "ERROR: failed to save network";
-                            aborted = true;
-                            break;
-                        }
-                    }
                 }
+                */
 
                 float sum_error = 0.0f;
                 model->train();
@@ -503,13 +494,20 @@ void train_unet::train(void)
                     optimizer->step();
                     optimizer->zero_grad();
                     model->total_training_count += param.batch_size;
+                    if(need_output_model)
+                    {
+                        output_model->copy_from(*model);
+                        need_output_model = false;
+                    }
+                }
 
+                {
                     float previous_error = cur_epoch > 0 ? error[cur_epoch-1]:sum_error/float(param.batch_size);
                     error[cur_epoch] = previous_error*0.95 + sum_error/float(param.batch_size)*0.05f;
                     auto out = line;
                     out[to_chart(error[cur_epoch])] = 'T';
-                    out[to_chart(mse_foreground)] = 'F';
-                    out[to_chart(mse_background)] = 'B';
+                    //out[to_chart(mse_foreground)] = 'F';
+                    //out[to_chart(mse_background)] = 'B';
 
                     std::string out2("|epoch:");
                     out2 += std::to_string(cur_epoch);
@@ -518,21 +516,22 @@ void train_unet::train(void)
                     tipl::out() << out;
                 }
 
-
+                if(po.has("network") &&
+                   ((cur_epoch+1 % 500 == 0) || cur_epoch+1 == param.epoch))
+                {
+                    tipl::out() << "save network " << po.get("network");
+                    if(!save_to_file(model,po.get("network").c_str()))
+                    {
+                        error_msg = "ERROR: failed to save network";
+                        aborted = true;
+                    }
+                    tipl::out() << "save errors " << po.get("error",po.get("network") + ".error.txt");
+                    if(!save_error_to(po.get("error","error.txt").c_str()))
+                        error_msg = "ERROR: failed to save error";
+                }
             }
             tipl::out() << (training_status = "training completed");
-            if(po.has("network"))
-            {
-                tipl::out() << "save network " << po.get("network");
-                if(!save_to_file(model,po.get("network").c_str()))
-                {
-                    error_msg = "ERROR: failed to save network";
-                    aborted = true;
-                }
-                tipl::out() << "save errors " << po.get("error","error.txt");
-                if(!save_error_to(po.get("error","error.txt").c_str()))
-                    error_msg = "ERROR: failed to save error";
-            }
+
         }
         catch(const c10::Error& error)
         {
@@ -543,7 +542,6 @@ void train_unet::train(void)
         }
         tipl::out() << error_msg << std::endl;
         pause = aborted = true;
-        output_model->copy_from(*model);
     }));
 }
 void train_unet::start(void)
@@ -598,7 +596,6 @@ void train_unet::start(void)
     model->train();
     output_model = UNet3d(model->in_count,model->out_count,model->feature_string);
     output_model->to(param.device);
-    output_model->copy_from(*model);
 
     read_file();
     prepare_tensor();    
@@ -606,6 +603,22 @@ void train_unet::start(void)
 
     if(!tipl::show_prog)
         join();
+}
+UNet3d& train_unet::get_model(void)
+{
+    if(running)
+    {
+        need_output_model = true;
+        tipl::progress p("copying network");
+        while(need_output_model && p(0,1))
+        {
+            std::this_thread::sleep_for(100ms);
+        }
+        if(p.aborted())
+            return model;
+        return output_model;
+    }
+    return model;
 }
 void train_unet::join(void)
 {
