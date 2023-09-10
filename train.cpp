@@ -701,7 +701,7 @@ int tra(void)
             tipl::out() << "ERROR: no available training images";
             return 1;
         }
-        for(size_t i = 0;train.param.image_file_name.size();++i)
+        for(size_t i = 0;i < train.param.image_file_name.size();++i)
             tipl::out() << std::filesystem::path(train.param.image_file_name[i]).filename().string() << "=>" << std::filesystem::path(train.param.label_file_name[i]).filename().string();
 
     }
