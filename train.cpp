@@ -689,7 +689,10 @@ int tra(void)
         train.param.label_file_name.clear();
         if(!po.get_files("image",train.param.image_file_name) ||
            !po.get_files("label",train.param.label_file_name))
+        {
+            tipl::out() << "ERROR: " << po.error_msg;
             return 1;
+        }
 
         if(train.param.image_file_name.size() != train.param.label_file_name.size())
         {
