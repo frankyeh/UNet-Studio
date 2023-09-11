@@ -517,7 +517,7 @@ void train_unet::train(void)
                 }
 
                 if(po.has("network") &&
-                   ((cur_epoch+1 % 500 == 0) || cur_epoch+1 == param.epoch))
+                   (((cur_epoch + 1) % 500 == 0) || cur_epoch+1 == param.epoch))
                 {
                     tipl::out() << "save network " << po.get("network");
                     if(!save_to_file(model,po.get("network").c_str()))
