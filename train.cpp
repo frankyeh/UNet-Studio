@@ -399,7 +399,7 @@ void train_unet::update_epoch_count()
 }
 void train_unet::train(void)
 {
-    train_thread.reset(new std::thread([=](){
+    auto run_training = [=](){
         struct exist_guard
         {
             bool& running;
@@ -542,7 +542,15 @@ void train_unet::train(void)
         }
         tipl::out() << error_msg << std::endl;
         pause = aborted = true;
-    }));
+    };
+
+    if(tipl::show_prog)
+        train_thread.reset(new std::thread(run_training));
+    else
+    {
+        run_training();
+        join();
+    }
 }
 void train_unet::start(void)
 {
@@ -599,10 +607,7 @@ void train_unet::start(void)
 
     read_file();
     prepare_tensor();    
-    train();
-
-    if(!tipl::show_prog)
-        join();
+    train();        
 }
 UNet3d& train_unet::get_model(void)
 {
