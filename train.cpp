@@ -153,13 +153,11 @@ void train_unet::read_file(void)
     train_image = std::vector<tipl::image<3> >(param.image_file_name.size());
     train_label = std::vector<tipl::image<3> >(param.image_file_name.size());
     train_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
-    train_image_ready = train_image_needed = std::vector<bool>(param.image_file_name.size(),false);
     train_image_is_template = std::vector<bool>(param.image_file_name.size(),true);
 
-    in_data = std::vector<tipl::image<3> >(thread_count);
-    in_data_read_id = std::vector<size_t>(thread_count);
-    out_data = std::vector<tipl::image<3> >(thread_count);
-    data_ready = std::vector<bool>(thread_count,false);
+    in_data_read_id = in_file_read_id = in_file_seed = std::vector<size_t>(thread_count);
+    out_data = in_data = in_file = out_file = std::vector<tipl::image<3> >(thread_count);
+    data_ready = file_ready = std::vector<bool>(thread_count,false);
 
     test_data_ready = false;
     test_in_tensor.clear();
@@ -169,6 +167,36 @@ void train_unet::read_file(void)
     // read training data
     read_images.reset(new std::thread([=]()
     {
+        // checking template or subject images
+        {
+            for(size_t i = 0;i < param.image_file_name.size();++i)
+            {
+                reading_status = "checking ";
+                reading_status += param.image_file_name[i];
+                tipl::io::gz_nifti in;
+                if(!in.load_from_file(param.image_file_name[i].c_str()))
+                {
+                    error_msg = "invalid NIFTI file: ";
+                    error_msg += param.image_file_name[i];
+                    aborted = true;
+                    return;
+                }
+                train_image_is_template[i] = in.is_mni();
+                if(train_image_is_template[i])
+                    tipl::out() << "template found: " << param.image_file_name[i];
+            }
+        }
+
+        std::vector<size_t> template_indices;
+        std::vector<size_t> non_template_indices;
+        for(size_t i = 0;i < train_image_is_template.size();++i)
+            if(train_image_is_template[i])
+                template_indices.insert(template_indices.end(),i);
+            else
+                non_template_indices.insert(non_template_indices.end(),i);
+
+
+
         tipl::out() << "a total of " << param.image_file_name.size() << " training dataset" << std::endl;
         tipl::out() << "a total of " << param.test_image_file_name.size() << " testing dataset" << std::endl;
 
@@ -231,38 +259,60 @@ void train_unet::read_file(void)
             test_data_ready = true;
         }
         // prepare training data
-        for(size_t total_read = 0;total_read < param.image_file_name.size() && !aborted;++total_read)
+
+        size_t seed = model->total_training_count;
+        std::mt19937 gen(0);
+        std::uniform_int_distribution<int> template_gen(0, std::max<int>(1,template_indices.size())-1);
+        std::uniform_int_distribution<int> non_template_gen(0, std::max<int>(1,non_template_indices.size())-1);
+
+        for(size_t thread = 0;!aborted;++thread,++seed)
         {
-            while(pause)
+            if(thread >= in_data.size())
+                thread = 0;
+            while(file_ready[thread])
             {
                 std::this_thread::sleep_for(100ms);
                 if(aborted)
                     return;
             }
-            size_t read_id = std::find(train_image_ready.begin(),train_image_ready.end(),false)-train_image_ready.begin();
-            for(size_t i = read_id+1;i < train_image_ready.size();++i)
-                if(!train_image_ready[i] && train_image_needed[i])
-                {
-                    read_id = i;
-                    break;
-                }
-            reading_status = "reading ";
-            reading_status += std::filesystem::path(param.image_file_name[read_id]).filename().string();
-            reading_status += " and ";
-            reading_status += std::filesystem::path(param.label_file_name[read_id]).filename().string();
-            tipl::shape<3> image_shape;
-            if(!read_image_and_label(param.image_file_name[read_id],param.label_file_name[read_id],
-                                     model->in_count,train_image[read_id],train_label[read_id],image_shape,train_image_vs[read_id]))
+            size_t read_id =
+            (non_template_indices.empty() || seed % param.batch_size < template_indices.size()) ?
+                template_indices[template_gen(gen)] : non_template_indices[non_template_gen(gen)];
+
+            in_file_seed[thread] = seed;
+            in_file_read_id[thread] = read_id;
+            if(train_image[read_id].empty())
             {
-                error_msg = "cannot read image or label data for ";
-                error_msg += std::filesystem::path(param.image_file_name[read_id]).filename().string();
-                aborted = true;
-                return;
+                reading_status = "reading ";
+                reading_status += std::filesystem::path(param.image_file_name[read_id]).filename().string();
+                reading_status += " and ";
+                reading_status += std::filesystem::path(param.label_file_name[read_id]).filename().string();
+                tipl::shape<3> image_shape;
+                if(!read_image_and_label(param.image_file_name[read_id],param.label_file_name[read_id],
+                                         model->in_count,in_file[thread],out_file[thread],image_shape,train_image_vs[read_id]))
+                {
+                    error_msg = "cannot read image or label data for ";
+                    error_msg += std::filesystem::path(param.image_file_name[read_id]).filename().string();
+                    aborted = true;
+                    return;
+                }
+                reading_status = "preprocessing";
+                preprocessing(in_file[thread],out_file[thread],image_shape,model->dim);
+                if(!param.is_label)
+                    tipl::normalize(out_file[thread]);
+                if(train_image_is_template[read_id])
+                {
+                    train_image[read_id] = in_file[thread];
+                    train_label[read_id] = out_file[thread];
+                }
             }
-            preprocessing(train_image[read_id],train_label[read_id],image_shape,model->dim);
-            if(!param.is_label)
-                tipl::normalize(train_label[read_id]);
-            train_image_ready[read_id] = true;
+            else
+            {
+                reading_status = "using template";
+                in_file[thread] = train_image[read_id];
+                out_file[thread] = train_label[read_id];
+            }
+            file_ready[thread] = true;
         }
         reading_status = "reading completed";
     }));
@@ -270,72 +320,52 @@ void train_unet::read_file(void)
 
 
     augmentation_thread.reset(new std::thread([=]()
-    {
-        {
-            for(size_t i = 0;i < param.image_file_name.size();++i)
-            {
-                augmentation_status = "checking ";
-                augmentation_status += param.image_file_name[i];
-                tipl::io::gz_nifti in;
-                if(!in.load_from_file(param.image_file_name[i].c_str()))
-                {
-                    error_msg = "invalid NIFTI file: ";
-                    error_msg += param.image_file_name[i];
-                    aborted = true;
-                    return;
-                }
-                train_image_is_template[i] = in.is_mni();
-            }
-        }
-
-
-        std::vector<size_t> template_indices;
-        std::vector<size_t> non_template_indices;
-        for(size_t i = 0;i < train_image_is_template.size();++i)
-            if(train_image_is_template[i])
-                template_indices.insert(template_indices.end(),i);
-            else
-                non_template_indices.insert(non_template_indices.end(),i);
-
-        tipl::out() << "gpu count: " << torch::cuda::device_count();
-        if(tipl::use_cuda && torch::cuda::device_count() > 1)
-            tipl::out() << "using gpu for visual perception augmentation";
-
-        augmentation_status = "augmenting images";
+    {       
+        std::mutex m;
         tipl::par_for(in_data.size(),[&](size_t thread)
         {
-            int seed = thread + model->total_training_count;
-            std::mt19937 gen(thread);
-            std::uniform_int_distribution<int> template_gen(0, std::max<int>(1,template_indices.size())-1);
-            std::uniform_int_distribution<int> non_template_gen(0, std::max<int>(1,non_template_indices.size())-1);
             while(!aborted)
             {
-                int read_id =
-                (non_template_indices.empty() || seed % param.batch_size < template_indices.size()) ?
-                    template_indices[template_gen(gen)] : non_template_indices[non_template_gen(gen)];
-                while(!train_image_ready[read_id] || data_ready[thread] || pause)
+                while(!file_ready[thread] || pause)
                 {
-                    train_image_needed[read_id] = true;
                     std::this_thread::sleep_for(100ms);
                     if(aborted)
                         return;
                 }
-                if(!train_image[read_id].size())
-                    continue;
-                in_data[thread] = train_image[read_id];
-                out_data[thread] = train_label[read_id];
-                in_data_read_id[thread] = read_id;
+
+                tipl::image<3> in_data_thread,out_data_thread;
+                size_t read_id = in_file_read_id[thread];
+                size_t seed = in_file_seed[thread];
+                in_data_thread.swap(in_file[thread]);
+                out_data_thread.swap(out_file[thread]);
+                file_ready[thread] = false;
+
+                {
+                    std::lock_guard<std::mutex> lock(m);
+                    augmentation_status = "augmenting ";
+                    augmentation_status += std::filesystem::path(param.image_file_name[read_id]).filename().string();
+                }
+
                 if constexpr (tipl::use_cuda)
                 {
                     if(torch::cuda::device_count() > 1)
-                        visual_perception_augmentation_cuda(param.options,in_data[thread],out_data[thread],param.is_label,model->dim,train_image_vs[read_id],seed);
+                        visual_perception_augmentation_cuda(param.options,in_data_thread,out_data_thread,param.is_label,model->dim,train_image_vs[read_id],seed);
                 }
                 if(torch::cuda::device_count() <= 1 || !tipl::use_cuda)
-                    visual_perception_augmentation(param.options,in_data[thread],out_data[thread],param.is_label,model->dim,train_image_vs[read_id],seed);
+                    visual_perception_augmentation(param.options,in_data_thread,out_data_thread,param.is_label,model->dim,train_image_vs[read_id],seed);
                 if(model->out_count > 1)
-                    preprocess_label(model,out_data[thread],param);
+                    preprocess_label(model,out_data_thread,param);
+
+                while(data_ready[thread] || pause)
+                {
+                    std::this_thread::sleep_for(100ms);
+                    if(aborted)
+                        return;
+                }
+                in_data[thread].swap(in_data_thread);
+                out_data[thread].swap(out_data_thread);
+                in_data_read_id[thread] = read_id;
                 data_ready[thread] = true;
-                seed += in_data.size();
             }
 
         });
@@ -354,24 +384,21 @@ void train_unet::prepare_tensor(void)
         try{
             tipl::par_for(in_tensor.size(),[&](size_t thread)
             {
-                size_t i = thread;
                 while(!aborted)
                 {
-                    size_t data_index = i%data_ready.size();
-                    while(!data_ready[data_index] || tensor_ready[thread] || pause)
+                    while(!data_ready[thread] || tensor_ready[thread] || pause)
                     {
                         std::this_thread::sleep_for(100ms);
                         if(aborted)
                             return;
                     }
-                    in_tensor[thread] = torch::from_blob(&in_data[data_index][0],
+                    in_tensor[thread] = torch::from_blob(&in_data[thread][0],
                         {1,model->in_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device);
-                    out_tensor[thread] = torch::from_blob(&out_data[data_index][0],
+                    out_tensor[thread] = torch::from_blob(&out_data[thread][0],
                         {1,model->out_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device);
-                    in_tensor_read_id[thread] = in_data_read_id[data_index];
+                    in_tensor_read_id[thread] = in_data_read_id[thread];
                     tensor_ready[thread] = true;
-                    data_ready[data_index] = false;
-                    i += in_tensor.size();
+                    data_ready[thread] = false;
                 }
             });
         }
@@ -429,7 +456,7 @@ void train_unet::train(void)
                     tipl::out() << "set learning rate to " << param.learning_rate << std::endl;
                     optimizer->defaults().set_lr(param.learning_rate);
                 }
-                /*
+
                 if(!test_in_tensor.empty())
                 {
                     output_model->eval();
@@ -443,7 +470,6 @@ void train_unet::train(void)
                         test_error_background[i][cur_epoch] = mse_background;
                     }
                 }
-                */
 
                 float sum_error = 0.0f;
                 model->train();
@@ -572,11 +598,6 @@ void train_unet::start(void)
         aborted = true;
         return;
     }
-    if(param.test_image_file_name.empty())
-    {
-        param.test_image_file_name.push_back(param.image_file_name[0]);
-        param.test_label_file_name.push_back(param.label_file_name[0]);
-    }
 
     if(model->total_training_count == 0)
     {
@@ -596,9 +617,12 @@ void train_unet::start(void)
         tipl::out() << "set network input sizes: " << model->dim << " with resolution:" << model->voxel_size <<std::endl;
     }
 
-    test_error_foreground = std::vector<std::vector<float> >(param.test_image_file_name.size());
-    test_error_background = test_error_foreground;
+    test_error_background = test_error_foreground = std::vector<std::vector<float> >(param.test_image_file_name.size());
     update_epoch_count();
+
+    tipl::out() << "gpu count: " << torch::cuda::device_count();
+    if(tipl::use_cuda && torch::cuda::device_count() > 1)
+        tipl::out() << "using gpu for visual perception augmentation";
 
     model->to(param.device);
     model->train();
