@@ -526,7 +526,7 @@ void train_unet::train(void)
                         aborted = true;
                     }
                     tipl::out() << "save errors " << po.get("error",po.get("network") + ".error.txt");
-                    if(!save_error_to(po.get("error","error.txt").c_str()))
+                    if(!save_error_to(po.get("error",po.get("network") + ".error.txt").c_str()))
                         error_msg = "ERROR: failed to save error";
                 }
             }
