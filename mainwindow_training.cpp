@@ -550,12 +550,6 @@ void MainWindow::training()
 }
 
 std::vector<size_t> get_label_count(const tipl::image<3>& label,size_t out_count);
-void visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& options,
-                          tipl::image<3>& input,
-                          tipl::image<3>& label,
-                          bool is_label,
-                          const tipl::shape<3>& image_shape,
-                          size_t random_seed);
 void MainWindow::on_list1_currentRowChanged(int currentRow)
 {
     if(ui->list2->currentRow() != currentRow)
@@ -576,10 +570,7 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
             for(auto& each : option->treemodel->name_data_mapping)
                 options[each.first.toStdString()] = each.second->getValue().toFloat();
 
-            if constexpr (tipl::use_cuda)
-                visual_perception_augmentation_cuda(options,I1,I2,is_label,shape,ui->seed->value());
-            else
-                visual_perception_augmentation(options,I1,I2,is_label,shape,ui->seed->value());
+            visual_perception_augmentation(options,I1,I2,is_label,shape,ui->seed->value());
         }
         if(ui->view_channel->value())
             std::copy(I1.begin()+shape.size()*ui->view_channel->value(),I1.begin()+shape.size()*(ui->view_channel->value()+1),I1.begin());
