@@ -154,6 +154,12 @@ float perlin_texture(float x, float y, float z,const std::vector<int>& p)
     return lerp(w, y1, y2);
 }
 
+bool visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& options,
+                          tipl::image<3>& input,
+                          tipl::image<3>& label,
+                          bool is_label,
+                          const tipl::shape<3>& image_shape,
+                          size_t random_seed);
 void visual_perception_augmentation(std::unordered_map<std::string,float>& options,
                           tipl::image<3>& input,
                           tipl::image<3>& label,
@@ -161,6 +167,12 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
                           const tipl::shape<3>& image_shape,
                           size_t random_seed)
 {
+    if constexpr (tipl::use_cuda)
+    {
+        if(visual_perception_augmentation_cuda(options,input,label,is_label,image_shape,random_seed))
+            return;
+    }
+
     try{
 
     tipl::uniform_dist<float> one(-1.0f,1.0f,random_seed);
