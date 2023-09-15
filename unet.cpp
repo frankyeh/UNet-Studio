@@ -104,15 +104,16 @@ void UNet3dImpl::copy_from(const UNet3dImpl& r)
     voxel_size = r.voxel_size;
     dim = r.dim;
 }
-void UNet3dImpl::add_gradient_from(const UNet3dImpl& r,torch::Device device)
+void UNet3dImpl::add_gradient_from(const UNet3dImpl& r)
 {
     auto rhs = r.parameters();
     auto lhs = parameters();
+    auto cur_device = device();
     tipl::par_for(rhs.size(),[&](size_t index)
     {
         torch::NoGradGuard no_grad;
         if(lhs[index].mutable_grad().defined() && rhs[index].mutable_grad().defined())
-            lhs[index].mutable_grad().add_(rhs[index].mutable_grad());
+            lhs[index].mutable_grad().add_(rhs[index].mutable_grad().to(cur_device));
     });
 }
 
