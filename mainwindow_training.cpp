@@ -546,7 +546,7 @@ void MainWindow::training()
         plot_error();
 
     if(ui->tabWidget->currentIndex() == 1)
-        ui->statusbar->showMessage((train.reading_status+"/"+train.augmentation_status+"/"+train.training_status).c_str());
+        ui->statusbar->showMessage((train.get_status() + "|" + train.reading_status+"/"+train.augmentation_status+"/"+train.training_status).c_str());
 }
 
 std::vector<size_t> get_label_count(const tipl::image<3>& label,size_t out_count);
@@ -555,7 +555,6 @@ void visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& 
                           tipl::image<3>& label,
                           bool is_label,
                           const tipl::shape<3>& image_shape,
-                          const tipl::vector<3>& image_vs,
                           size_t random_seed);
 void MainWindow::on_list1_currentRowChanged(int currentRow)
 {
@@ -567,8 +566,7 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
     if(currentRow >= 0 && currentRow < image_list.size())
     {
         tipl::shape<3> shape;
-        tipl::vector<3> vs;
-        if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),in_count,I1,I2,shape,vs))
+        if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),in_count,I1,I2,shape))
             I2.clear();
         if(!is_label)
             tipl::normalize(I2);
@@ -579,9 +577,9 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
                 options[each.first.toStdString()] = each.second->getValue().toFloat();
 
             if constexpr (tipl::use_cuda)
-                visual_perception_augmentation_cuda(options,I1,I2,is_label,shape,vs,ui->seed->value());
+                visual_perception_augmentation_cuda(options,I1,I2,is_label,shape,ui->seed->value());
             else
-                visual_perception_augmentation(options,I1,I2,is_label,shape,vs,ui->seed->value());
+                visual_perception_augmentation(options,I1,I2,is_label,shape,ui->seed->value());
         }
         if(ui->view_channel->value())
             std::copy(I1.begin()+shape.size()*ui->view_channel->value(),I1.begin()+shape.size()*(ui->view_channel->value()+1),I1.begin());

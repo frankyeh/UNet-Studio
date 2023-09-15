@@ -52,14 +52,12 @@ bool read_image_and_label(const std::string& image_name,
                           size_t in_count,
                           tipl::image<3>& input,
                           tipl::image<3>& label,
-                          tipl::shape<3>& image_shape,
-                          tipl::vector<3>& vs);
+                          tipl::shape<3>& image_shape);
 void visual_perception_augmentation(std::unordered_map<std::string,float>& options,
                           tipl::image<3>& image,
                           tipl::image<3>& label,
                           bool is_label,
                           const tipl::shape<3>& image_shape,
-                          const tipl::vector<3>& image_vs,
                           size_t random_seed);
 class train_unet{
 public:
@@ -71,7 +69,6 @@ public:
     std::string error_msg,reading_status,augmentation_status,training_status;
 private:
     std::vector<tipl::image<3> > train_image,train_label;
-    std::vector<tipl::vector<3> > train_image_vs;
     std::vector<bool> train_image_is_template;
     std::vector<torch::Tensor> test_in_tensor,test_out_tensor,test_out_mask;
     bool test_data_ready = false;
@@ -102,13 +99,14 @@ public:
     std::vector<std::vector<float> > test_error_foreground,test_error_background;
     void update_epoch_count();
     bool save_error_to(const char* file_name);
+    std::string get_status(void);
 private:
     UNet3d output_model;
     bool need_output_model = false;
 public:
     UNet3d& get_model(void);
 public:
-    UNet3d model;
+    UNet3d model,model2;
     ~train_unet(void)
     {
         stop();

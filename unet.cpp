@@ -75,28 +75,45 @@ torch::nn::Sequential UNet3dImpl::ConvBlock(const std::vector<int>& rhs,size_t k
 
 void UNet3dImpl::copy_from(const UNet3dImpl& r)
 {
-    torch::NoGradGuard no_grad;
-    set_requires_grad(false);
     auto rhs = r.parameters();
     auto lhs = parameters();
-    for(size_t index = 0;index < rhs.size();++index)
+    tipl::par_for(rhs.size(),[&](size_t index)
     {
+        torch::NoGradGuard no_grad;
+        bool requires_grad = lhs[index].requires_grad();
+        lhs[index].set_requires_grad(false);
+        auto new_rhs = rhs[index].to(lhs[index].device());
         if(lhs[index].sizes() == rhs[index].sizes())
-            lhs[index].copy_(rhs[index]);
+        {
+            lhs[index].copy_(new_rhs);
+            if(lhs[index].mutable_grad().defined() && rhs[index].mutable_grad().defined())
+                lhs[index].mutable_grad().copy_(rhs[index].mutable_grad().to(lhs[index].device()));
+        }
         else
         {
-            auto new_rhs = rhs[index].to(lhs[index].device());
             if(rhs[index].numel() > lhs[index].numel())
                 lhs[index].copy_(new_rhs.reshape({rhs[index].numel()}).slice(0,0,lhs[index].numel()).reshape(lhs[index].sizes()));
             else
                 lhs[index].reshape({lhs[index].numel()}).index_put_({torch::indexing::Slice(0,int(rhs[index].numel()))},
                                    new_rhs.reshape({rhs[index].numel()}));
         }
-    }
+        lhs[index].set_requires_grad(requires_grad);
+    });
 
     total_training_count = r.total_training_count;
     voxel_size = r.voxel_size;
     dim = r.dim;
+}
+void UNet3dImpl::add_gradient_from(const UNet3dImpl& r,torch::Device device)
+{
+    auto rhs = r.parameters();
+    auto lhs = parameters();
+    tipl::par_for(rhs.size(),[&](size_t index)
+    {
+        torch::NoGradGuard no_grad;
+        if(lhs[index].mutable_grad().defined() && rhs[index].mutable_grad().defined())
+            lhs[index].mutable_grad().add_(rhs[index].mutable_grad());
+    });
 }
 
 

@@ -288,7 +288,6 @@ void visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& 
                           tipl::image<3>& label_,
                           bool is_label,
                           const tipl::shape<3>& image_shape,
-                          const tipl::vector<3>& image_vs,
                           size_t random_seed)
 {
     try{
@@ -399,9 +398,9 @@ void visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& 
     {
         auto resolution = range(1.0f/options["scaling_up"],1.0f/options["scaling_down"]);
         tipl::affine_transform<float> transform = {
-                    one()*float(options["translocation_ratio"])*image_shape[0]*image_vs[0],
-                    one()*float(options["translocation_ratio"])*image_shape[1]*image_vs[1],
-                    one()*float(options["translocation_ratio"])*image_shape[2]*image_vs[2],
+                    one()*float(options["translocation_ratio"])*image_shape[0],
+                    one()*float(options["translocation_ratio"])*image_shape[1],
+                    one()*float(options["translocation_ratio"])*image_shape[2],
                     one()*options["rotation_x"],
                     one()*options["rotation_y"],
                     one()*options["rotation_z"],
@@ -409,7 +408,7 @@ void visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& 
                     resolution*range(1.0f/options["aspect_ratio"],options["aspect_ratio"]),
                     resolution*range(1.0f/options["aspect_ratio"],options["aspect_ratio"]),
                     0.0f,0.0f,0.0f};
-        auto trans = tipl::transformation_matrix<float>(transform,image_shape,image_vs,image_shape,image_vs);
+        auto trans = tipl::transformation_matrix<float>(transform,image_shape,tipl::v(1.0f,1.0f,1.0f),image_shape,tipl::v(1.0f,1.0f,1.0f));
 
 
         tipl::vector<3> perspective((one()-0.5f)*options["perspective"]/float(image_shape[0]),
@@ -471,9 +470,9 @@ void visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& 
             std::vector<tipl::affine_transform<float> > args;
             float pi2 = std::acos(-1)*2.0f;
             for(size_t iter = 0;iter < 5;++iter)
-                args.push_back(tipl::affine_transform<float>{one()*image_shape[0]*image_vs[0]*0.5f,
-                                                    one()*image_shape[1]*image_vs[1]*0.5f,
-                                                    one()*image_shape[2]*image_vs[2]*0.5f,
+                args.push_back(tipl::affine_transform<float>{one()*image_shape[0]*0.5f,
+                                                    one()*image_shape[1]*0.5f,
+                                                    one()*image_shape[2]*0.5f,
                                                     one()*pi2,one()*pi2,one()*pi2,
                                                     range(0.8f,1.25f),range(0.8f,1.25f),range(0.8f,1.25f),
                                                     0.0f,0.0f,0.0f});
@@ -487,7 +486,7 @@ void visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& 
                 tipl::device_image<3> background(image_shape);
                 for(size_t iter = 0;iter < 5;++iter)
                 {
-                    tipl::resample_cuda(image,background,tipl::transformation_matrix<float>(args[iter],image_shape,image_vs,image_shape,image_vs));
+                    tipl::resample_cuda(image,background,tipl::transformation_matrix<float>(args[iter],image_shape,tipl::v(1.0f,1.0f,1.0f),image_shape,tipl::v(1.0f,1.0f,1.0f)));
                     tipl::lower_threshold_cuda(background,0.0f);
                     tipl::normalize_cuda(background,options["rubber_stamping_mag"]);
                     TIPL_RUN(blend_kernel,image_out.size())

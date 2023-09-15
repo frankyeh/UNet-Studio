@@ -51,6 +51,7 @@ public:
                 int32_t out_count_,
                 std::string feature_string_);
     void copy_from(const UNet3dImpl& r);
+    void add_gradient_from(const UNet3dImpl& r,torch::Device device);
 
 public:
     torch::Tensor forward(torch::Tensor inputTensor);
