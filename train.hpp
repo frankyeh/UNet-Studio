@@ -85,12 +85,6 @@ private:
     std::shared_ptr<std::thread> augmentation_thread;
     void read_file(void);
 private:
-    std::vector<torch::Tensor> in_tensor,out_tensor;
-    std::vector<size_t> in_tensor_read_id;
-    std::vector<bool> tensor_ready;
-    std::shared_ptr<std::thread> prepare_tensor_thread;
-    void prepare_tensor(void);
-private:
     std::shared_ptr<std::thread> train_thread;
     void train(void);
 public:
@@ -106,7 +100,8 @@ private:
 public:
     UNet3d& get_model(void);
 public:
-    UNet3d model,model2;
+    UNet3d model;
+    std::vector<UNet3d> other_models;
     ~train_unet(void)
     {
         stop();
