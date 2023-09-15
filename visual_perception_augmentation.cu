@@ -280,10 +280,8 @@ __global__ void perlin_texture_kernel2(T background)
         background[index] = v-std::floor(v);
     }
 }
-
-
-
-void visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& options,
+bool distribute_gpu(void);
+bool visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& options,
                           tipl::image<3>& input_,
                           tipl::image<3>& label_,
                           bool is_label,
@@ -292,12 +290,8 @@ void visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& 
 {
     try{
 
-    {
-        int gpu_count = 1;
-        if(cudaGetDeviceCount(&gpu_count) != cudaSuccess ||
-            cudaSetDevice(gpu_count-1) != cudaSuccess)
-            tipl::out() << "cudaSetDevice error:" << cudaSetDevice(gpu_count-1) << std::endl;
-    }
+    if(!distribute_gpu())
+        return false;
 
     tipl::device_image<3> input = input_;
     tipl::device_image<3> label = label_;
@@ -541,7 +535,12 @@ void visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& 
     catch(std::runtime_error& error)
     {
         tipl::out() << "ERROR: " << error.what() << std::endl;
+        return false;
     }
     if(cudaSetDevice(0) != cudaSuccess)
+    {
         tipl::out() << "cudaSetDevice error:" << cudaSetDevice(0) << std::endl;
+        return false;
+    }
+    return true;
 }
