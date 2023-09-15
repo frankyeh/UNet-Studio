@@ -311,7 +311,7 @@ void evaluate_unet::evaluate(void)
                 }
                 if(cur_input.empty())
                     continue;
-                auto out = model->forward(torch::from_blob(&cur_input[0],
+                auto out = model->forward(torch::from_blob(cur_input.data(),
                                           {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device));
                 evaluate_output[cur_prog].resize(cur_input.shape().multiply(tipl::shape<3>::z,model->out_count).divide(tipl::shape<3>::z,model->in_count));
                 std::memcpy(&evaluate_output[cur_prog][0],out.to(torch::kCPU).data_ptr<float>(),evaluate_output[cur_prog].size()*sizeof(float));
