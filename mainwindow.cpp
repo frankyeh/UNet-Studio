@@ -73,7 +73,7 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     timer = new QTimer(this);
-    timer->setInterval(1500);
+    timer->setInterval(100);
     connect(timer, SIGNAL(timeout()), this, SLOT(training()));
 
     eval_timer = new QTimer(this);
