@@ -10,18 +10,22 @@ __global__ void cuda_test(){
 
 bool has_cuda = true;
 int gpu_count = 0;
-void distribute_gpu(void)
+bool distribute_gpu(void)
 {
     static int cur_gpu = 0;
     static std::mutex m;
     std::lock_guard<std::mutex> lock(m);
     if(gpu_count <= 1)
-        return;
+        return true;
     if(cudaSetDevice(cur_gpu) != cudaSuccess)
+    {
         tipl::out() << "cudaSetDevice error:" << cudaSetDevice(cur_gpu) << std::endl;
+        return false;
+    }
     ++cur_gpu;
     if(cur_gpu >= gpu_count)
         cur_gpu = 0;
+    return true;
 }
 
 std::vector<std::string> gpu_names;
