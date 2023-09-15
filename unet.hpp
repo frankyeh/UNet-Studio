@@ -51,7 +51,7 @@ public:
                 int32_t out_count_,
                 std::string feature_string_);
     void copy_from(const UNet3dImpl& r);
-    void add_gradient_from(const UNet3dImpl& r,torch::Device device);
+    void add_gradient_from(const UNet3dImpl& r);
 
 public:
     torch::Tensor forward(torch::Tensor inputTensor);
@@ -74,6 +74,10 @@ public:
         torch::nn::Module::train(on);
     }
     void print_layers(void);
+    torch::Device device(void) const
+    {
+        return parameters().size() && parameters()[0].defined() ? parameters()[0].device() : torch::kCPU;
+    }
 private:
     torch::nn::Sequential ConvBlock(const std::vector<int>& rhs,size_t ks,torch::nn::Sequential s = torch::nn::Sequential());
 };
