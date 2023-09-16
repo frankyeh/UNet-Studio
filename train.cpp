@@ -424,9 +424,6 @@ void train_unet::train(void)
                     optimizer->defaults().set_lr(param.learning_rate);
                 }
 
-
-
-
                 if(need_output_model || !test_in_tensor.empty())
                 {
                     output_model->copy_from(*model);
@@ -491,12 +488,10 @@ void train_unet::train(void)
                             auto weight = train_image_is_template[in_data_read_id[thread]] ? param.template_label_weight : param.subject_label_weight;
                             if(weight.size() == cur_model->out_count)
                             {
-                                training_status += "w";
                                 at::Tensor loss;
                                 for(size_t i = 0;i < cur_model->out_count;++i)
                                     if(weight[i] != 0.0f)
                                     {
-                                        training_status += std::to_string(i);
                                         auto l = torch::mse_loss(output.select(1,i),out_tensor_thread.select(1,i))*weight[i];
                                         if(loss.defined())
                                             loss += l;
@@ -554,13 +549,11 @@ void train_unet::train(void)
                 if(po.has("network") &&
                    (((cur_epoch + 1) % 500 == 0) || cur_epoch+1 == param.epoch))
                 {
-                    tipl::out() << "save network " << po.get("network");
                     if(!save_to_file(model,po.get("network").c_str()))
                     {
                         error_msg = "ERROR: failed to save network";
                         aborted = true;
                     }
-                    tipl::out() << "save errors " << po.get("error",po.get("network") + ".error.txt");
                     if(!save_error_to(po.get("error",po.get("network") + ".error.txt").c_str()))
                         error_msg = "ERROR: failed to save error";
                 }
