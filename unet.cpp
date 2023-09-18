@@ -82,12 +82,12 @@ void UNet3dImpl::copy_from(const UNet3dImpl& r)
         torch::NoGradGuard no_grad;
         bool requires_grad = lhs[index].requires_grad();
         lhs[index].set_requires_grad(false);
-        auto new_rhs = rhs[index].to(lhs[index].device());
+        auto new_rhs = rhs[index].to(lhs[index].device()).detach();
         if(lhs[index].sizes() == rhs[index].sizes())
         {
             lhs[index].copy_(new_rhs);
             if(lhs[index].mutable_grad().defined() && rhs[index].mutable_grad().defined())
-                lhs[index].mutable_grad().copy_(rhs[index].mutable_grad().to(lhs[index].device()));
+                lhs[index].mutable_grad().copy_(rhs[index].mutable_grad().to(lhs[index].device()).detach());
         }
         else
         {
@@ -113,7 +113,7 @@ void UNet3dImpl::add_gradient_from(const UNet3dImpl& r)
     {
         torch::NoGradGuard no_grad;
         if(lhs[index].mutable_grad().defined() && rhs[index].mutable_grad().defined())
-            lhs[index].mutable_grad().add_(rhs[index].mutable_grad().to(cur_device));
+            lhs[index].mutable_grad().add_(rhs[index].mutable_grad().to(cur_device).detach());
     });
 }
 
