@@ -12,25 +12,34 @@ extern console_stream console;
 void check_cuda(std::string& error_msg);
 
 int tra(void);
+int eval(void);
 int run_cmd(void)
 {
-    if (!po.check("action"))
+    if(!po.check("action"))
         return 1;
+    if(!po.has("network"))
+    {
+        tipl::out() << "ERROR: please specify --network";
+        return 1;
+    }
+
     if(po.get("action") == std::string("train"))
         return tra();
+    if(po.get("action") == std::string("evaluate"))
+        return eval();
     return 1;
 }
 
 int main(int argc, char *argv[])
 {
     tipl::available_thread_count<0>() = std::thread::hardware_concurrency()*8;
+    if(!po.parse(argc,argv))
+    {
+        tipl::out() << po.error_msg << std::endl;
+        return 1;
+    }
     if(argc > 2)
     {
-        if(!po.parse(argc,argv))
-        {
-            tipl::out() << po.error_msg << std::endl;
-            return 1;
-        }
         return run_cmd();
     }
 
