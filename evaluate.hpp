@@ -65,6 +65,7 @@ public:
         stop();
     }
     void start(void);
+    void join(void);
     void stop(void);
     bool save_to_file(size_t index,const char* file_name);
 
