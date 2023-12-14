@@ -1,5 +1,7 @@
 #include "evaluate.hpp"
 
+extern tipl::program_option<tipl::out> po;
+
 std::vector<std::string> operations({
         "none",
         "gaussian_filter",
@@ -342,7 +344,7 @@ void evaluate_unet::output(void)
     label_prob = std::vector<tipl::image<3> >(param.image_file_name.size());
     foreground_prob = std::vector<tipl::image<3> >(param.image_file_name.size());
     is_label = std::vector<char>(param.image_file_name.size());
-    output_thread.reset(new std::thread([this]()
+    auto run_evaluation = [this]()
     {
         struct exist_guard
         {
@@ -439,7 +441,15 @@ void evaluate_unet::output(void)
         tipl::out() << error_msg << std::endl;
         aborted = true;
         status = "complete";
-    }));
+    };
+
+    if(tipl::show_prog)
+        output_thread.reset(new std::thread(run_evaluation));
+    else
+    {
+        run_evaluation();
+        join();
+    }
 }
 
 
@@ -456,9 +466,9 @@ void evaluate_unet::start(void)
     evaluate();
     output();
 }
-void evaluate_unet::stop(void)
+
+void evaluate_unet::join(void)
 {
-    aborted = true;
     if(read_file_thread.get())
     {
         read_file_thread->join();
@@ -474,6 +484,11 @@ void evaluate_unet::stop(void)
         output_thread->join();
         output_thread.reset();
     }
+}
+void evaluate_unet::stop(void)
+{
+    aborted = true;
+    join();
 }
 bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
 {
@@ -521,5 +536,75 @@ bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
     return out.save_to_file(file_name);
 }
 
+bool load_from_file(UNet3d& model,const char* file_name);
+std::string get_network_path(void);
+int eval(void)
+{
+    static evaluate_unet eval;
+    if(eval.running)
+    {
+        tipl::out() << "terminating training...";
+        eval.stop();
+    }
 
 
+    // loading images data
+    {
+        eval.param.image_file_name.clear();
+        if(!po.has("image"))
+        {
+            tipl::out() << "ERROR: please specify --image";
+            return 1;
+        }
+        if(!po.get_files("image",eval.param.image_file_name))
+        {
+            tipl::out() << "ERROR: " << eval.error_msg;
+            return 1;
+        }
+    }
+
+    auto network = get_network_path();
+    {
+        if(!std::filesystem::exists(network))
+        {
+            tipl::out() << "ERROR: cannot find the network file " << network;
+            return 1;
+        }
+        tipl::out() << "loading network " << network;
+        if(!load_from_file(eval.model,network.c_str()))
+        {
+            tipl::out() << "ERROR: failed to load model from " << network;
+            return 1;
+        }
+        tipl::out() << eval.model->get_info();
+    }
+
+    eval.param.prob_threshold = po.get("prob_threshold",0.5f);
+    eval.proc_strategy.match_resolution = po.get("match_resolution",1);
+    eval.proc_strategy.match_fov = po.get("match_fov",1);
+    eval.proc_strategy.match_orientation = po.get("match_orientation",0);
+    eval.proc_strategy.output_format = po.get("output_format",0);
+
+
+    eval.param.device = torch::Device(po.get("device",torch::hasCUDA() ? "cuda:0" :
+                                                       (torch::hasHIP() ? "hip:0" :
+                                                       (torch::hasMPS() ? "mps:0": "cpu"))));
+    {
+        tipl::progress p("start evaluating");
+        eval.start();
+        eval.join();
+    }
+    if(!eval.error_msg.empty())
+    {
+        tipl::out() << "ERROR: " << eval.error_msg;
+        return 1;
+    }
+    {
+        tipl::progress p("saving results");
+        for(size_t i = 0;p(i,eval.param.image_file_name.size());++i)
+            if(!eval.save_to_file(i,(eval.param.image_file_name[i] + ".seg.nii.gz").c_str()))
+                tipl::out() << "ERROR: " << eval.error_msg;
+    }
+
+    return 0;
+}
