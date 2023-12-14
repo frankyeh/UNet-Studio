@@ -704,6 +704,16 @@ bool train_unet::save_error_to(const char* file_name)
 
 bool get_label_info(const std::string& label_name,std::vector<int>& out_count,bool& is_label);
 
+
+std::string get_network_path(void)
+{
+    std::string network = po.get("network");
+    if(!tipl::ends_with(network,"net.gz"))
+        network += ".net.gz";
+    if(!std::filesystem::exists(network) && std::filesystem::exists(po.exec_path + "/network/" + network))
+        po.set("network",network = po.exec_path + "/network/" + network);
+    return network;
+}
 int tra(void)
 {
     static train_unet train;
@@ -740,18 +750,7 @@ int tra(void)
             tipl::out() << std::filesystem::path(train.param.image_file_name[i]).filename().string() << "=>" << std::filesystem::path(train.param.label_file_name[i]).filename().string();
 
     }
-
-
-
-
-    if(!po.has("network"))
-    {
-        tipl::out() << "ERROR: please specify --network";
-        return 1;
-    }
-    std::string network = po.get("network");
-    if(!tipl::ends_with(network,"net.gz"))
-        network += ".net.gz";
+    auto network = get_network_path();
     if(std::filesystem::exists(network))
     {
         tipl::out() << "loading existing network " << network;
