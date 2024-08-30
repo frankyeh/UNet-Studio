@@ -83,9 +83,11 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout
-      uses: actions/checkout@v2.5.0
+      uses: actions/checkout@v4.1.1
     - name: Set up QEMU
-      uses: docker/setup-qemu-action@v2.1.0
+      uses: docker/setup-qemu-action@v3.0.0
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3.0.0    
     - name: Free Disk Space (Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
@@ -98,10 +100,8 @@ jobs:
         large-packages: true
         docker-images: false
         swap-storage: true
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2.2.1
     - name: Build and push
-      uses: docker/build-push-action@v3.2.0
+      uses: docker/build-push-action@v5.1.0
       with:
         context: .
         file: build_packages/${{ matrix.os }}/Dockerfile
