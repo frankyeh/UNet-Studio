@@ -229,13 +229,13 @@ void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
             tipl::vector<3> vs;
             if(!tipl::io::gz_nifti::load_from_file(evaluate_list[currentRow].toStdString().c_str(),eval_I1_buffer[currentRow],vs))
                 return;
-            eval_I1_buffer_max[currentRow] = tipl::max_value_mt(eval_I1_buffer[currentRow]);
+            eval_I1_buffer_max[currentRow] = tipl::max_value(eval_I1_buffer[currentRow]);
         }
         ui->eval_image_max->setMaximum(eval_I1_buffer_max[currentRow]);
         ui->eval_image_max->setSingleStep(eval_I1_buffer_max[currentRow]/20.0f);
         ui->eval_pos->setMaximum(eval_I1_buffer[currentRow].shape()[ui->eval_view_dim->currentIndex()]-1);
         ui->eval_pos->setValue(std::round(pos_index*float(ui->eval_pos->maximum())));
-        ui->eval_image_max->setValue(tipl::max_value_mt(tipl::volume2slice(eval_I1_buffer[currentRow],ui->eval_view_dim->currentIndex(),ui->eval_pos->value())));
+        ui->eval_image_max->setValue(tipl::max_value(tipl::volume2slice(eval_I1_buffer[currentRow],ui->eval_view_dim->currentIndex(),ui->eval_pos->value())));
     }
     else
         ui->eval_pos->setMaximum(0);

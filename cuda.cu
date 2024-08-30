@@ -1,9 +1,27 @@
-#include "TIPL/tipl.hpp"
+#include "TIPL/reg/linear.hpp"
+#include "TIPL/prog.hpp"
 #include <iostream>
 #include <cuda.h>
 #include <cuda_runtime.h>
 __global__ void cuda_test(){
     ;
+}
+
+
+namespace tipl::reg
+{
+
+template
+float optimize_mi_cuda<false,unsigned char,3>(
+            std::shared_ptr<tipl::reg::linear_reg_param<3,unsigned char> > reg,
+                        tipl::reg::cost_type cost_type,
+                        bool& terminated);
+template
+float optimize_mi_cuda<true,unsigned char,3>(
+            std::shared_ptr<tipl::reg::linear_reg_param<3,unsigned char> > reg,
+                        tipl::reg::cost_type cost_type,
+                        bool& terminated);
+
 }
 
 bool has_cuda = true;
@@ -71,17 +89,3 @@ void check_cuda(std::string& error_msg)
     has_cuda = true;
 }
 
-size_t linear_cuda(const tipl::image<3,float>& from,
-                              tipl::vector<3> from_vs,
-                              const tipl::image<3,float>& to,
-                              tipl::vector<3> to_vs,
-                              tipl::affine_transform<float>& arg,
-                              tipl::reg::reg_type reg_type,
-                              bool& terminated,
-                              const float* bound)
-{
-    distribute_gpu();
-    return tipl::reg::linear_mr<tipl::reg::mutual_information_cuda>
-            (from,from_vs,to,to_vs,arg,reg_type,[&](void){return terminated;},
-                0.01,bound != tipl::reg::narrow_bound,bound);
-}

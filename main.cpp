@@ -32,7 +32,6 @@ int run_cmd(void)
 
 int main(int argc, char *argv[])
 {
-    tipl::available_thread_count<0>() = std::thread::hardware_concurrency()*8;
     if(!po.parse(argc,argv))
     {
         tipl::out() << po.error_msg << std::endl;
@@ -148,7 +147,7 @@ bool save_to_file(UNet3d& model,const char* file_name)
     mat.write("total_training_count",model->total_training_count);
     mat.write("voxel_size",model->voxel_size);
     mat.write("dimension",model->dim);
-    mat.write("param",{model->in_count,model->out_count});
+    mat.write("param",std::vector<int>({model->in_count,model->out_count}));
     int id = 0;
     for(auto tensor : model->parameters())
     {

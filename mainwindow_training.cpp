@@ -575,7 +575,7 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         if(ui->view_channel->value())
             std::copy(I1.begin()+shape.size()*ui->view_channel->value(),I1.begin()+shape.size()*(ui->view_channel->value()+1),I1.begin());
         I1.resize(shape);
-        v2c1.set_range(0,tipl::max_value_mt(I1));
+        v2c1.set_range(0,tipl::max_value(I1));
         v2c2.set_range(0,is_label ? out_count : 1);
         ui->pos->setMaximum(I1.shape()[ui->view_dim->currentIndex()]-1);
     }

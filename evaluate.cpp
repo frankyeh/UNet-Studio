@@ -25,6 +25,22 @@ size_t linear_cuda(const tipl::image<3,float>& from,
                               bool& terminated,
                               const float* bound);
 
+
+template<int dim>
+inline auto subject_image_pre(tipl::image<dim>&& I)
+{
+    tipl::image<dim,unsigned char> out;
+    tipl::filter::gaussian(I);
+    tipl::segmentation::normalize_otsu_median(I);
+    tipl::normalize_upper_lower2(I,out,255.999f);
+    return out;
+}
+template<int dim>
+inline auto subject_image_pre(const tipl::image<dim>& I)
+{
+    return subject_image_pre(tipl::image<dim>(I));
+}
+
 inline size_t linear_with_mi(const tipl::image<3,float>& from,
                             const tipl::vector<3>& from_vs,
                             const tipl::image<3,float>& to,
@@ -32,16 +48,11 @@ inline size_t linear_with_mi(const tipl::image<3,float>& from,
                               tipl::affine_transform<float>& arg,
                               tipl::reg::reg_type reg_type,
                               bool& terminated,
-                              const float* bound = tipl::reg::reg_bound)
+                              const float bound[3][8] = tipl::reg::reg_bound)
 {
-    float result = 0.0f;
-    if constexpr (tipl::use_cuda)
-        result = linear_cuda(from,from_vs,to,to_vs,arg,tipl::reg::reg_type(reg_type),terminated,bound);
-    if(result == 0.0f)
-        result = tipl::reg::linear_mr<tipl::reg::mutual_information>
-                (from,from_vs,to,to_vs,arg,tipl::reg::reg_type(reg_type),[&](void){return terminated;},
-                    0.01,bound != tipl::reg::narrow_bound,bound);
-    return result;
+    return tipl::reg::linear<tipl::out>(tipl::reg::make_list(subject_image_pre(from)),from_vs,
+                                        tipl::reg::make_list(subject_image_pre(to)),to_vs,
+                                        arg,reg_type,terminated,bound);
 }
 
 inline void rotate_to_template(tipl::image<3>& images,
@@ -502,8 +513,11 @@ bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
         return false;
     }
     tipl::matrix<4,4,float> trans;
+    tipl::vector<3> vs;
     in.get_image_transformation(trans);
     out.set_image_transformation(trans);
+    in.get_voxel_size(vs);
+    out.set_voxel_size(vs);
 
     tipl::out() << "save " << file_name;
     in.flip_swap_seq = raw_image_flip_swap[currentRow];
