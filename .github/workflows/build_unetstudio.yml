@@ -87,18 +87,6 @@ jobs:
       uses: docker/setup-qemu-action@v3.0.0
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3.0.0    
-    - name: Free Disk Space (Ubuntu)
-      uses: jlumbroso/free-disk-space@main
-      with:
-        # this might remove tools that are actually needed,
-        # if set to "true" but frees about 6 GB
-        tool-cache: false
-        android: true
-        dotnet: true
-        haskell: true
-        large-packages: true
-        docker-images: false
-        swap-storage: true
     - name: Build and push
       uses: docker/build-push-action@v5.1.0
       with:
