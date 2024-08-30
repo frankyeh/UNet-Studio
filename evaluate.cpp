@@ -66,7 +66,7 @@ inline void rotate_to_template(tipl::image<3>& images,
     {
         auto image = images.alias(image_dim.size()*c,image_dim);
         auto target_image = target_images.alias(model_dim.size()*c,model_dim);
-        tipl::resample_mt(image,target_image,trans);
+        tipl::resample(image,target_image,trans);
         tipl::normalize(target_image);
     });
     target_images.swap(images);
@@ -384,7 +384,7 @@ void evaluate_unet::output(void)
                     {
                         auto trans = raw_image_trans[cur_output];
                         trans.inverse();
-                        tipl::resample_mt(from,to,trans);
+                        tipl::resample(from,to,trans);
                     }
                     for(size_t j = 0;j < raw_image_mask[cur_output].size();++j)
                         if(!raw_image_mask[cur_output][j])
