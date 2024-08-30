@@ -32,10 +32,9 @@ jobs:
       run: |
         curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
         mkdir libtorch
-        unzip "libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip" -d libtorch
-        setx PATH "%PATH%;C:\libtorch\bin"
-        setx CMAKE_PREFIX_PATH "%CMAKE_PREFIX_PATH%;C:\libtorch"
-          
+        tar -xf "libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip" -C libtorch
+        echo "C:\libtorch\bin" >> $GITHUB_ENV
+        echo "C:\libtorch" >> $GITHUB_ENV     
     - name: Install Zlib
       run: |
         ./build_packages/install_zlib.bat
