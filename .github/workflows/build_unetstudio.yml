@@ -15,8 +15,15 @@ jobs:
     runs-on: windows-2019
     steps:
     - uses: actions/checkout@v2.5.0
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3.2.1
+      with:
+        version: 6.5.2
+    - name: Install Ninja and CMake
+      run: |    
+        choco install ninja cmake
     - name: Install Cuda
-      uses: Jimver/cuda-toolkit@v0.2.5
+      uses: Jimver/cuda-toolkit@v0.2.11
     - name: Install libtorch
       run: |
         curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
@@ -27,13 +34,7 @@ jobs:
         ./build_packages/install_zlib.bat
         del "C:/Program Files/zlib/lib/zlib.lib"
         del "C:/Program Files/zlib/bin/zlib.dll"
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v2
-      with:
-        version: 6.2.0   
-    - name: Install Ninja and CMake
-      run: |    
-        choco install ninja cmake
+    
     - name: Install TIPL
       run: |
         git clone https://github.com/frankyeh/TIPL.git
