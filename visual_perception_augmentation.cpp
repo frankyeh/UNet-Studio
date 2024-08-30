@@ -90,7 +90,7 @@ void accumulate_transforms(image_type& displaced,bool has_lens_distortion,bool h
                            const tipl::transformation_matrix<float>& trans)
 {
     auto center = tipl::vector<3>(displaced.shape())/2.0f;
-    tipl::par_for(tipl::begin_index(displaced),tipl::end_index(displaced),
+    tipl::par_for(tipl::begin_index(displaced.shape()),tipl::end_index(displaced.shape()),
         [&](const tipl::pixel_index<3>& index)
     {
         // pos now in the "retina" space
@@ -371,7 +371,7 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
                 tipl::image<3> background(image_shape);
                 for(size_t iter = 0;iter < 5;++iter)
                 {
-                    tipl::resample_mt(image,background,tipl::transformation_matrix<float>(args[iter],image_shape,tipl::v(1.0f,1.0f,1.0f),image_shape,tipl::v(1.0f,1.0f,1.0f)));
+                    tipl::resample(image,background,tipl::transformation_matrix<float>(args[iter],image_shape,tipl::v(1.0f,1.0f,1.0f),image_shape,tipl::v(1.0f,1.0f,1.0f)));
                     tipl::lower_threshold(background,0.0f);
                     tipl::normalize(background,options["rubber_stamping_mag"]);
                     for(size_t i = 0;i < image_out.size();++i)
