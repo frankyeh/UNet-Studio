@@ -95,7 +95,7 @@ bool read_image_and_label(const std::string& image_name,
     if(image_shape != label_shape || label_t != image_t)
     {
         tipl::image<3> new_label(image_shape);
-        tipl::resample_mt<tipl::nearest>(label,new_label,tipl::from_space(image_t).to(label_t));
+        tipl::resample<tipl::nearest>(label,new_label,tipl::from_space(image_t).to(label_t));
         label.swap(new_label);
     }
     return true;
