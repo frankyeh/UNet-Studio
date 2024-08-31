@@ -33,8 +33,6 @@ jobs:
         curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
         mkdir libtorch
         tar -xf "libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip" -C libtorch
-        echo "D:/a/UNet-Studio/UNet-Studio/libtorch" >> $GITHUB_ENV
-        echo "D:/a/UNet-Studio/UNet-Studio/libtorch/bin" >> $GITHUB_ENV     
     - name: Install Zlib
       run: |
         ./build_packages/install_zlib.bat
@@ -56,7 +54,7 @@ jobs:
           -DCMAKE_CXX_COMPILER=cl ^
           -DTIPL_DIR=. ^
           -DCMAKE_PREFIX_PATH="D:/a/UNet-Studio/UNet-Studio/libtorch;C:/Program Files/Qt/6.5.2/msvc2019_64/lib;C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.7" ^
-          -DTorch_DIR="D:/a/UNet-Studio/UNet-Studio/libtorch"
+          -DTorch_DIR=./libtorch
         cmake --build ./build --parallel --config Release
       shell: cmd      
     - name: Packaging
