@@ -9,9 +9,10 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 COMPONENTS Core Gui Network Widgets REQUIRED)
 find_package(ZLIB REQUIRED)
+set(ZLIB_USE_STATIC_LIBS "ON")
+
 find_package(Torch REQUIRED)
 find_package(CUDAToolkit)
 if(CUDAToolkit_FOUND)
@@ -81,12 +82,13 @@ if(CUDAToolkit_FOUND)
     string(REPLACE "cross-execution-space-call" "" CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS})
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -allow-unsupported-compiler --extended-lambda")
     set(CMAKE_CUDA_RUNTIME_LIBRARY "Static")
+    target_compile_definitions(dsi_studio PUBLIC TIPL_USE_CUDA)
+
     if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.23.0")
         set_property(TARGET unet_studio PROPERTY CUDA_ARCHITECTURES all)
     else()
         set_property(TARGET unet_studio PROPERTY CUDA_ARCHITECTURES "50;52;53;60;61;62;70;72;75;80;86")
     endif()
-    target_compile_definitions(unet_studio PUBLIC TIPL_USE_CUDA)
     target_link_libraries(unet_studio PUBLIC Qt6::Widgets ZLIB::ZLIB ${CUDA_LIBRARIES} ${TORCH_LIBRARIES})
 else()
 
