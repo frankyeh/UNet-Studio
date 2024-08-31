@@ -82,7 +82,7 @@ if(CUDAToolkit_FOUND)
     string(REPLACE "cross-execution-space-call" "" CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS})
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -allow-unsupported-compiler --extended-lambda")
     set(CMAKE_CUDA_RUNTIME_LIBRARY "Static")
-    target_compile_definitions(dsi_studio PUBLIC TIPL_USE_CUDA)
+    target_compile_definitions(unet_studio PUBLIC TIPL_USE_CUDA)
 
     if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.23.0")
         set_property(TARGET unet_studio PROPERTY CUDA_ARCHITECTURES all)
