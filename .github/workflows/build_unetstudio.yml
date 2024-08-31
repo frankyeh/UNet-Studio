@@ -51,7 +51,7 @@ jobs:
           -DCMAKE_C_COMPILER=cl ^
           -DCMAKE_CXX_COMPILER=cl ^
           -DTIPL_DIR=. ^
-          -DCMAKE_PREFIX_PATH="%{Qt:QT_INSTALL_PREFIX};D:\a\UNet-Studio\UNet-Studio\libtorch\" ^
+          -DCMAKE_PREFIX_PATH="%{Qt:QT_INSTALL_PREFIX};D:\a\UNet-Studio\UNet-Studio\libtorch\share\cmake\" ^
           -DTorch_DIR=D:\a\UNet-Studio\UNet-Studio\libtorch\share\cmake\
         cmake --build ./build --parallel --config Release
       shell: cmd      
