@@ -82,7 +82,7 @@ jobs:
   linux-build:
     strategy:
       matrix:
-        os: [ubuntu2204,ubuntu2004]
+        os: [ubuntu2204,ubuntu2404]
       fail-fast: false
     runs-on: ubuntu-20.04
     steps:
