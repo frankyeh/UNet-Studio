@@ -15,6 +15,16 @@ jobs:
     runs-on: windows-2019
     steps:
     - uses: actions/checkout@v2.5.0
+    - name: Install CUDA
+      uses: Jimver/cuda-toolkit@v0.2.11
+      env:
+        CUDA_VERSION: "11.7"
+    - name: Install LibTorch
+      run: |
+        curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
+        mkdir libtorch
+        tar -xf "libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip" -C libtorch
+        ls ./libtorch
     - name: Install Qt
       uses: jurplel/install-qt-action@v3.2.1
       with:
@@ -22,18 +32,6 @@ jobs:
     - name: Install Ninja and CMake
       run: |    
         choco install ninja cmake
-
-    - name: Install CUDA
-      uses: Jimver/cuda-toolkit@v0.2.11
-      env:
-        CUDA_VERSION: "11.7"
-
-    - name: Install LibTorch
-      run: |
-        curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
-        mkdir libtorch
-        tar -xf "libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip" -C libtorch
-        ls D:/a/UNet-Studio/libtorch
     - name: Install Zlib
       run: |
         ./build_packages/install_zlib.bat
@@ -54,8 +52,8 @@ jobs:
           -DCMAKE_C_COMPILER=cl ^
           -DCMAKE_CXX_COMPILER=cl ^
           -DTIPL_DIR=. ^
-          -DCMAKE_PREFIX_PATH="D:/a/UNet-Studio/libtorch;C:/Program Files/Qt/6.5.2/msvc2019_64/lib;C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.7" ^
-          -DTorch_DIR=D:/a/UNet-Studio/libtorch/share/cmake/Torch
+          -DCMAKE_PREFIX_PATH="%{Qt:QT_INSTALL_PREFIX};./libtorch;./cudnn" ^
+          -DTorch_DIR=./libtorch/share/cmake/Torch
         cmake --build ./build --parallel --config Release
       shell: cmd      
     - name: Packaging
