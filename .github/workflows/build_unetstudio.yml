@@ -49,7 +49,14 @@ jobs:
       run: |
         for /f "usebackq delims=#" %%a in (`"%programfiles(x86)%\Microsoft Visual Studio\Installer\vswhere" -latest -property installationPath`) do call "%%a\Common7\Tools\VsDevCmd.bat" -arch=x64
         mkdir -p build
-        cmake -S . -B build -GNinja "-DZLIB_LIBRARY=C:/Program Files/zlib/lib/zlibstatic.lib" "-DCMAKE_BUILD_TYPE:STRING=Release" "-DCMAKE_C_COMPILER:STRING=cl" "-DCMAKE_CXX_COMPILER:STRING=cl" -DTIPL_DIR=. -DCMAKE_PREFIX_PATH="C:/actions/libtorch;C:/Program Files/Qt/6.5.2/msvc2019_64/lib;C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.7"
+        cmake -S . -B build -GNinja ^ 
+          -DZLIB_LIBRARY="C:/Program Files/zlib/lib/zlibstatic.lib" ^
+          -DCMAKE_BUILD_TYPE=Release ^
+          -DCMAKE_C_COMPILER=cl ^
+          -DCMAKE_CXX_COMPILER=cl ^
+          -DTIPL_DIR=. ^
+          -DCMAKE_PREFIX_PATH="C:/actions/libtorch;C:/Program Files/Qt/6.5.2/msvc2019_64/lib;C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.7" ^
+          -DTorch_DIR="C:/actions/libtorch/share/cmake/Torch"
         cmake --build ./build --parallel --config Release
       shell: cmd      
     - name: Packaging
