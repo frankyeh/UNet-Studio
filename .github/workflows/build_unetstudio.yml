@@ -51,8 +51,9 @@ jobs:
           -DCMAKE_C_COMPILER=cl ^
           -DCMAKE_CXX_COMPILER=cl ^
           -DTIPL_DIR=. ^
-          -DCMAKE_PREFIX_PATH="%{Qt:QT_INSTALL_PREFIX};D:\a\UNet-Studio\UNet-Studio\libtorch\share\cmake\Torch" ^
-          -DTorch_DIR=D:\a\UNet-Studio\UNet-Studio\libtorch\share\cmake\Torch
+          -DCMAKE_PREFIX_PATH="D:/a/UNet-Studio/UNet-Studio/libtorch/share/cmake/Torch" ^
+          -DTorch_DIR="D:/a/UNet-Studio/UNet-Studio/libtorch/share/cmake/Torch" ^
+          -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
         cmake --build ./build --parallel --config Release
       shell: cmd      
     - name: Packaging
