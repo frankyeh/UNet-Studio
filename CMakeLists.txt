@@ -13,6 +13,9 @@ find_package(Qt6 COMPONENTS Core Gui Network Widgets REQUIRED)
 find_package(ZLIB REQUIRED)
 set(ZLIB_USE_STATIC_LIBS "ON")
 
+message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+message(STATUS "Torch_DIR: ${Torch_DIR}")
+
 find_package(Torch REQUIRED)
 find_package(CUDAToolkit)
 if(CUDAToolkit_FOUND)
