@@ -92,12 +92,11 @@ if(CUDAToolkit_FOUND)
     else()
         set_property(TARGET unet_studio PROPERTY CUDA_ARCHITECTURES "50;52;53;60;61;62;70;72;75;80;86")
     endif()
-    target_link_libraries(unet_studio PUBLIC Qt6::Widgets ZLIB::ZLIB ${CUDA_LIBRARIES} ${TORCH_LIBRARIES})
+    target_link_libraries(unet_studio PUBLIC Qt6::Widgets Qt6::Core Qt6::Gui ZLIB::ZLIB ${CUDA_LIBRARIES} ${TORCH_LIBRARIES})
 else()
 
-    target_link_libraries(unet_studio PUBLIC Qt6::Widgets ZLIB::ZLIB ${TORCH_LIBRARIES})
+    target_link_libraries(unet_studio PUBLIC Qt6::Widgets Qt6::Core Qt6::Gui ZLIB::ZLIB ${TORCH_LIBRARIES})
 
 endif(CUDAToolkit_FOUND)
-
 
 
