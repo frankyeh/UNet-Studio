@@ -68,7 +68,9 @@ if(WIN32)
     set_target_properties(unet_studio PROPERTIES
         WIN32_EXECUTABLE TRUE
         LINK_FLAGS "/ICON:unet-studio.ico")
-else()
+endif()
+
+if(APPLE)
     set_target_properties(unet_studio PROPERTIES
         MACOSX_BUNDLE_GUI_IDENTIFIER unet-studio.labsolver.org
         MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
