@@ -44,6 +44,7 @@ jobs:
         git clone https://github.com/frankyeh/UNet-Studio-Data.git
     - name: Build UNet Studio
       run: |
+        dir D:/a/UNet-Studio/UNet-Studio/libtorch/share/cmake/Torch
         for /f "usebackq delims=#" %%a in (`"%programfiles(x86)%\Microsoft Visual Studio\Installer\vswhere" -latest -property installationPath`) do call "%%a\Common7\Tools\VsDevCmd.bat" -arch=x64
         mkdir -p build
         cmake -S . -B build -GNinja ^ 
