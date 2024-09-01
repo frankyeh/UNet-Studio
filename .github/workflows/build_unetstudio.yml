@@ -13,6 +13,9 @@ on:
 jobs:
   windows_build:
     runs-on: windows-2019
+    env:
+      CMAKE_PREFIX_PATH: D:/a/UNet-Studio/UNet-Studio/libtorch
+      Torch_DIR: D:/a/UNet-Studio/UNet-Studio/libtorch/share/cmake/Torch
     steps:
     - uses: actions/checkout@v2.5.0
     - name: Install CUDA
