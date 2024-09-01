@@ -47,14 +47,7 @@ jobs:
         dir "D:/a/UNet-Studio/UNet-Studio/libtorch/share/cmake/Torch"
         for /f "usebackq delims=#" %%a in (`"%programfiles(x86)%\Microsoft Visual Studio\Installer\vswhere" -latest -property installationPath`) do call "%%a\Common7\Tools\VsDevCmd.bat" -arch=x64
         mkdir -p build
-        cmake -S . -B build -GNinja ^ 
-          -DCMAKE_BUILD_TYPE=Release ^
-          -DCMAKE_C_COMPILER=cl ^
-          -DCMAKE_CXX_COMPILER=cl ^
-          -DTIPL_DIR=. ^
-          -DCMAKE_PREFIX_PATH="D:/a/UNet-Studio/UNet-Studio/libtorch" ^
-          -DTorch_DIR="D:/a/UNet-Studio/UNet-Studio/libtorch/share/cmake/Torch" ^
-          -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
+        cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH=D:\a\UNet-Studio\UNet-Studio\libtorch -DTorch_DIR=D:\a\UNet-Studio\UNet-Studio\libtorch\share\cmake\Torch -DCMAKE_BUILD_TYPE=Release -DTIPL_DIR=.
         cmake --build ./build --parallel --config Release
       shell: cmd      
     - name: Packaging
