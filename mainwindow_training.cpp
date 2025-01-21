@@ -625,7 +625,7 @@ void label_on_images(QImage& I,float display_ratio,
             for(size_t pos = 0;pos < slice.size();++pos)
                 mask[pos] = (slice[pos] == 1.0f ? 1:0);
             region_masks[i] = std::move(mask);
-        });
+        },out_count);
     }
     else
     {
