@@ -79,11 +79,9 @@ bool read_image_and_label(const std::string& image_name,
         {
             tipl::image<3> I;
             nii >> I;
-            tipl::par_for(I.size(),[&](size_t pos)
-            {
+            for(size_t pos = 0;pos < I.size();++pos)
                 if(I[pos])
                     label[pos] = index;
-            });
         }
     }
     else
@@ -140,7 +138,7 @@ void preprocessing(tipl::image<3>& image,tipl::image<3>& label,tipl::shape<3> fr
 
 void train_unet::read_file(void)
 {
-    int thread_count = po.get("thread_count",std::min<int>(8,std::thread::hardware_concurrency()));
+    thread_count = po.get("thread_count",std::min<int>(8,std::thread::hardware_concurrency()));
 
     train_image = std::vector<tipl::image<3> >(param.image_file_name.size());
     train_label = std::vector<tipl::image<3> >(param.image_file_name.size());
@@ -365,7 +363,7 @@ void train_unet::read_file(void)
                 data_ready[thread] = true;
             }
 
-        });
+        },thread_count);
         augmentation_status = "augmentation completed";
     }));
 }
@@ -514,7 +512,7 @@ void train_unet::train(void)
                         return;
                     }
 
-                });
+                },thread_count);
 
                 if(aborted)
                     return;
