@@ -79,6 +79,7 @@ private:
     std::vector<bool> file_ready;
 
 private:
+    size_t thread_count = 1;
     std::vector<tipl::image<3> > in_data,out_data;
     std::vector<size_t> in_data_read_id;
     std::vector<bool> data_ready;
