@@ -57,7 +57,7 @@ void lens_distortion(image_type& displaced,float magnitude)
     tipl::vector<3,int> center(displaced.shape());
     center /= 2;
     magnitude /= radius2;
-    tipl::par_for(tipl::begin_index(displaced.shape()),
+    tipl::adaptive_par_for(tipl::begin_index(displaced.shape()),
                   tipl::end_index(displaced.shape()),[&](const tipl::pixel_index<3>& pos)
     {
         tipl::vector<3> dir(pos);
@@ -90,7 +90,7 @@ void accumulate_transforms(image_type& displaced,bool has_lens_distortion,bool h
                            const tipl::transformation_matrix<float>& trans)
 {
     auto center = tipl::vector<3>(displaced.shape())/2.0f;
-    tipl::par_for(tipl::begin_index(displaced.shape()),tipl::end_index(displaced.shape()),
+    tipl::adaptive_par_for(tipl::begin_index(displaced.shape()),tipl::end_index(displaced.shape()),
         [&](const tipl::pixel_index<3>& index)
     {
         // pos now in the "retina" space
@@ -318,7 +318,7 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
         accumulate_transforms(displaced,options["lens_distortion"] > 0.0f,options["perspective"] > 0.0f,perspective,trans);
 
 
-        tipl::par_for(displaced.size(),[&](size_t index)
+        tipl::adaptive_par_for(displaced.size(),[&](size_t index)
         {
             auto pos = displaced[index];
             tipl::interpolator::linear<3> interp;
@@ -393,7 +393,7 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
             {
                 float pow_octave = pow(0.5f, octave);
                 float scale = zoom * pow_octave;
-                tipl::par_for(tipl::begin_index(image_shape),
+                tipl::adaptive_par_for(tipl::begin_index(image_shape),
                               tipl::end_index(image_shape),[&](const tipl::pixel_index<3>& index)
                 {
                     tipl::vector<3> pos(index);
@@ -402,7 +402,7 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
                     background[index.index()] += n;
                 });
             }
-            tipl::par_for(background.size(),[&](size_t pos)
+            tipl::adaptive_par_for(background.size(),[&](size_t pos)
             {
                 auto v = background[pos];
                 v *= 2.0f;
