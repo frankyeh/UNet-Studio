@@ -77,7 +77,7 @@ void UNet3dImpl::copy_from(const UNet3dImpl& r)
 {
     auto rhs = r.parameters();
     auto lhs = parameters();
-    tipl::par_for(rhs.size(),[&](size_t index)
+    tipl::adaptive_par_for(rhs.size(),[&](size_t index)
     {
         torch::NoGradGuard no_grad;
         bool requires_grad = lhs[index].requires_grad();
@@ -109,7 +109,7 @@ void UNet3dImpl::add_gradient_from(const UNet3dImpl& r)
     auto rhs = r.parameters();
     auto lhs = parameters();
     auto cur_device = device();
-    tipl::par_for(rhs.size(),[&](size_t index)
+    tipl::adaptive_par_for(rhs.size(),[&](size_t index)
     {
         torch::NoGradGuard no_grad;
         if(lhs[index].mutable_grad().defined() && rhs[index].mutable_grad().defined())
