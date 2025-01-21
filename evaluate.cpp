@@ -181,7 +181,7 @@ void postproc_actions(const std::string& command,
     if(command =="soft_max")
     {
         float soft_min_prob = param1;
-        tipl::par_for(dim.size(),[&](size_t pos)
+        tipl::adaptive_par_for(dim.size(),[&](size_t pos)
         {
             float m = 0.0f;
             for(size_t i = pos;i < this_image.size();i += dim.size())
@@ -202,7 +202,7 @@ void postproc_actions(const std::string& command,
     if(command =="to_3d_label")
     {
         tipl::image<3> I(dim);
-        tipl::par_for(dim.size(),[&](size_t pos)
+        tipl::adaptive_par_for(dim.size(),[&](size_t pos)
         {
             for(size_t i = pos,label = 1;i < this_image.size();i += dim.size(),++label)
                 if(this_image[i])
