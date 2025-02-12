@@ -434,6 +434,12 @@ void evaluate_unet::output(void)
                             label_prob[cur_output].swap(I);
                         }
                     break;
+                    case 3: // mask
+                        label_prob[cur_output] = foreground_prob[cur_output];
+                        tipl::upper_threshold(label_prob[cur_output],param.prob_threshold);
+                        tipl::filter::gaussian(label_prob[cur_output]);
+                        tipl::normalize(label_prob[cur_output]);
+                    break;
 
                 }
 
