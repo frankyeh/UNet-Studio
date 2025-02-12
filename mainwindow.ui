@@ -238,6 +238,11 @@
                </item>
                <item>
                 <property name="text">
+                 <string>Mask</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
                  <string>UNet output</string>
                 </property>
                </item>
