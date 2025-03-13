@@ -100,6 +100,28 @@ void UNet3dImpl::copy_from(const UNet3dImpl& r)
         lhs[index].set_requires_grad(requires_grad);
     });
 
+    auto rhs_buffers = r.buffers();
+    auto lhs_buffers = buffers();
+    auto rhs_iter = rhs_buffers.begin();
+    auto lhs_iter = lhs_buffers.begin();
+    while (rhs_iter != rhs_buffers.end() && lhs_iter != lhs_buffers.end())
+    {
+        const auto& rhs_tensor = *rhs_iter;
+        auto& lhs_tensor = *lhs_iter;
+
+        if (lhs_tensor.sizes() == rhs_tensor.sizes())
+            lhs_tensor.copy_(rhs_tensor.to(lhs_tensor.device()).detach());
+        else
+        {
+            // Handle size mismatch
+            auto reshaped_rhs = rhs_tensor.to(lhs_tensor.device()).detach().reshape(lhs_tensor.sizes());
+            lhs_tensor.copy_(reshaped_rhs);
+        }
+        ++rhs_iter;
+        ++lhs_iter;
+    }
+
+
     total_training_count = r.total_training_count;
     voxel_size = r.voxel_size;
     dim = r.dim;
