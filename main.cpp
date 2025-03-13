@@ -80,7 +80,20 @@ bool load_from_file(UNet3d& model,const char* file_name)
         const auto* data = mat.read_as_type<float>((std::string("tensor")+std::to_string(id)).c_str(),row,col);
         if(!data || row*col != tensor.numel())
             return false;
-        std::copy(data,data+row*col,tensor.data_ptr<float>());
+        std::copy(data,data+tensor.numel(),tensor.data_ptr<float>());
+        ++id;
+    }
+    id = 0;
+    for(const auto& buffer : model->buffers())
+    {
+        unsigned int row,col;
+        const auto* data = mat.read_as_type<float>((std::string("buffer")+std::to_string(id)).c_str(),row,col);
+        if(!data || row*col != buffer.numel())
+            continue;
+        if(buffer.scalar_type() == torch::kFloat)
+            std::copy(data,data+buffer.numel(),buffer.data_ptr<float>());
+        if(buffer.scalar_type() == torch::kLong)
+            std::copy(data,data+buffer.numel(),buffer.data_ptr<int64_t>());
         ++id;
     }
     /*
@@ -149,10 +162,28 @@ bool save_to_file(UNet3d& model,const char* file_name)
     mat.write("dimension",model->dim);
     mat.write("param",std::vector<int>({model->in_count,model->out_count}));
     int id = 0;
-    for(auto tensor : model->parameters())
+    for(const auto& tensor : model->parameters())
     {
         auto cpu_tensor = tensor.to(torch::kCPU);
         mat.write((std::string("tensor")+std::to_string(id)).c_str(),cpu_tensor.data_ptr<float>(),cpu_tensor.numel()/cpu_tensor.sizes().front(),cpu_tensor.sizes().front());
+        ++id;
+    }
+    id = 0;
+    for(const auto& buffer : model->buffers())
+    {
+        auto cpu_buffer = buffer.to(torch::kCPU);
+        if(!cpu_buffer.numel())
+            continue;
+        if (cpu_buffer.scalar_type() == torch::kFloat)
+            mat.write((std::string("buffer") + std::to_string(id)).c_str(),
+                          cpu_buffer.data_ptr<float>(),
+                          cpu_buffer.numel() / cpu_buffer.sizes().front(),
+                          cpu_buffer.sizes().front());
+        else
+            if (cpu_buffer.scalar_type() == torch::kLong)
+                mat.write((std::string("buffer") + std::to_string(id)).c_str(),cpu_buffer.data_ptr<int64_t>(),1,1);
+            else
+                tipl::warning() << "buffer not saved due to type " << int(cpu_buffer.scalar_type());
         ++id;
     }
     return true;
