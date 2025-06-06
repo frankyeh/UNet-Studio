@@ -81,6 +81,7 @@ inline void rotate_to_template(tipl::image<3>& images,
         tipl::normalize(target_image);
     });
     target_images.swap(images);
+    tipl::lower_threshold(images,0.0f);
 }
 
 
@@ -88,7 +89,7 @@ inline void rotate_to_template(tipl::image<3>& images,
 void postproc_actions(const std::string& command,
                       float param1,float param2,
                       tipl::image<3>& this_image,
-                      tipl::image<3>& foreground_prob,
+                      tipl::image<3>& prob,
                       const tipl::shape<3>& dim,
                       char& is_label)
 {
@@ -187,7 +188,7 @@ void postproc_actions(const std::string& command,
             for(size_t i = pos;i < this_image.size();i += dim.size())
                 if(this_image[i] > m)
                     m = this_image[i];
-            if(foreground_prob[pos] <= soft_min_prob)
+            if(prob[pos] <= soft_min_prob)
             {
                 for(size_t i = pos;i < this_image.size();i += dim.size())
                     this_image[i] = 0.0f;
@@ -300,7 +301,7 @@ void evaluate_unet::read_file(void)
                                 model->dim,model->voxel_size,
                                 raw_image_trans[i],
                                 proc_strategy.match_resolution,proc_strategy.match_fov);
-            tipl::lower_threshold(evaluate_input[i],0.0f);
+
             data_ready[i] = true;
         }
     }));
@@ -377,37 +378,19 @@ void evaluate_unet::output(void)
                 }
                 if(evaluate_output[cur_output].empty())
                     continue;
-                tipl::shape<3> dim_from(evaluate_output[cur_output].shape().divide(tipl::shape<3>::z,model->out_count)),
-                               dim_to(raw_image_shape[cur_output]);
-                label_prob[cur_output].resize(dim_to.multiply(tipl::shape<3>::z,model->out_count));
-                tipl::par_for(model->out_count,[&](int i)
-                {
-                    auto from = evaluate_output[cur_output].alias(dim_from.size()*i,dim_from);
-                    auto to = label_prob[cur_output].alias(dim_to.size()*i,dim_to);
-                    if(!proc_strategy.match_fov && !proc_strategy.match_resolution)
-                    {
-                        auto shift = tipl::vector<3,int>(to.shape())-tipl::vector<3,int>(from.shape());
-                        shift[0] /= 2;
-                        shift[1] /= 2;
-                        tipl::draw(from,to,shift);
-                    }
-                    else
-                    {
-                        auto trans = raw_image_trans[cur_output];
-                        trans.inverse();
-                        tipl::resample(from,to,trans);
-                    }
-                    for(size_t j = 0;j < raw_image_mask[cur_output].size();++j)
-                        if(!raw_image_mask[cur_output][j])
-                            to[j] = 0;
-                });
+
+                tipl::ml3d::postproc_actions(label_prob[cur_output],
+                                             foreground_prob[cur_output],
+                                             evaluate_output[cur_output],
+                                             raw_image_mask[cur_output],
+                                             raw_image_trans[cur_output],
+                                             model->out_count,
+                                             proc_strategy.match_resolution,
+                                             proc_strategy.match_fov,
+                                             param.prob_threshold);
+
                 if(aborted)
                     return;
-
-                auto I = tipl::make_image(&label_prob[cur_output][0],
-                                    raw_image_shape[cur_output].expand(
-                                    label_prob[cur_output].depth()/raw_image_shape[cur_output][2]));
-                foreground_prob[cur_output] = tipl::ml3d::defragment4d(I,param.prob_threshold);
 
 
                 switch(proc_strategy.output_format)
