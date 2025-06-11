@@ -333,7 +333,7 @@ void evaluate_unet::evaluate(void)
                 auto out = model->forward(torch::from_blob(cur_input.data(),
                                           {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device));
                 evaluate_output[cur_prog].resize(cur_input.shape().multiply(tipl::shape<3>::z,model->out_count).divide(tipl::shape<3>::z,model->in_count));
-                std::memcpy(&evaluate_output[cur_prog][0],out.to(torch::kCPU).data_ptr<float>(),evaluate_output[cur_prog].size()*sizeof(float));
+                std::memcpy(evaluate_output[cur_prog].data(),out.to(torch::kCPU).data_ptr<float>(),evaluate_output[cur_prog].size()*sizeof(float));
             }
         }
         catch(const c10::Error& error)
@@ -429,19 +429,17 @@ void evaluate_unet::output(void)
                     continue;
 
                 tipl::ml3d::postproc_actions(label_prob[cur_output],
-                                             foreground_prob[cur_output],
                                              evaluate_output[cur_output],
                                              raw_image[cur_output],
                                              raw_image_trans[cur_output],
-                                             model->out_count,
-                                             proc_strategy.match_resolution,
-                                             proc_strategy.match_fov,
-                                             param.prob_threshold);
+                                             model->out_count,!proc_strategy.match_fov && !proc_strategy.match_resolution);
                 if(model->voxel_size[0] > raw_image_vs[cur_output][0])
                 {
                     tipl::out() << "apply super-resolution regression using kNN";
 
                 }
+                auto label_prob_4d = tipl::make_image(label_prob[cur_output].data(),raw_image[cur_output].shape().expand(model->out_count));
+                foreground_prob[cur_output] = tipl::ml3d::defragment4d(label_prob_4d,param.prob_threshold);
 
                 if(aborted)
                     return;
