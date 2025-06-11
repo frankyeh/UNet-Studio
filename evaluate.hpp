@@ -30,7 +30,7 @@ public:
     std::vector<tipl::vector<3> > raw_image_vs;
     std::vector<tipl::transformation_matrix<float> > raw_image_trans;
     std::vector<std::vector<char> > raw_image_flip_swap;
-    std::vector<tipl::image<3,char> > raw_image_mask;
+    std::vector<tipl::image<3> > raw_image;
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;
     void read_file(void);
