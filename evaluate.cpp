@@ -225,7 +225,7 @@ void evaluate_unet::read_file(void)
     raw_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
     raw_image_trans = std::vector<tipl::transformation_matrix<float> >(param.image_file_name.size());
     raw_image_flip_swap = std::vector<std::vector<char> >(param.image_file_name.size());
-    raw_image_mask = std::vector<tipl::image<3,char> >(param.image_file_name.size());
+    raw_image = std::vector<tipl::image<3> >(param.image_file_name.size());
     data_ready = std::vector<bool> (param.image_file_name.size());
     read_file_thread.reset(new std::thread([=]()
     {
@@ -268,7 +268,10 @@ void evaluate_unet::read_file(void)
                 return;
             }
             in >> evaluate_input[i];
-            tipl::threshold(evaluate_input[i],raw_image_mask[i],0);
+            tipl::segmentation::normalize_otsu_median(evaluate_input[i]);
+
+            raw_image[i] = evaluate_input[i];
+
             in.get_voxel_size(raw_image_vs[i]);
             raw_image_flip_swap[i] = in.flip_swap_seq;
             raw_image_shape[i] = evaluate_input[i].shape();
@@ -286,7 +289,9 @@ void evaluate_unet::read_file(void)
                     aborted = true;
                     return;
                 }
+                tipl::segmentation::normalize_otsu_median(evaluate_input[i]);
             }
+
             if(!template_image.empty())
                 rotate_to_template(evaluate_input[i],
                                    raw_image_shape[i],
@@ -351,6 +356,50 @@ void evaluate_unet::proc_actions(const char* cmd,float param1,float param2)
                  raw_image_shape[cur_output],
                  is_label[cur_output]);
 }
+
+template<typename T,typename U,typename V>
+inline void postproc_actions_Knn(T& label_prob,
+                             T& fg_prob,
+                             const U& eval_input,
+                             const U& eval_output,
+                             const V& raw_image,
+                             tipl::transformation_matrix<float,3> trans,
+                             size_t model_out_count,float prob_threshold)
+{
+    tipl::shape<3> dim_from(eval_output.shape().divide(tipl::shape<3>::z,model_out_count)),
+                   dim_to(raw_image.shape());
+    label_prob.resize(dim_to.multiply(tipl::shape<3>::z,model_out_count));
+    trans.inverse();
+    tipl::par_for(model_out_count,[&](int i)
+    {
+        auto from_out = eval_output.alias(dim_from.size()*i,dim_from);
+        auto to = label_prob.alias(dim_to.size()*i,dim_to);
+        for(tipl::pixel_index<3> index(dim_to);index < dim_to.size();++index)
+        {
+            auto cur_v = dim_to[index.index()];
+            tipl::vector<3> pos;
+            trans(index,pos);
+            pos.round();
+            auto input = tipl::get_window(tipl::pixel_index<3>(pos[0],pos[1],pos[2],eval_input.shape()),eval_input,2);
+            for(auto& each : input)
+                each = std::fabs(each-cur_v);
+            auto output = tipl::get_window(tipl::pixel_index<3>(pos[0],pos[1],pos[2],from_out.shape()),from_out,2);
+            std::vector<size_t> p(input.size());
+            std::iota(p.begin(), p.end(), 0);
+            std::sort(p.begin(), p.end(),[&](size_t i, size_t j){ return input[i] < input[j]; });
+            std::vector<float> sorted_output(p.size());
+            for (size_t i = 0; i < p.size(); ++i)
+                sorted_output[i] = output[p[i]];
+            to[index.index()] = tipl::mean(sorted_output.begin(),
+                                           sorted_output.begin() + std::min<size_t>(sorted_output.size()/2,5));
+        }
+        tipl::preserve(to.begin(),to.end(),raw_image.begin());
+
+    },model_out_count);
+    auto I = tipl::make_image(label_prob.data(),dim_to.expand(label_prob.depth()/dim_to[2]));
+    fg_prob = tipl::ml3d::defragment4d(I,prob_threshold);
+}
+
 void evaluate_unet::output(void)
 {
     label_prob = std::vector<tipl::image<3> >(param.image_file_name.size());
@@ -382,12 +431,17 @@ void evaluate_unet::output(void)
                 tipl::ml3d::postproc_actions(label_prob[cur_output],
                                              foreground_prob[cur_output],
                                              evaluate_output[cur_output],
-                                             raw_image_mask[cur_output],
+                                             raw_image[cur_output],
                                              raw_image_trans[cur_output],
                                              model->out_count,
                                              proc_strategy.match_resolution,
                                              proc_strategy.match_fov,
                                              param.prob_threshold);
+                if(model->voxel_size[0] > raw_image_vs[cur_output][0])
+                {
+                    tipl::out() << "apply super-resolution regression using kNN";
+
+                }
 
                 if(aborted)
                     return;
@@ -428,7 +482,7 @@ void evaluate_unet::output(void)
 
                 evaluate_input[cur_output] = tipl::image<3>();
                 evaluate_output[cur_output] = tipl::image<3>();
-                raw_image_mask[cur_output] = tipl::image<3,char>();
+                raw_image[cur_output] = tipl::image<3>();
             }
         }
         catch(const c10::Error& error)
