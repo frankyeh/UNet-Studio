@@ -208,13 +208,57 @@ jobs:
         cmake -S . -B build -DCMAKE_PREFIX_PATH=$TORCH_DIR/torch -DCMAKE_BUILD_TYPE:STRING=Release -DTIPL_DIR=.
         cmake --build ./build --parallel --config Release
         cd ..
-    - name: Packaging
+    - name: Bundle Torch Libraries
       run: |
-        mv build/unet_studio.app .
-        macdeployqt unet_studio.app
+        # Define key paths
+        APP_BUNDLE="unet_studio.app"
+        FRAMEWORKS_DIR="$APP_BUNDLE/Contents/Frameworks"
+        EXECUTABLE_PATH="$APP_BUNDLE/Contents/MacOS/unet_studio"
+        TORCH_LIB_DIR="$TORCH_INSTALL_DIR/torch/lib"
+
+        # 1. Create the Frameworks directory
+        echo "Creating Frameworks directory at $FRAMEWORKS_DIR"
+        mkdir -p "$FRAMEWORKS_DIR"
+
+        # 2. Identify and copy Torch dylibs
+        dylibs_to_copy=(
+            "libc10.dylib"
+            "libtorch.dylib"
+            "libtorch_cpu.dylib"
+            "libgomp.1.dylib"
+        )
+        echo "Copying Torch libraries from $TORCH_LIB_DIR..."
+        for dylib in "${dylibs_to_copy[@]}"; do
+            if [ -f "$TORCH_LIB_DIR/$dylib" ]; then
+                cp "$TORCH_LIB_DIR/$dylib" "$FRAMEWORKS_DIR/"
+                echo "  - Copied $dylib"
+            fi
+        done
+
+        # 3. Update the executable to find the new libraries
+        echo "Updating executable library paths..."
+        for dylib in "${dylibs_to_copy[@]}"; do
+            if [ -f "$FRAMEWORKS_DIR/$dylib" ]; then
+                install_name_tool -change "$TORCH_LIB_DIR/$dylib" "@rpath/$dylib" "$EXECUTABLE_PATH"
+                echo "  - Updated path for $dylib"
+            fi
+        done
+
+        # 4. Set the executable's rpath so it knows where to look
+        echo "Setting rpath for the executable..."
+        install_name_tool -add_rpath "@executable_path/../Frameworks" "$EXECUTABLE_PATH"
+
+    - name: Finalize Package and Zip 🎁
+      run: |
+        # Move data and icons into the finalized app bundle
         mv UNet-Studio-Data/* unet_studio.app/Contents/MacOS/
-        mv unet-studio.icns unet_studio.app/Contents/Resources/
+        # The icns file seems to be missing from the build steps, assuming it's in the repo root
+        # If unet-studio.icns is generated during build, adjust the source path
+        if [ -f "unet-studio.icns" ]; then
+            mv unet-studio.icns unet_studio.app/Contents/Resources/
+        fi
         zip -r unet_studio_${{ matrix.os }}.zip unet_studio.app
+
     - name: Create Release
       uses: ncipollo/release-action@v1.8.9
       with:
