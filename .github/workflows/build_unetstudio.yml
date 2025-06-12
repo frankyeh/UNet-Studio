@@ -25,8 +25,7 @@ jobs:
     - name: Install LibTorch
       run: |
         curl -LO "https://download.pytorch.org/libtorch/cu117/libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
-        mkdir libtorch
-        tar -xf "libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
+        unzip "libtorch-win-shared-with-deps-2.0.0%2Bcu117.zip"
     - name: Install Qt
       uses: jurplel/install-qt-action@v3.2.1
       with:
