@@ -43,14 +43,34 @@ jobs:
       run: |
         git clone https://github.com/frankyeh/TIPL.git
         git clone https://github.com/frankyeh/UNet-Studio-Data.git
+
+
+
     - name: Build UNet Studio
       run: |
-        dir "D:/a/UNet-Studio/UNet-Studio/libtorch/share/cmake/Torch"
+        # --- DIAGNOSTIC STEP ---
+        # See exactly what is in the workspace directory. You should see 'libtorch' listed here.
+        echo "--- Listing workspace contents ---"
+        dir "${{ github.workspace }}"
+ 
+        # Verify the exact path to the Torch cmake file CMake needs to find.
+        echo "--- Verifying LibTorch cmake path ---"
+        dir "${{ github.workspace }}\libtorch\share\cmake\Torch"
+          
+        # --- BUILD STEP ---
+        # Set up the Visual Studio Environment
         for /f "usebackq delims=#" %%a in (`"%programfiles(x86)%\Microsoft Visual Studio\Installer\vswhere" -latest -property installationPath`) do call "%%a\Common7\Tools\VsDevCmd.bat" -arch=x64
-        mkdir -p build
-        cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH=D:\a\UNet-Studio\UNet-Studio\libtorch -DTorch_DIR=D:\a\UNet-Studio\UNet-Studio\libtorch\share\cmake\Torch -DCMAKE_BUILD_TYPE=Release -DTIPL_DIR=.
+         
+        # Create build directory
+        mkdir build
+
+        # Configure CMake using the robust workspace variable.
+        # We only need to set CMAKE_PREFIX_PATH.
+        cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ github.workspace }}/libtorch" -DTIPL_DIR=.
+
+        # Build the project
         cmake --build ./build --parallel --config Release
-      shell: cmd      
+      shell: cmd
     - name: Packaging
       run: |
         move UNet-Studio-Data unet_studio_win
