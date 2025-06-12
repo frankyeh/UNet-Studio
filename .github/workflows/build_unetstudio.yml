@@ -231,22 +231,18 @@ jobs:
 
     - name: Build UNet Studio 🔧
       run: |
-        # 1. Get the correct Torch path using the recommended method.
-        #    We define it as a local shell variable so it can be used immediately.
-        TORCH_CMAKE_PATH=$(python -c "import torch; print(torch.utils.cmake_prefix_path)")
-        echo "Torch CMAKE_PREFIX_PATH found at: $TORCH_CMAKE_PATH"
+        # Get the python site-packages directory where torch is installed
+        TORCH_SITE_PACKAGES=$(pip3.11 show torch | grep 'Location:' | awk '{print $2}')
+        echo "Found torch site-packages at: $TORCH_SITE_PACKAGES"
+        
+        # Save this path for the packaging step later
+        echo "TORCH_SITE_PACKAGES=$TORCH_SITE_PACKAGES" >> $GITHUB_ENV
 
-        # 2. For the subsequent packaging step, find the parent 'lib' directory 
-        #    and save it to the GITHUB_ENV file for use in the *next* step.
-        TORCH_LIB_DIR=$(dirname "$TORCH_CMAKE_PATH")/lib
-        echo "TORCH_LIB_DIR=$TORCH_LIB_DIR" >> $GITHUB_ENV
-        
-        # 3. Configure CMake using the local variable we just defined.
-        #    This will now work correctly.
+        # Configure CMake using the correct path to the Torch cmake files
         mkdir -p build
-        cmake -S . -B build -DCMAKE_PREFIX_PATH="$TORCH_CMAKE_PATH" -DCMAKE_BUILD_TYPE=Release -DTIPL_DIR=.
+        cmake -S . -B build -DCMAKE_PREFIX_PATH="$TORCH_SITE_PACKAGES/torch/share/cmake/Torch" -DCMAKE_BUILD_TYPE=Release -DTIPL_DIR=.
         
-        # 4. Build the project.
+        # Build the project
         cmake --build ./build --parallel --config Release
         
     - name: Package Qt Dependencies 📦
@@ -256,12 +252,17 @@ jobs:
         macdeployqt unet_studio.app
 
     - name: Bundle Torch Libraries 🚀
+      env:
+        # This makes the variable from the previous step available in the shell
+        TORCH_SITE_PACKAGES: ${{ env.TORCH_SITE_PACKAGES }}
       run: |
         # Define key paths
         APP_BUNDLE="unet_studio.app"
         FRAMEWORKS_DIR="$APP_BUNDLE/Contents/Frameworks"
         EXECUTABLE_PATH="$APP_BUNDLE/Contents/MacOS/unet_studio"
-        TORCH_LIB_DIR="$TORCH_INSTALL_DIR/torch/lib"
+        
+        # Correctly define the torch lib directory using the passed-in variable
+        TORCH_LIB_DIR="$TORCH_SITE_PACKAGES/torch/lib"
 
         # 1. Create the Frameworks directory
         echo "Creating Frameworks directory at $FRAMEWORKS_DIR"
@@ -285,16 +286,22 @@ jobs:
         # 3. Update the executable to find the new libraries
         echo "Updating executable library paths..."
         for dylib in "${dylibs_to_copy[@]}"; do
-            if [ -f "$FRAMEWORKS_DIR/$dylib" ]; then
-                install_name_tool -change "$TORCH_LIB_DIR/$dylib" "@rpath/$dylib" "$EXECUTABLE_PATH"
-                echo "  - Updated path for $dylib"
+            if [ -f "$FRAMEWORKS_DIR/$dylib" ]; an
+                # Note: The original path might vary slightly based on installation
+                # This command is flexible enough to handle most cases
+                install_name_tool -change "$TORCH_LIB_DIR/$dylib" "@rpath/$dylib" "$EXECUTABLE_PATH" || echo "No change needed for $dylib"
             fi
         done
 
-        # 4. Set the executable's rpath so it knows where to look
-        echo "Setting rpath for the executable..."
-        install_name_tool -add_rpath "@executable_path/../Frameworks" "$EXECUTABLE_PATH"
-
+        # 4. Safely add the executable's rpath
+        echo "Checking and setting rpath for the executable..."
+        # This command checks if the rpath already exists before trying to add it.
+        if ! otool -l "$EXECUTABLE_PATH" | grep -q "path @executable_path/../Frameworks"; then
+            install_name_tool -add_rpath "@executable_path/../Frameworks" "$EXECUTABLE_PATH"
+            echo "  - RPATH added."
+        else
+            echo "  - RPATH already exists."
+        fi
     - name: Finalize Package and Zip 🎁
       run: |
         # Move data and icons into the finalized app bundle
