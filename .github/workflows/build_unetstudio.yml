@@ -10,8 +10,29 @@ on:
         description: 'Release Name'
         required: true
         default: '2022.04.17 "Sun" Release'
+      build_windows:
+        type: boolean
+        description: 'Build Windows'
+        required: false
+        default: 'true'
+      build_linux:
+        type: boolean
+        description: 'Build Linux'
+        required: false
+        default: 'true'
+      build_mac:
+        type: boolean
+        description: 'Build Mac'
+        required: false
+        default: 'true'
+      build_docker:
+        type: boolean
+        description: 'Build Docker'
+        required: false
+        default: 'true'        
 jobs:
   windows_build:
+    if: ${{ github.event.inputs.build_windows == 'true' }}
     runs-on: windows-2019
     env:
       CMAKE_PREFIX_PATH: D:/a/UNet-Studio/UNet-Studio/libtorch
@@ -94,6 +115,7 @@ jobs:
         prerelease: false  
         
   linux-build:
+    if: ${{ github.event.inputs.build_linux == 'true' }}
     strategy:
       matrix:
         os: [ubuntu2204,ubuntu2404]
@@ -128,6 +150,7 @@ jobs:
         prerelease: false
 
   docker_build:
+    if: ${{ github.event.inputs.build_docker == 'true' }}
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -172,6 +195,7 @@ jobs:
           dsistudio/unetstudio:latest
 
   macos-build:
+    if: ${{ github.event.inputs.build_mac == 'true' }}
     strategy:
       matrix:
         os: [macos-13,macos-14,macos-15]
