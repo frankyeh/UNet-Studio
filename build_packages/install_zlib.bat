@@ -55,6 +55,9 @@ powershell.exe -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compressi
 if %ERRORLEVEL% NEQ 0 (call :failed && exit /B 1) else (echo done.)
 
 echo|set /p="[4/6] Fixing CMakeLists.txt... "
+
+call :fix_min_version
+
 set OLDSTR=RUNTIME DESTINATION ""\${INSTALL_BIN_DIR}\""
 set NEWSTR=RUNTIME DESTINATION ""bin\""
 call :search_replace "%OLDSTR%" "%NEWSTR%"
@@ -93,6 +96,11 @@ echo Details can be found at %LOGFILE%.
 
 @echo on
 @goto :eof
+
+:fix_min_version
+cd /d %SRC_DIR%
+powershell -Command "(Get-Content CMakeLists.txt) -replace 'cmake_minimum_required.*', 'cmake_minimum_required(VERSION 3.5)' | Set-Content -Encoding ASCII CMakeLists.txt"
+goto :eof
 
 :setup_cmake_path
 where cmake.exe
