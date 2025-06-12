@@ -204,35 +204,47 @@ jobs:
     env:
       CFLAGS: -Werror
     steps:
-    - uses: actions/checkout@v2.5.0
+    - uses: actions/checkout@v4
     - name: Setup Python
-      uses: actions/setup-python@v5.0.0
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.11
+        python-version: '3.11'
+
     - name: Install PyTorch
       run: |
         python -m pip install --upgrade pip
         pip install torch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1
-    - name: Install CMake
+
+    - name: Install Dependencies
       run: |
-        brew update
         brew install cmake
+
     - name: Install Qt
-      uses: jurplel/install-qt-action@v3.3.0
+      uses: jurplel/install-qt-action@v3
       with:
         version: '6.2'
-    - name: Download TIPL and Atlases
+
+    - name: Download TIPL and Data
       run: |
         git clone https://github.com/frankyeh/TIPL.git
         git clone https://github.com/frankyeh/UNet-Studio-Data.git
-    - name: Build UNet Studio
+
+    - name: Build UNet Studio 🔧
       run: |
+        # Find the PyTorch installation path and set it as an environment variable
+        # This makes it available to later steps
+        echo "TORCH_INSTALL_DIR=$(pip3.11 show torch | grep 'Location:' | awk '{print $2}')" >> $GITHUB_ENV
         mkdir -p build
-        export TORCH_DIR="$(pip3.11 show torch | grep 'Location:' | awk '{print $2}')"
-        cmake -S . -B build -DCMAKE_PREFIX_PATH=$TORCH_DIR/torch -DCMAKE_BUILD_TYPE:STRING=Release -DTIPL_DIR=.
+        cmake -S . -B build -DCMAKE_PREFIX_PATH=$TORCH_INSTALL_DIR/torch -DCMAKE_BUILD_TYPE=Release -DTIPL_DIR=.
         cmake --build ./build --parallel --config Release
-        cd ..
-    - name: Bundle Torch Libraries
+
+    - name: Package Qt Dependencies 📦
+      run: |
+        # Move the app to the working directory and run macdeployqt
+        mv build/unet_studio.app .
+        macdeployqt unet_studio.app
+
+    - name: Bundle Torch Libraries 🚀
       run: |
         # Define key paths
         APP_BUNDLE="unet_studio.app"
@@ -284,10 +296,11 @@ jobs:
         zip -r unet_studio_${{ matrix.os }}.zip unet_studio.app
 
     - name: Create Release
-      uses: ncipollo/release-action@v1.8.9
+      uses: ncipollo/release-action@v1
       with:
         allowUpdates: true
         artifacts: "*.zip"
+        token: ${{ secrets.GITHUB_TOKEN }}
         tag: ${{ github.event.inputs.tag }}
         name: ${{ github.event.inputs.release_name }}
         prerelease: false
