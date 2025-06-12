@@ -286,9 +286,7 @@ jobs:
         # 3. Update the executable to find the new libraries
         echo "Updating executable library paths..."
         for dylib in "${dylibs_to_copy[@]}"; do
-            if [ -f "$FRAMEWORKS_DIR/$dylib" ]; an
-                # Note: The original path might vary slightly based on installation
-                # This command is flexible enough to handle most cases
+            if [ -f "$FRAMEWORKS_DIR/$dylib" ]; then
                 install_name_tool -change "$TORCH_LIB_DIR/$dylib" "@rpath/$dylib" "$EXECUTABLE_PATH" || echo "No change needed for $dylib"
             fi
         done
@@ -302,6 +300,7 @@ jobs:
         else
             echo "  - RPATH already exists."
         fi
+        
     - name: Finalize Package and Zip 🎁
       run: |
         # Move data and icons into the finalized app bundle
