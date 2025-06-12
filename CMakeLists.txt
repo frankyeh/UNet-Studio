@@ -58,8 +58,7 @@ if(WIN32)
 endif()
 if(APPLE)
     set(UNET_STUDIO_EXEC
-        MACOSX_BUNDLE)
-    set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64")        
+        MACOSX_BUNDLE)     
 endif()
 
 
