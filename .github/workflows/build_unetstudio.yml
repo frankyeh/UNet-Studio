@@ -231,13 +231,24 @@ jobs:
 
     - name: Build UNet Studio 🔧
       run: |
-        # Find the PyTorch installation path and set it as an environment variable
-        # This makes it available to later steps
-        echo "TORCH_INSTALL_DIR=$(pip3.11 show torch | grep 'Location:' | awk '{print $2}')" >> $GITHUB_ENV
-        mkdir -p build
-        cmake -S . -B build -DCMAKE_PREFIX_PATH=$TORCH_INSTALL_DIR/torch -DCMAKE_BUILD_TYPE=Release -DTIPL_DIR=.
-        cmake --build ./build --parallel --config Release
+        # 1. Get the correct Torch path using the recommended method.
+        #    We define it as a local shell variable so it can be used immediately.
+        TORCH_CMAKE_PATH=$(python -c "import torch; print(torch.utils.cmake_prefix_path)")
+        echo "Torch CMAKE_PREFIX_PATH found at: $TORCH_CMAKE_PATH"
 
+        # 2. For the subsequent packaging step, find the parent 'lib' directory 
+        #    and save it to the GITHUB_ENV file for use in the *next* step.
+        TORCH_LIB_DIR=$(dirname "$TORCH_CMAKE_PATH")/lib
+        echo "TORCH_LIB_DIR=$TORCH_LIB_DIR" >> $GITHUB_ENV
+        
+        # 3. Configure CMake using the local variable we just defined.
+        #    This will now work correctly.
+        mkdir -p build
+        cmake -S . -B build -DCMAKE_PREFIX_PATH="$TORCH_CMAKE_PATH" -DCMAKE_BUILD_TYPE=Release -DTIPL_DIR=.
+        
+        # 4. Build the project.
+        cmake --build ./build --parallel --config Release
+        
     - name: Package Qt Dependencies 📦
       run: |
         # Move the app to the working directory and run macdeployqt
