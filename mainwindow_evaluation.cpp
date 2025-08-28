@@ -123,6 +123,7 @@ void MainWindow::on_evaluate_clicked()
     // find template
     if(ui->match_orientation->isChecked())
     {
+        /*
         evaluate.proc_strategy.template_file_name.clear();
         QDir dir(QCoreApplication::applicationDirPath() + "/template");
         dir.setNameFilters(QStringList() << "*.nii.gz");
@@ -135,6 +136,7 @@ void MainWindow::on_evaluate_clicked()
                 tipl::out() << "rotation template: " << evaluate.proc_strategy.template_file_name << std::endl;
             }
         }
+        */
         if(evaluate.proc_strategy.template_file_name.empty())
         {
             QMessageBox::critical(this,"ERROR",QString("cannot find a rotation template for ") + eval_name);
@@ -227,7 +229,7 @@ void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
         if(eval_I1_buffer[currentRow].empty())
         {
             tipl::vector<3> vs;
-            if(!tipl::io::gz_nifti::load_from_file(evaluate_list[currentRow].toStdString().c_str(),eval_I1_buffer[currentRow],vs))
+            if(!tipl::io::gz_nifti::load_from_file(evaluate_list[currentRow].toStdString(),eval_I1_buffer[currentRow]))
                 return;
             eval_I1_buffer_max[currentRow] = tipl::max_value(eval_I1_buffer[currentRow]);
         }
