@@ -64,6 +64,7 @@ inline void rotate_to_template(tipl::image<3>& images,
                          const tipl::vector<3>& model_vs,
                          tipl::transformation_matrix<float>& trans)
 {
+    tipl::out() << "rotate to template";
     tipl::affine_transform<float> arg_rotated;
     auto image0 = images.alias(0,image_dim);
     bool terminated = false;
@@ -218,6 +219,35 @@ void postproc_actions(const std::string& command,
     }
     tipl::out() << "ERROR: unknown command " << command << std::endl;
 }
+
+template<typename T, typename U>
+void subsample8(const T& I, U& subI,size_t sub_index)
+{
+    tipl::shape<3> sub_dim(I.width()/2,I.height()/2,I.depth()/2);
+    subI.resize(sub_dim);
+    int skip_x = sub_dim[0]*2;
+    int skip_y = sub_dim[1]*2;
+    int skip_z = sub_dim[2]*2;
+    size_t sub_pos = 0;
+    for (tipl::pixel_index<3> index(I.shape()); index < I.size(); ++index)
+        if(index[0] != skip_x && index[1] != skip_y && index[2] != skip_z &&
+           sub_index == ((index[0] & 1) + ((index[1] & 1) << 1) + ((index[2] & 1) << 2)))
+            subI[sub_pos++] = I[index.index()];
+}
+template<typename T, typename U>
+void upsample8(T& I, const U& subI,size_t sub_index)
+{
+    tipl::shape<3> sub_dim(I.width()/2,I.height()/2,I.depth()/2);
+    int skip_x = sub_dim[0]*2;
+    int skip_y = sub_dim[1]*2;
+    int skip_z = sub_dim[2]*2;
+    size_t sub_pos = 0;
+    for (tipl::pixel_index<3> index(I.shape()); index < I.size(); ++index)
+        if(index[0] != skip_x && index[1] != skip_y && index[2] != skip_z &&
+           sub_index == ((index[0] & 1) + ((index[1] & 1) << 1) + ((index[2] & 1) << 2)))
+            I[index.index()] = subI[sub_pos++];
+}
+
 void evaluate_unet::read_file(void)
 {
     evaluate_input = std::vector<tipl::image<3> >(param.image_file_name.size());
@@ -225,7 +255,6 @@ void evaluate_unet::read_file(void)
     raw_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
     raw_image_trans = std::vector<tipl::transformation_matrix<float> >(param.image_file_name.size());
     raw_image_flip_swap = std::vector<std::vector<char> >(param.image_file_name.size());
-    raw_image = std::vector<tipl::image<3> >(param.image_file_name.size());
     data_ready = std::vector<bool> (param.image_file_name.size());
     read_file_thread.reset(new std::thread([=]()
     {
@@ -267,29 +296,35 @@ void evaluate_unet::read_file(void)
                 aborted = true;
                 return;
             }
-            in >> evaluate_input[i];
-            tipl::segmentation::normalize_otsu_median(evaluate_input[i]);
-
-            raw_image[i] = evaluate_input[i];
-
+            tipl::image<3> raw_image;
+            in >> raw_image;
             in.get_voxel_size(raw_image_vs[i]);
             raw_image_flip_swap[i] = in.flip_swap_seq;
-            raw_image_shape[i] = evaluate_input[i].shape();
-            tipl::out() << "channel:" << in.dim(4) << "dim: " << evaluate_input[i].shape() << " vs:" << raw_image_vs[i] << std::endl;
+            raw_image_shape[i] = raw_image.shape();
 
-            // handle multiple channels
+            tipl::out() << "channel:" << in.dim(4) << "dim: " << raw_image.shape() << " vs:" << raw_image_vs[i] << std::endl;
+
+            tipl::segmentation::normalize_otsu_median(raw_image);
+            tipl::out() << "adjust intensity by normalizing otsu median value";
+
+            evaluate_input[i] = raw_image;
             evaluate_input[i].resize(raw_image_shape[i].multiply(tipl::shape<3>::z,model->in_count));
-            for(size_t c = 1;c < model->in_count;++c)
+
+            if(model->in_count)
             {
-                auto image = evaluate_input[i].alias(c*raw_image_shape[i].size(),raw_image_shape[i]);
-                if(!(in >> image))
+                tipl::out() << "handle multiple channels. model channel count:" << model->in_count;
+                for(size_t c = 1;c < model->in_count;++c)
                 {
-                    error_msg = param.image_file_name[i];
-                    error_msg += " reading failed";
-                    aborted = true;
-                    return;
+                    auto image = evaluate_input[i].alias(c*raw_image_shape[i].size(),raw_image_shape[i]);
+                    if(!(in >> image))
+                    {
+                        error_msg = param.image_file_name[i];
+                        error_msg += " reading failed";
+                        aborted = true;
+                        return;
+                    }
+                    tipl::segmentation::normalize_otsu_median(evaluate_input[i]);
                 }
-                tipl::segmentation::normalize_otsu_median(evaluate_input[i]);
             }
 
             if(!template_image.empty())
@@ -306,7 +341,6 @@ void evaluate_unet::read_file(void)
                                 model->dim,model->voxel_size,
                                 raw_image_trans[i],
                                 proc_strategy.match_resolution,proc_strategy.match_fov);
-
             data_ready[i] = true;
         }
     }));
@@ -330,10 +364,35 @@ void evaluate_unet::evaluate(void)
                 }
                 if(cur_input.empty())
                     continue;
-                auto out = model->forward(torch::from_blob(cur_input.data(),
-                                          {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device));
+
                 evaluate_output[cur_prog].resize(cur_input.shape().multiply(tipl::shape<3>::z,model->out_count).divide(tipl::shape<3>::z,model->in_count));
-                std::memcpy(evaluate_output[cur_prog].data(),out.to(torch::kCPU).data_ptr<float>(),evaluate_output[cur_prog].size()*sizeof(float));
+                tipl::out() << "input dimension:" << cur_input.shape() << " vs:" << raw_image_vs[cur_prog];
+                if((cur_input.width()/2 >= model->dim.width() ||
+                   raw_image_vs[cur_prog][0] * 2.0f <= model->voxel_size[0]) && model->in_count == 1)
+                {
+                    tipl::out() << "subsample by 2x to handle large image volume";
+                    for(size_t i = 0;i < 8;++i)
+                    {
+                        tipl::image<3,float> subI,result;
+                        subsample8(cur_input,subI,i);
+                        tipl::out() << "inferencing using u-net at subsample " << i;
+                        auto out = model->forward(torch::from_blob(subI.data(),{1,1,int(subI.depth()),int(subI.height()),int(subI.width())}).to(param.device));
+                        result.resize(subI.shape().multiply(tipl::shape<3>::z,model->out_count));
+                        std::memcpy(result.data(),out.to(torch::kCPU).data_ptr<float>(),result.size()*sizeof(float));
+                        for(size_t j = 0;j < model->out_count;++j)
+                        {
+                            auto eval_output = tipl::make_image(evaluate_output[cur_prog].data() + j*cur_input.size(),cur_input.shape());
+                            upsample8(eval_output,tipl::make_image(result.data() + j*subI.size(),subI.shape()),i);
+                        }
+                    }
+                }
+                else
+                {
+                    tipl::out() << "inferencing using u-net";
+                    auto out = model->forward(torch::from_blob(cur_input.data(),
+                                              {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device));
+                    std::memcpy(evaluate_output[cur_prog].data(),out.to(torch::kCPU).data_ptr<float>(),evaluate_output[cur_prog].size()*sizeof(float));
+                }
             }
         }
         catch(const c10::Error& error)
@@ -430,15 +489,11 @@ void evaluate_unet::output(void)
 
                 tipl::ml3d::postproc_actions(label_prob[cur_output],
                                              evaluate_output[cur_output],
-                                             raw_image[cur_output],
+                                             raw_image_shape[cur_output],
                                              raw_image_trans[cur_output],
                                              model->out_count,!proc_strategy.match_fov && !proc_strategy.match_resolution);
-                if(model->voxel_size[0] > raw_image_vs[cur_output][0])
-                {
-                    tipl::out() << "apply super-resolution regression using kNN";
 
-                }
-                auto label_prob_4d = tipl::make_image(label_prob[cur_output].data(),raw_image[cur_output].shape().expand(model->out_count));
+                auto label_prob_4d = tipl::make_image(label_prob[cur_output].data(),raw_image_shape[cur_output].expand(model->out_count));
                 foreground_prob[cur_output] = tipl::ml3d::defragment4d(label_prob_4d,param.prob_threshold);
 
                 if(aborted)
@@ -480,7 +535,7 @@ void evaluate_unet::output(void)
 
                 evaluate_input[cur_output] = tipl::image<3>();
                 evaluate_output[cur_output] = tipl::image<3>();
-                raw_image[cur_output] = tipl::image<3>();
+
             }
         }
         catch(const c10::Error& error)
