@@ -33,7 +33,7 @@ on:
 jobs:
   windows_build:
     if: ${{ github.event.inputs.build_windows == 'true' }}
-    runs-on: windows-2019
+    runs-on: windows-latest
     env:
       CMAKE_PREFIX_PATH: D:/a/UNet-Studio/UNet-Studio/libtorch
       Torch_DIR: D:/a/UNet-Studio/UNet-Studio/libtorch/share/cmake/Torch
@@ -64,8 +64,6 @@ jobs:
       run: |
         git clone https://github.com/frankyeh/TIPL.git
         git clone https://github.com/frankyeh/UNet-Studio-Data.git
-
-
 
     - name: Build UNet Studio
       run: |
@@ -215,14 +213,17 @@ jobs:
         python -m pip install --upgrade pip
         pip install torch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1
 
-    - name: Install Dependencies
+    - name: brew update
       run: |
+        brew update
+        brew uninstall cmake
         brew install cmake
 
     - name: Install Qt
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4.1.1
       with:
-        version: '6.2'
+        version: 6.8    
+        cache: true
 
     - name: Download TIPL and Data
       run: |
