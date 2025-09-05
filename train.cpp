@@ -727,7 +727,7 @@ int tra(void)
     {
         train.param.image_file_name.clear();
         train.param.label_file_name.clear();
-        if(!po.get_files("image",train.param.image_file_name) ||
+        if(!po.get_files("source",train.param.image_file_name) ||
            !po.get_files("label",train.param.label_file_name))
         {
             tipl::out() << "ERROR: " << po.error_msg;
