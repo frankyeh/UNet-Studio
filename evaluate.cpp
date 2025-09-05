@@ -661,12 +661,9 @@ int eval(void)
     // loading images data
     {
         eval.param.image_file_name.clear();
-        if(!po.has("image"))
-        {
-            tipl::out() << "ERROR: please specify --image";
+        if(!po.check("source"))
             return 1;
-        }
-        if(!po.get_files("image",eval.param.image_file_name))
+        if(!po.get_files("source",eval.param.image_file_name))
         {
             tipl::out() << "ERROR: " << eval.error_msg;
             return 1;
@@ -691,7 +688,7 @@ int eval(void)
 
     eval.param.prob_threshold = po.get("prob_threshold",0.5f);
     eval.proc_strategy.match_resolution = po.get("match_resolution",1);
-    eval.proc_strategy.match_fov = po.get("match_fov",1);
+    eval.proc_strategy.match_fov = po.get("match_fov",0);
     eval.proc_strategy.match_orientation = po.get("match_orientation",0);
     eval.proc_strategy.output_format = po.get("output_format",0);
 
@@ -712,8 +709,12 @@ int eval(void)
     {
         tipl::progress p("saving results");
         for(size_t i = 0;p(i,eval.param.image_file_name.size());++i)
-            if(!eval.save_to_file(i,(eval.param.image_file_name[i] + ".seg.nii.gz").c_str()))
+        {
+            auto file_name = eval.param.image_file_name[i] + ".result.nii.gz";
+            tipl::out() << "save to " << file_name;
+            if(!eval.save_to_file(i,file_name.c_str()))
                 tipl::out() << "ERROR: " << eval.error_msg;
+        }
     }
 
     return 0;
