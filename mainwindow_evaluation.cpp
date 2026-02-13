@@ -229,8 +229,10 @@ void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
         if(eval_I1_buffer[currentRow].empty())
         {
             tipl::vector<3> vs;
-            if(!tipl::io::gz_nifti::load_from_file(evaluate_list[currentRow].toStdString(),eval_I1_buffer[currentRow]))
+            tipl::io::gz_nifti in;
+            if(!in.open(evaluate_list[currentRow].toStdString(),std::ios::in))
                 return;
+            in >> eval_I1_buffer[currentRow];
             eval_I1_buffer_max[currentRow] = tipl::max_value(eval_I1_buffer[currentRow]);
         }
         ui->eval_image_max->setMaximum(eval_I1_buffer_max[currentRow]);
