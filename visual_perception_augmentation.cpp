@@ -318,7 +318,7 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
         accumulate_transforms(displaced,options["lens_distortion"] > 0.0f,options["perspective"] > 0.0f,perspective,trans);
 
 
-        tipl::adaptive_par_for(displaced.size(),[&](size_t index)
+        tipl::par_for(displaced.size(),[&](size_t index)
         {
             auto pos = displaced[index];
             tipl::interpolator::linear<3> interp;
