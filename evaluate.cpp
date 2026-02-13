@@ -263,7 +263,7 @@ void evaluate_unet::read_file(void)
         if(proc_strategy.match_resolution && !proc_strategy.template_file_name.empty())
         {
             tipl::io::gz_nifti in;
-            if(in.load_from_file(proc_strategy.template_file_name))
+            if(in.open(proc_strategy.template_file_name,std::ios::in))
             {
                 in >> template_image;
                 in.get_voxel_size(template_image_vs);
@@ -283,7 +283,7 @@ void evaluate_unet::read_file(void)
             }
             tipl::out() << "reading " << param.image_file_name[i] << std::endl;
             tipl::io::gz_nifti in;
-            if(!in.load_from_file(param.image_file_name[i]))
+            if(!in.open(param.image_file_name[i],std::ios::in))
             {
                 error_msg = in.error_msg;
                 aborted = true;
@@ -376,7 +376,7 @@ void evaluate_unet::evaluate(void)
                         tipl::image<3,float> subI,result;
                         subsample8(cur_input,subI,i);
                         tipl::out() << "inferencing using u-net at subsample " << i;
-                        auto out = model->forward(torch::from_blob(subI.data(),{1,1,int(subI.depth()),int(subI.height()),int(subI.width())}).to(param.device));
+                        auto out = model->forward(torch::from_blob(subI.data(),{1,1,int(subI.depth()),int(subI.height()),int(subI.width())}).to(param.device))[0];
                         result.resize(subI.shape().multiply(tipl::shape<3>::z,model->out_count));
                         std::memcpy(result.data(),out.to(torch::kCPU).data_ptr<float>(),result.size()*sizeof(float));
                         for(size_t j = 0;j < model->out_count;++j)
@@ -390,7 +390,7 @@ void evaluate_unet::evaluate(void)
                 {
                     tipl::out() << "inferencing using u-net";
                     auto out = model->forward(torch::from_blob(cur_input.data(),
-                                              {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device));
+                                              {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device))[0];
                     std::memcpy(evaluate_output[cur_prog].data(),out.to(torch::kCPU).data_ptr<float>(),evaluate_output[cur_prog].size()*sizeof(float));
                 }
             }
@@ -514,7 +514,7 @@ void evaluate_unet::output(void)
                             tipl::threshold(foreground_prob[cur_output],foreground_mask,param.prob_threshold,1,0);
                             tipl::filter::gaussian(foreground_mask);
 
-                            if(in.load_from_file(param.image_file_name[cur_output]))
+                            if(in.open(param.image_file_name[cur_output],std::ios::in))
                             {
                                 in >> I;
                                 for(size_t pos = 0;pos < I.size() && pos < foreground_mask.size();++pos)
@@ -603,17 +603,20 @@ bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
         return false;
     tipl::out() << "reader header information from " << param.image_file_name[currentRow];
     tipl::io::gz_nifti in,out;
-    if(!in.load_from_file(param.image_file_name[currentRow]))
+    if(!in.open(param.image_file_name[currentRow],std::ios::in))
     {
         error_msg = in.error_msg;
         return false;
     }
+    if(!out.open(file_name,std::ios::out))
+    {
+        error_msg = out.error_msg;
+        return false;
+    }
     tipl::matrix<4,4,float> trans;
     tipl::vector<3> vs;
-    in.get_image_transformation(trans);
-    out.set_image_transformation(trans);
-    in.get_voxel_size(vs);
-    out.set_voxel_size(vs);
+    in >> std::tie(trans,vs);
+    out << std::tie(trans,vs);
 
     tipl::out() << "save " << file_name;
     in.flip_swap_seq = raw_image_flip_swap[currentRow];
@@ -621,29 +624,31 @@ bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
     {
         tipl::image<3,unsigned char> label(label_prob[currentRow]);
         in.apply_flip_swap_seq(label,true);
+
         if(label_prob[currentRow].depth() == raw_image_shape[currentRow][2])
-            out.load_from_image(label);
+            out << label;
         else
-            out.load_from_image(label.alias(0,tipl::shape<4>(
+            out << label.alias(0,tipl::shape<4>(
                           raw_image_shape[currentRow][0],
                           raw_image_shape[currentRow][1],
                           raw_image_shape[currentRow][2],
-                          label_prob[currentRow].depth()/raw_image_shape[currentRow][2])));
-        return out.save_to_file(file_name);
+                          label_prob[currentRow].depth()/raw_image_shape[currentRow][2]));
     }
-
-    tipl::image<3> prob(label_prob[currentRow]);
-    in.apply_flip_swap_seq(prob,true);
-
-    if(label_prob[currentRow].depth() == raw_image_shape[currentRow][2])
-        out.load_from_image(prob);
     else
-        out.load_from_image(prob.alias(0,tipl::shape<4>(
-                          raw_image_shape[currentRow][0],
-                          raw_image_shape[currentRow][1],
-                          raw_image_shape[currentRow][2],
-                          label_prob[currentRow].depth()/raw_image_shape[currentRow][2])));
-    return out.save_to_file(file_name);
+    {
+        tipl::image<3> prob(label_prob[currentRow]);
+        in.apply_flip_swap_seq(prob,true);
+
+        if(label_prob[currentRow].depth() == raw_image_shape[currentRow][2])
+            out << prob;
+        else
+            out << prob.alias(0,tipl::shape<4>(
+                              raw_image_shape[currentRow][0],
+                              raw_image_shape[currentRow][1],
+                              raw_image_shape[currentRow][2],
+                              label_prob[currentRow].depth()/raw_image_shape[currentRow][2]));
+    }
+    return true;
 }
 
 bool load_from_file(UNet3d& model,const char* file_name);
