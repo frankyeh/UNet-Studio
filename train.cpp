@@ -52,10 +52,10 @@ bool read_image_and_label(const std::string& image_name,
     tipl::matrix<4,4,float> image_t((tipl::identity_matrix()));
     {
         tipl::io::gz_nifti nii;
-        if(!nii.load_from_file(image_name))
+        if(!nii.open(image_name,std::ios::in) || nii.dim(4) != in_count)
             return false;
         nii.get_image_dimension(image_shape);
-        if(nii.dim(4) != in_count)
+        if(image_shape.size() > 256*256*196)
             return false;
         input.resize(tipl::shape<3>(image_shape.width(),image_shape.height(),image_shape.depth()*in_count));
         for(int c = 0;c < in_count;++c)
@@ -63,39 +63,27 @@ bool read_image_and_label(const std::string& image_name,
             auto I = input.alias(image_shape.size()*c,image_shape);
             nii >> I;
         }
-        nii.get_image_transformation(image_t);
+        nii >> image_t;
     }
 
-
     tipl::io::gz_nifti nii;
-    tipl::shape<3> label_shape;
-    if(!nii.load_from_file(label_name))
+    if(!nii.open(label_name,std::ios::in))
         return false;
-    nii.get_image_dimension(label_shape);
+    label.clear();
+    label.resize(image_shape);
     if(nii.dim(4) > 1)
     {
-        label.resize(label_shape);
         for(size_t index = 1;index <= nii.dim(4);++index)
         {
-            tipl::image<3> I;
-            nii >> I;
+            tipl::image<3> I(image_shape);
+            nii.to_space(I,image_t);
             for(size_t pos = 0;pos < I.size();++pos)
                 if(I[pos])
                     label[pos] = index;
         }
     }
     else
-    {
-        nii >> label;
-    }
-    tipl::matrix<4,4,float> label_t((tipl::identity_matrix()));
-    nii.get_image_transformation(label_t);
-    if(image_shape != label_shape || label_t != image_t)
-    {
-        tipl::image<3> new_label(image_shape);
-        tipl::resample<tipl::nearest>(label,new_label,tipl::from_space(image_t).to(label_t));
-        label.swap(new_label);
-    }
+        nii.to_space(label,image_t);
     return true;
 }
 
@@ -163,7 +151,7 @@ void train_unet::read_file(void)
                 reading_status = "checking ";
                 reading_status += param.image_file_name[i];
                 tipl::io::gz_nifti in;
-                if(!in.load_from_file(param.image_file_name[i].c_str()))
+                if(!in.open(param.image_file_name[i].c_str(),std::ios::in))
                 {
                     error_msg = "invalid NIFTI file: ";
                     error_msg += param.image_file_name[i];
@@ -370,12 +358,8 @@ void train_unet::read_file(void)
 
 void train_unet::update_epoch_count()
 {
-    error.resize(param.epoch);
-    for(auto& each : test_error_foreground)
+    for(auto& each : test_error)
         each.resize(param.epoch);
-    for(auto& each : test_error_background)
-        each.resize(param.epoch);
-
 }
 std::string train_unet::get_status(void)
 {
@@ -389,6 +373,7 @@ std::string train_unet::get_status(void)
     }
     return s1 + "|" + s2;
 }
+
 void train_unet::train(void)
 {
     auto run_training = [=](){
@@ -428,18 +413,17 @@ void train_unet::train(void)
                     need_output_model = false;
                 }
 
+                float mse_error = 0.0f;
                 if(!test_in_tensor.empty())
                 {
                     output_model->eval();
+                    torch::NoGradGuard no_grad; // Disable gradient for validation
                     for(size_t i = 0;i < test_in_tensor.size();++i)
                     {
-                        float mse_foreground = 0.0f,mse_background = 0.0f;
-                        auto f = output_model->forward(test_in_tensor[i]);
-                        mse_foreground = torch::mse_loss(f.masked_select(test_out_mask[i].gt(0)),test_out_tensor[i].masked_select(test_out_mask[i].gt(0))).item().toFloat();
-                        mse_background = torch::mse_loss(f.masked_select(test_out_mask[i].le(0)),test_out_tensor[i].masked_select(test_out_mask[i].le(0))).item().toFloat();
-                        test_error_foreground[i][cur_epoch] = mse_foreground;
-                        test_error_background[i][cur_epoch] = mse_background;
+                        auto f = output_model->forward(test_in_tensor[i])[0];
+                        mse_error += (test_error[i][cur_epoch] = torch::mse_loss(f.clamp(0.0, 1.0),test_out_tensor[i]).item().toFloat());
                     }
+                    mse_error /= test_in_tensor.size();
                 }
 
                 training_status = "training ";
@@ -448,7 +432,7 @@ void train_unet::train(void)
                     each->copy_from(*model);
                 std::mutex m;
                 size_t b = 0;
-                std::vector<float> error_each_model(model_count);
+                std::vector<float> de_each_model(model_count);
                 tipl::par_for(model_count,[&](size_t model_id)
                 {
                     try{
@@ -475,39 +459,72 @@ void train_unet::train(void)
                                     return;
                             }
 
-                            torch::Tensor out_tensor_thread,in_tensor_thread;
-                            out_tensor_thread = torch::from_blob(out_data[thread].data(),
+                            torch::Tensor target_probs = torch::from_blob(out_data[thread].data(),
                                     {1,cur_model->out_count,int(cur_model->dim[2]),int(cur_model->dim[1]),int(cur_model->dim[0])}).to(cur_model->device());
-                            in_tensor_thread = torch::from_blob(in_data[thread].data(),
+                            torch::Tensor in_tensor = torch::from_blob(in_data[thread].data(),
                                     {1,cur_model->in_count,int(cur_model->dim[2]),int(cur_model->dim[1]),int(cur_model->dim[0])}).to(cur_model->device());
                             data_ready[thread] = false;
 
-                            auto output = cur_model->forward(in_tensor_thread);
-                            auto weight = train_image_is_template[in_data_read_id[thread]] ? param.template_label_weight : param.subject_label_weight;
-                            if(weight.size() == cur_model->out_count)
-                            {
-                                at::Tensor loss;
-                                for(size_t i = 0;i < cur_model->out_count;++i)
-                                    if(weight[i] != 0.0f)
-                                    {
-                                        auto l = torch::mse_loss(output.select(1,i),out_tensor_thread.select(1,i))*weight[i];
-                                        if(loss.defined())
-                                            loss += l;
-                                        else
-                                            loss = l;
-                                    }
-                                output = loss;
-                            }
-                            else
-                                output = torch::mse_loss(output,out_tensor_thread);
+                            auto outputs = cur_model->forward(in_tensor);
 
-                            error_each_model[model_id] += output.item().toFloat();
-                            output.backward();
+                            torch::Tensor total_loss;
+                            {
+
+
+                                // target_probs shape: (Batch, Channels, D, H, W)
+                                // Channels can be any number (2, 5, 10, etc.)
+
+                                for(size_t k = 0; k < outputs.size(); ++k)
+                                {
+                                    // 1. Handle Downsampling for Target
+                                    torch::Tensor cur_target_probs;
+                                    if(k == 0)
+                                        cur_target_probs = target_probs;
+                                    else
+                                        cur_target_probs = torch::nn::functional::interpolate(target_probs,
+                                            torch::nn::functional::InterpolateFuncOptions()
+                                            .size(std::vector<int64_t>{outputs[k].size(2), outputs[k].size(3), outputs[k].size(4)})
+                                            .mode(torch::kTrilinear).align_corners(false));
+
+                                    // 2. CREATE Background PROBABILITY MAPS
+                                    auto pred_tissues = outputs[k].clamp(0.0, 1.0);
+
+                                    // Calculate Background: 1.0 - sum(tissues)
+                                    // We clamp to 0-1 to ensure numerical stability
+                                    auto pred_bg = (1.0 - pred_tissues.sum(1, true)).clamp(0.0, 1.0);
+                                    auto target_bg = (1.0 - cur_target_probs.sum(1, true)).clamp(0.0, 1.0);
+
+                                    // Concatenate: Channel 0 = Background, Channels 1-5 = Tissues
+                                    auto pred_all = torch::cat({pred_bg, pred_tissues}, 1);
+                                    auto target_all = torch::cat({target_bg, cur_target_probs}, 1);
+
+                                    // Use Binary Cross Entropy since channels are independent ReLU-based estimates
+                                    // We use a small epsilon (1e-7) to avoid log(0)
+                                    auto bce = -torch::mean(target_all * torch::log(pred_all + 1e-7) +
+                                                              (1.0 - target_all) * torch::log(1.0 - pred_all + 1e-7));
+                                    // 4. DICE LOSS (6-Channel)
+                                    auto dims = std::vector<int64_t>{2, 3, 4};
+                                    auto intersection = torch::sum(pred_all * target_all, dims);
+                                    auto cardinality = torch::sum(pred_all + target_all, dims);
+                                    auto dice = 1.0f - torch::mean((2.f * intersection + 1e-5) / (cardinality + 1e-5));
+
+                                    // MSE (Excellent for ReLU regression to target probabilities)
+                                    auto mse = torch::mse_loss(pred_tissues, cur_target_probs);
+
+                                    float level_weight = 1.0f / (1 << k);
+                                    auto level_loss = (bce + dice + mse) * level_weight;
+
+                                    if(total_loss.defined()) total_loss += level_loss;
+                                    else total_loss = level_loss;
+                                }
+                            };
+                            de_each_model[model_id] = total_loss.item().toFloat();
+                            total_loss.backward();
                         }
                     }
                     catch(const c10::Error& error)
                     {
-                        error_msg = std::string("during ") + training_status + ":" + error.what();
+                        tipl::out() << (error_msg = std::string("during ") + training_status + ":" + error.what());
                         aborted = true;
                         return;
                     }
@@ -527,18 +544,15 @@ void train_unet::train(void)
                 }
 
                 {
-                    float sum_error = tipl::sum(error_each_model);
-                    float previous_error = cur_epoch > 0 ? error[cur_epoch-1]:sum_error/float(param.batch_size);
-                    error[cur_epoch] = previous_error*0.95 + sum_error/float(param.batch_size)*0.05f;
                     auto out = line;
-                    out[to_chart(error[cur_epoch])] = 'T';
-                    //out[to_chart(mse_foreground)] = 'F';
-                    //out[to_chart(mse_background)] = 'B';
+                    out[to_chart(mse_error)] = 'T';
 
                     std::string out2("|epoch:");
                     out2 += std::to_string(cur_epoch);
-                    out2 += " error:";
-                    out2 += std::to_string(error[cur_epoch]);
+                    out2 += " de:";
+                    out2 += std::to_string(tipl::mean(de_each_model));
+                    out2 += " mse:";
+                    out2 += std::to_string(mse_error);
                     std::copy(out2.begin(),out2.end(),out.begin());
 
                     tipl::out() << out;
@@ -561,11 +575,11 @@ void train_unet::train(void)
         }
         catch(const c10::Error& error)
         {
-            error_msg = std::string("during ") + training_status + ":" + error.what();
+            tipl::out() << (error_msg = std::string("during ") + training_status + ":" + error.what());
         }
         catch(...)
         {
-            error_msg = "unknown error in training";
+            tipl::out() << (error_msg = "unknown error in training");
         }
         pause = aborted = true;
     };
@@ -588,7 +602,7 @@ void train_unet::start(void)
         pause = aborted = false;
         running = true;
         error_msg.clear();
-        error.clear();
+        test_error.clear();
         cur_epoch = 0;
     }
 
@@ -602,7 +616,7 @@ void train_unet::start(void)
     if(model->total_training_count == 0)
     {
         tipl::io::gz_nifti in;
-        if(!in.load_from_file(param.image_file_name[0]))
+        if(!in.open(param.image_file_name[0],std::ios::in))
         {
             error_msg = "Invalid NIFTI format";
             error_msg += param.image_file_name[0];
@@ -617,7 +631,7 @@ void train_unet::start(void)
         tipl::out() << "set network input sizes: " << model->dim << " with resolution:" << model->voxel_size <<std::endl;
     }
 
-    test_error_background = test_error_foreground = std::vector<std::vector<float> >(param.test_image_file_name.size());
+    test_error = std::vector<std::vector<float> >(param.test_image_file_name.size());
     update_epoch_count();
 
     model->to(param.device);
@@ -681,20 +695,15 @@ void train_unet::stop(void)
 bool train_unet::save_error_to(const char* file_name)
 {
     std::ofstream out(file_name);
-    if(!out)
+    if(!out || test_error.empty())
         return false;
-    out << "trainning_error\t";
-    for(size_t j = 0;j < test_error_foreground.size();++j)
-        out << "test_foreground_error\ttest_background_error\t";
+    for(size_t j = 0;j < test_error.size();++j)
+        out << "mse_error\t";
     out << std::endl;
-    for(size_t i = 0;i < error.size() && i < cur_epoch;++i)
+    for(size_t i = 0;i < test_error[0].size() && i < cur_epoch;++i)
     {
-        out << error[i] << "\t";
-        for(size_t j = 0;j < test_error_foreground.size();++j)
-        {
-            out << test_error_foreground[j][i] << "\t";
-            out << test_error_background[j][i] << "\t";
-        }
+        for(size_t j = 0;j < test_error.size();++j)
+            out << test_error[j][i] << "\t";
         out << std::endl;
     }
     return true;
