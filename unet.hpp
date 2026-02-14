@@ -22,7 +22,7 @@ public:
     tipl::shape<3> dim = {192,224,192};
     std::deque<torch::nn::Sequential> encoding,decoding,up;
     std::vector<torch::nn::BatchNorm3d> bn_layers;
-    torch::nn::Sequential output;
+    std::vector<torch::nn::Sequential> output;
 public:
     auto parse_feature_string(std::vector<int>& kernel_size) const
     {
@@ -54,23 +54,16 @@ public:
     void add_gradient_from(const UNet3dImpl& r);
 
 public:
-    torch::Tensor forward(torch::Tensor inputTensor);
+    std::vector<torch::Tensor> forward(torch::Tensor inputTensor);
 
     void set_requires_grad(bool req)
     {
         for (auto& p : parameters())
             p.set_requires_grad(req);
     }
-
-    void set_bn_tracking_running_stats(bool stat)
-    {
-        for(auto bn : bn_layers)
-            bn->options.track_running_stats(stat);
-    }
     virtual void train(bool on = true) override
     {
         set_requires_grad(on);
-        set_bn_tracking_running_stats(on);
         torch::nn::Module::train(on);
     }
     void print_layers(void);
