@@ -11,7 +11,7 @@ struct training_param{
     std::vector<std::string> image_file_name,test_image_file_name;
     std::vector<std::string> label_file_name,test_label_file_name;
     std::vector<std::vector<size_t> > relations;
-    std::vector<float> template_label_weight,subject_label_weight;
+    std::vector<float> subject_label_weight;
     int batch_size = 8;
     int epoch = 4000;
     float learning_rate = 0.00025f;
@@ -20,26 +20,11 @@ struct training_param{
     torch::Device device = torch::kCPU;
     inline void set_weight(std::string w)
     {
-        bool subject_weight = true;
-        bool template_weight = true;
-        if(w.back() == 's')
-        {
-            template_weight = false;
-            w.pop_back();
-        }
-        if(w.back() == 't')
-        {
-            subject_weight = false;
-            w.pop_back();
-        }
         std::istringstream in(w);
         auto label_weight = std::vector<float>((std::istream_iterator<float>(in)),std::istream_iterator<float>());
         tipl::multiply_constant(label_weight,1.0f/(tipl::sum(label_weight)));
 
-        if(subject_weight)
-            subject_label_weight = label_weight;
-        if(template_weight)
-            template_label_weight = label_weight;
+        subject_label_weight = label_weight;
     }
 };
 
@@ -90,8 +75,7 @@ private:
     void train(void);
 public:
     size_t cur_epoch = 0;
-    std::vector<float> error;
-    std::vector<std::vector<float> > test_error_foreground,test_error_background;
+    std::vector<std::vector<float> > test_error;
     void update_epoch_count();
     bool save_error_to(const char* file_name);
     std::string get_status(void);
