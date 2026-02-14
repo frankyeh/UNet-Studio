@@ -155,7 +155,7 @@ void MainWindow::on_action_train_open_files_triggered()
         return;
     {
          tipl::io::gz_nifti nii;
-         if(!nii.load_from_file(fileNames[0].toStdString()))
+         if(!nii.open(fileNames[0].toStdString(),std::ios::in))
          {
              QMessageBox::critical(this,"ERROR","Cannot read the NIFTI file");
              return;
@@ -178,7 +178,7 @@ void MainWindow::on_action_train_open_files_triggered()
 bool get_label_info(const std::string& label_name,std::vector<int>& out_count,bool& is_label)
 {
     tipl::io::gz_nifti nii;
-    if(!nii.load_from_file(label_name))
+    if(!nii.open(label_name,std::ios::in))
         return false;
     if(nii.dim(4) != 1)
         out_count.resize(nii.dim(4));
@@ -415,6 +415,8 @@ void MainWindow::on_train_start_clicked()
             train.param.label_file_name.push_back(label_list[i].toStdString());
         }
     }
+    train.param.test_image_file_name = train.param.image_file_name;
+    train.param.test_label_file_name = train.param.label_file_name;
 
     train.param.device = ui->train_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->train_device->currentIndex()-1):torch::Device(torch::kCPU);
     train.start();
@@ -460,13 +462,8 @@ void MainWindow::plot_error()
         painter.drawRect(left_border,upper_border,x_size ,y_size);
 
         std::vector<std::vector<float> > all_errors;
-
-        all_errors.push_back(std::vector<float>(train.error.begin(),train.error.begin()+train.cur_epoch));
-        for(size_t i = 0;i < train.test_error_foreground.size();++i)
-        {
-            all_errors.push_back(std::vector<float>(train.test_error_foreground[i].begin(),train.test_error_foreground[i].begin()+train.cur_epoch));
-            all_errors.push_back(std::vector<float>(train.test_error_background[i].begin(),train.test_error_background[i].begin()+train.cur_epoch));
-        }
+        for(size_t i = 0;i < train.test_error.size();++i)
+            all_errors.push_back(std::vector<float>(train.test_error[i].begin(),train.test_error[i].begin()+train.cur_epoch));
 
         std::vector<QColor> colors = {QColor(0,0,0),QColor(244,177,131),QColor(197,90,17),QColor(142,170,219),QColor(47,84,150)};
         auto x_scale = std::min<float>(5.0f,float(x_size)/float(train.cur_epoch+1));
@@ -520,7 +517,7 @@ void MainWindow::training()
     ui->action_train_auto_match_label_files->setEnabled(!train.running);
 
     ui->train_device->setEnabled(!train.running);
-    ui->save_error->setEnabled(!train.error.empty());
+    ui->save_error->setEnabled(!train.test_error.empty());
     ui->training_gif->setEnabled(train.running);
 
 
@@ -534,7 +531,8 @@ void MainWindow::training()
         ui->train_prog->setEnabled(!train.pause);
         ui->train_prog->setMaximum(ui->epoch->value());
         ui->train_prog->setValue(train.cur_epoch+1);
-        ui->train_prog->setFormat(QString( "epoch: %1/%2 error: %3" ).arg(train.cur_epoch).arg(ui->train_prog->maximum()).arg(train.cur_epoch ? std::to_string(train.error[train.cur_epoch-1]).c_str():"pending"));
+        if(!train.test_error.empty())
+            ui->train_prog->setFormat(QString( "epoch: %1/%2 error: %3" ).arg(train.cur_epoch).arg(ui->train_prog->maximum()).arg(train.cur_epoch ? std::to_string(train.test_error[0][train.cur_epoch-1]).c_str():"pending"));
     }
     else
         ui->train_prog->setValue(0);
