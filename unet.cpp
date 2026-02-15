@@ -87,7 +87,7 @@ torch::nn::Sequential UNet3dImpl::ConvBlock(const std::vector<int>& rhs,size_t k
         if(count)
         {
             s->push_back(torch::nn::Conv3d(torch::nn::Conv3dOptions(count, next_count, ks).padding((ks-1)/2)));
-            s->push_back(torch::nn::BatchNorm3d(next_count));
+            s->push_back(torch::nn::InstanceNorm3d(next_count));
             s->push_back(torch::nn::LeakyReLU(torch::nn::LeakyReLUOptions().inplace(true)));
         }
         count = next_count;
