@@ -58,7 +58,6 @@ public:
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
-    bool eventFilter(QObject *obj, QEvent *event) override;
 private slots:
 
     void training(void);
