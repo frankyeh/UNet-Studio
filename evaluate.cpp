@@ -376,7 +376,7 @@ void evaluate_unet::evaluate(void)
                         tipl::image<3,float> subI,result;
                         subsample8(cur_input,subI,i);
                         tipl::out() << "inferencing using u-net at subsample " << i;
-                        auto out = torch::sigmoid(model->forward(torch::from_blob(subI.data(),{1,1,int(subI.depth()),int(subI.height()),int(subI.width())}).to(param.device))[0]);
+                        auto out = model->forward(torch::from_blob(subI.data(),{1,1,int(subI.depth()),int(subI.height()),int(subI.width())}).to(param.device))[0];
                         result.resize(subI.shape().multiply(tipl::shape<3>::z,model->out_count));
                         std::memcpy(result.data(),out.to(torch::kCPU).data_ptr<float>(),result.size()*sizeof(float));
                         for(size_t j = 0;j < model->out_count;++j)
@@ -389,8 +389,8 @@ void evaluate_unet::evaluate(void)
                 else
                 {
                     tipl::out() << "inferencing using u-net";
-                    auto out = torch::sigmoid(model->forward(torch::from_blob(cur_input.data(),
-                                              {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device))[0]);
+                    auto out = model->forward(torch::from_blob(cur_input.data(),
+                                              {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device))[0];
                     std::memcpy(evaluate_output[cur_prog].data(),out.to(torch::kCPU).data_ptr<float>(),evaluate_output[cur_prog].size()*sizeof(float));
                 }
             }
