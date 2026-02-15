@@ -488,7 +488,6 @@ void MainWindow::plot_error()
 
 void MainWindow::training()
 {
-    console.show_output();
     if(!train.running)
         timer->stop();
 
