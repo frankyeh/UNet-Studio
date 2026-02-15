@@ -89,11 +89,6 @@ MainWindow::~MainWindow()
     delete ui;
 }
 extern console_stream console;
-bool MainWindow::eventFilter(QObject *obj, QEvent *event)
-{
-    console.show_output();
-    return false;
-}
 void MainWindow::on_eval_view_dim_currentIndexChanged(int index)
 {
     auto currentRow = ui->evaluate_list->currentRow();
