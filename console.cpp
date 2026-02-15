@@ -8,33 +8,79 @@
 
 console_stream console;
 
-void console_stream::show_output(void)
-{
-    if(!tipl::is_main_thread() || !log_window || !has_output)
-        return;
-    QStringList strSplitted;
-    {
-        std::lock_guard<std::mutex> lock(edit_buf);
-        strSplitted = buf.split("\n");
-        buf = strSplitted.back();
+// Function to map ANSI color codes to Qt colors
+QColor colorFromAnsiCode(int code) {
+    switch (code) {
+        case 31: return QColor(161,67,76);
+        case 32: return QColor(67,161,76);
+        case 33: return QColor(207,151,45);
+        case 34: return QColor(95,168,253);
+        case 35: return QColor(179,137,243);
+        default: return QColor(230,237,243);
     }
-    for(int i = 0; i+1 < strSplitted.size(); i++)
-        log_window->append(strSplitted.at(i));
-    QApplication::processEvents();
-    has_output = false;
 }
-std::basic_streambuf<char>::int_type console_stream::overflow(std::basic_streambuf<char>::int_type v)
+
+// Function to append text to QTextEdit with ANSI color and bold support
+void appendColoredText(QTextEdit &textEdit, const QString &text)
 {
+    QTextCursor cursor = textEdit.textCursor();
+    cursor.movePosition(QTextCursor::End);
+
+    QString currentPart;
+    int endIndex = -1;
+    for(int index = 0;index < text.length();++index)
     {
-        std::lock_guard<std::mutex> lock(edit_buf);
-        buf.push_back(char(v));
+        // Found start of escape sequence, find end of sequence
+        if (text[index] == '\033' && index + 1 < text.length() && text[index + 1] == '[' &&
+            (endIndex = text.indexOf('m', index)) != -1)
+        {
+            if (!currentPart.isEmpty())
+            {
+                cursor.insertText(currentPart);
+                currentPart.clear();
+            }
+
+            // Get the ANSI escape sequence
+            QString escapeSequence = text.mid(index, endIndex - index + 1);
+            QStringList parts = escapeSequence.mid(2, endIndex - index - 2).split(';');
+            if (parts.isEmpty())
+                // Invalid escape sequence, treat as regular text
+                currentPart += text.mid(index, endIndex - index + 1);
+            else
+            {
+                QTextCharFormat format;
+                for (const QString& part : parts)
+                {
+                    int code = part.toInt();
+                    if (code == 1)
+                        format.setFontWeight(QFont::Bold);
+                    else
+                        format.setForeground(colorFromAnsiCode(code));
+                }
+
+                // Move cursor to end and apply format
+                cursor.movePosition(QTextCursor::End);
+                cursor.setCharFormat(format);
+            }
+            // Move index to end of escape sequence
+            index = endIndex;
+            continue;
+
+        }
+        currentPart.push_back(text[index]);// Regular text
     }
 
+    // Append any remaining regular text
+    currentPart.push_back("\n");
+    cursor.insertText(currentPart);
+}
+
+std::basic_streambuf<char>::int_type console_stream::overflow(std::basic_streambuf<char>::int_type v)
+{
+    std::lock_guard<std::mutex> lock(edit_buf);
+    buf.push_back(char(v));
     if (v == '\n')
-    {
         has_output = true;
-        show_output();
-    }
     return v;
 }
 
@@ -52,14 +98,40 @@ Console::Console(QWidget *parent) :
     ui->setupUi(this);
     ui->pwd->setText(QString("[%1]$ ./unet_studio ").arg(QDir().current().absolutePath()));
     console.log_window = ui->console;
-    console.show_output();
-
+    timer = new QTimer(this);
+    connect(timer, SIGNAL(timeout()), this, SLOT(check_msg()));
+    timer->setInterval(1000);
+    timer->start();
 }
 
 Console::~Console()
 {
     console.log_window = nullptr;
     delete ui;
+}
+
+void Console::check_msg(void)
+{
+    if(!console.has_output)
+        return;
+    console.has_output = false;
+    QStringList strSplitted;
+    {
+        std::lock_guard<std::mutex> lock(console.edit_buf);
+        strSplitted = console.buf.split('\n');
+        console.buf = strSplitted.back();
+    }
+
+    QScrollBar *vScrollBar = ui->console->verticalScrollBar();
+    bool shouldAutoScroll = false;
+    if (vScrollBar)// If the scrollbar is not visible, or if its value is at maximum, set auto-scroll flag.
+        shouldAutoScroll = (!vScrollBar->isVisible() || vScrollBar->value() == vScrollBar->maximum());
+
+    for(int i = 0; i+1 < strSplitted.size(); i++)
+        appendColoredText(*(ui->console),strSplitted[i]);
+
+    if (shouldAutoScroll && vScrollBar) // Scroll to bottom after appending text.
+        vScrollBar->setValue(vScrollBar->maximum());
 }
 
 extern tipl::program_option<tipl::out> po;
