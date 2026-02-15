@@ -421,7 +421,7 @@ void train_unet::train(void)
                     for(size_t i = 0;i < test_in_tensor.size();++i)
                     {
                         auto f = output_model->forward(test_in_tensor[i])[0];
-                        mse_error += (test_error[i][cur_epoch] = torch::mse_loss(f.clamp(0.0, 1.0),test_out_tensor[i]).item().toFloat());
+                        mse_error += (test_error[i+1][cur_epoch] = torch::mse_loss(f,test_out_tensor[i]).item().toFloat());
                     }
                     mse_error /= test_in_tensor.size();
                 }
@@ -432,7 +432,7 @@ void train_unet::train(void)
                     each->copy_from(*model);
                 std::mutex m;
                 size_t b = 0;
-                std::vector<float> de_each_model(model_count);
+                std::vector<float> error_each_model(model_count);
                 tipl::par_for(model_count,[&](size_t model_id)
                 {
                     try{
@@ -487,8 +487,9 @@ void train_unet::train(void)
                                             .mode(torch::kTrilinear).align_corners(false));
 
                                     // 2. CREATE Background PROBABILITY MAPS
-                                    auto pred_tissues = outputs[k].clamp(0.0, 1.0);
+                                    //auto pred_tissues = outputs[k].clamp(0.0, 1.0);
 
+                                    /*
                                     // Calculate Background: 1.0 - sum(tissues)
                                     // We clamp to 0-1 to ensure numerical stability
                                     auto pred_bg = (1.0 - pred_tissues.sum(1, true)).clamp(0.0, 1.0);
@@ -507,18 +508,18 @@ void train_unet::train(void)
                                     auto intersection = torch::sum(pred_all * target_all, dims);
                                     auto cardinality = torch::sum(pred_all + target_all, dims);
                                     auto dice = 1.0f - torch::mean((2.f * intersection + 1e-5) / (cardinality + 1e-5));
-
+                                    */
                                     // MSE (Excellent for ReLU regression to target probabilities)
-                                    auto mse = torch::mse_loss(pred_tissues, cur_target_probs);
+                                    auto mse = torch::mse_loss(outputs[k], cur_target_probs);
 
                                     float level_weight = 1.0f / (1 << k);
-                                    auto level_loss = (bce + dice + mse) * level_weight;
+                                    auto level_loss = (mse) * level_weight;
 
                                     if(total_loss.defined()) total_loss += level_loss;
                                     else total_loss = level_loss;
                                 }
                             };
-                            de_each_model[model_id] = total_loss.item().toFloat();
+                            error_each_model[model_id] = total_loss.item().toFloat();
                             total_loss.backward();
                         }
                     }
@@ -545,12 +546,13 @@ void train_unet::train(void)
 
                 {
                     auto out = line;
+                    out[to_chart(test_error[0][cur_epoch] = tipl::mean(error_each_model))] = 'E';
                     out[to_chart(mse_error)] = 'T';
 
                     std::string out2("|epoch:");
                     out2 += std::to_string(cur_epoch);
-                    out2 += " de:";
-                    out2 += std::to_string(tipl::mean(de_each_model));
+                    out2 += " test:";
+                    out2 += std::to_string(test_error[0][cur_epoch]);
                     out2 += " mse:";
                     out2 += std::to_string(mse_error);
                     std::copy(out2.begin(),out2.end(),out.begin());
@@ -631,7 +633,7 @@ void train_unet::start(void)
         tipl::out() << "set network input sizes: " << model->dim << " with resolution:" << model->voxel_size <<std::endl;
     }
 
-    test_error = std::vector<std::vector<float> >(param.test_image_file_name.size());
+    test_error = std::vector<std::vector<float> >(param.test_image_file_name.size() + 1);
     update_epoch_count();
 
     model->to(param.device);
@@ -697,9 +699,6 @@ bool train_unet::save_error_to(const char* file_name)
     std::ofstream out(file_name);
     if(!out || test_error.empty())
         return false;
-    for(size_t j = 0;j < test_error.size();++j)
-        out << "mse_error\t";
-    out << std::endl;
     for(size_t i = 0;i < test_error[0].size() && i < cur_epoch;++i)
     {
         for(size_t j = 0;j < test_error.size();++j)
