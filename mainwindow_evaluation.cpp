@@ -152,7 +152,6 @@ void MainWindow::on_evaluate_clicked()
 
 void MainWindow::evaluating()
 {
-    console.show_output();
     if(!evaluate.running)
         eval_timer->stop();
     if(!evaluate.error_msg.empty())
