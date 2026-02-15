@@ -560,7 +560,7 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),in_count,I1,I2,shape))
             I2.clear();
         if(!is_label)
-            tipl::normalize(I2);
+            tipl::segmentation::normalize_otsu_median(I2);
         if(ui->train_view_transform->isChecked())
         {
             std::unordered_map<std::string,float> options;
