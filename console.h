@@ -3,6 +3,7 @@
 #include <mutex>
 #include <iostream>
 #include <QMainWindow>
+#include <QTimer>
 
 
 class QTextEdit;
@@ -15,7 +16,6 @@ protected:
     virtual int_type overflow(int_type v) override;
     virtual std::streamsize xsputn(const char *p, std::streamsize n) override;
 public:
-    void show_output(void);
     std::mutex edit_buf;
     QString buf;
     QTextEdit* log_window = nullptr;
@@ -44,14 +44,13 @@ class Console : public QMainWindow
 public:
     explicit Console(QWidget *parent = nullptr);
     ~Console();
-
 private slots:
     void on_run_cmd_clicked();
-
     void on_set_dir_clicked();
-
+    void check_msg(void);
 private:
     Ui::Console *ui;
+    QTimer *timer;
 };
 
 
