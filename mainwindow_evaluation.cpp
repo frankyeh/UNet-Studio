@@ -228,10 +228,8 @@ void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
         if(eval_I1_buffer[currentRow].empty())
         {
             tipl::vector<3> vs;
-            tipl::io::gz_nifti in;
-            if(!in.open(evaluate_list[currentRow].toStdString(),std::ios::in))
+            if(!(tipl::io::gz_nifti(evaluate_list[currentRow].toStdString(),std::ios::in) >> std::tie(eval_I1_buffer[currentRow],vs)))
                 return;
-            in >> eval_I1_buffer[currentRow];
             eval_I1_buffer_max[currentRow] = tipl::max_value(eval_I1_buffer[currentRow]);
         }
         ui->eval_image_max->setMaximum(eval_I1_buffer_max[currentRow]);
@@ -281,15 +279,15 @@ void MainWindow::get_evaluate_views(QImage& view1,QImage& view2,float display_ra
         auto eval_output_count = eval_I2.depth()/evaluate.raw_image_shape[currentRow][2];
         eval_v2c2.set_range(0,1);
         if(evaluate.is_label[currentRow] && eval_output_count == 1)
-            eval_v2c2.set_range(0,evaluate.model->out_count);
+            eval_v2c2.set_range(0,evaluate.model->out_count-1);
         if(evaluate.is_label[currentRow] && eval_output_count >= 1)
             label_on_images(view1,display_ratio,
                             eval_I2,
                             evaluate.raw_image_shape[currentRow],
                             d,
                             slice_pos,
-                            evaluate.model->out_count,
-                            evaluate.model->out_count);
+                            evaluate.model->out_count-1,
+                            evaluate.model->out_count-1);
 
         ui->eval_label_slider->setMaximum(eval_output_count-1);
         ui->eval_label_slider->setVisible(eval_output_count > 1);
