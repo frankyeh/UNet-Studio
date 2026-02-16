@@ -35,7 +35,7 @@ public:
 public:
     QStringList image_list,label_list;
     std::vector<size_t> image_last_added_indices;
-    std::vector<std::vector<size_t> > relations;
+
 
     void update_list(void);
 public: //evalute
@@ -124,7 +124,6 @@ private slots:
     void on_action_evaluate_copy_all_left_view_cropped_triggered();
     void on_action_train_reorder_output_triggered();
     void on_action_train_copy_all_view_triggered();
-    void on_actionAdd_Relation_triggered();
     void on_actionApply_Label_Weights_triggered();
 };
 #endif // MAINWINDOW_H
