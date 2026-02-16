@@ -432,6 +432,6 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
     }
     catch(std::runtime_error& error)
     {
-        tipl::out() << "ERROR: " << error.what() << std::endl;
+        tipl::error() << error.what() << std::endl;
     }
 }
