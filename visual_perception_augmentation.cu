@@ -532,7 +532,7 @@ bool visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& 
     }
     catch(std::runtime_error& error)
     {
-        tipl::out() << "ERROR: " << error.what() << std::endl;
+        tipl::error() << error.what() << std::endl;
         return false;
     }
     if(cudaSetDevice(0) != cudaSuccess)
