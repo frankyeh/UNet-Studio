@@ -85,21 +85,6 @@ void MainWindow::on_action_save_training_setting_triggered()
 
 }
 
-void MainWindow::on_actionAdd_Relation_triggered()
-{
-    auto relation_str = QInputDialog::getText(this,"","Please Specify Related Labels",QLineEdit::Normal,"0 1 2 3 4");
-    if(relation_str.isEmpty())
-        return;
-    std::istringstream in(relation_str.toStdString());
-    std::vector<size_t> relation((std::istream_iterator<int>(in)),std::istream_iterator<int>());
-    if(relation.size() < 2 || tipl::max_value(relation) >= out_count)
-    {
-        QMessageBox::critical(this,"ERROR","Invalid Relation");
-        return;
-    }
-    relations.push_back(relation);
-    update_list();
-}
 
 void MainWindow::update_list(void)
 {
@@ -115,15 +100,6 @@ void MainWindow::update_list(void)
         item->setCheckState(Qt::Checked);
 
         auto label_text = QFileInfo(label_list[i]).fileName();
-        if(!relations.empty())
-        {
-            for(const auto& each: relations)
-            {
-                label_text += ".r";
-                for(const auto& v: each)
-                    label_text += QString::number(v);
-            }
-        }
         ui->list2->addItem(label_list[i].isEmpty() ? QString("(to be assigned)") : label_text);
         ready_to_train = true;
     }
@@ -154,10 +130,10 @@ void MainWindow::on_action_train_open_files_triggered()
     if (fileNames.isEmpty())
         return;
     {
-         tipl::io::gz_nifti nii;
-         if(!nii.open(fileNames[0].toStdString(),std::ios::in))
+         tipl::io::gz_nifti nii(fileNames[0].toStdString(),std::ios::in);
+         if(!nii)
          {
-             QMessageBox::critical(this,"ERROR","Cannot read the NIFTI file");
+             QMessageBox::critical(this,"ERROR",nii.error_msg.c_str());
              return;
          }
          in_count = nii.dim(4);    
@@ -177,11 +153,11 @@ void MainWindow::on_action_train_open_files_triggered()
 
 bool get_label_info(const std::string& label_name,std::vector<int>& out_count,bool& is_label)
 {
-    tipl::io::gz_nifti nii;
-    if(!nii.open(label_name,std::ios::in))
+    tipl::io::gz_nifti nii(label_name,std::ios::in);
+    if(!nii)
         return false;
     if(nii.dim(4) != 1)
-        out_count.resize(nii.dim(4));
+        out_count.resize(nii.dim(4)+1);
     if(nii.is_integer())
     {
         is_label = true;
@@ -189,10 +165,9 @@ bool get_label_info(const std::string& label_name,std::vector<int>& out_count,bo
         {
             tipl::image<3,short> labels;
             nii >> labels;
-            out_count.resize(tipl::max_value(labels));
+            out_count.resize(tipl::max_value(labels)+1);
             for(size_t i = 0;i < labels.size();++i)
-                if(labels[i])
-                    out_count[labels[i]-1]++;
+                out_count[labels[i]]++;
         }
     }
     else
@@ -201,10 +176,9 @@ bool get_label_info(const std::string& label_name,std::vector<int>& out_count,bo
         nii >> labels;
         is_label = tipl::is_label_image(labels);
         if(nii.dim(4) == 1)
-            out_count.resize(is_label ? tipl::max_value(labels) : 1);
+            out_count.resize(is_label ? tipl::max_value(labels)+1 : 1);
         for(size_t i = 0;i < labels.size();++i)
-            if(labels[i] != 0.0f)
-                out_count[int(labels[i])-1]++;
+            out_count[int(labels[i])]++;
     }
 
     if(out_count.size() > 128)
@@ -261,7 +235,6 @@ void MainWindow::on_action_train_clear_all_triggered()
 {
     image_list.clear();
     label_list.clear();
-    relations.clear();
     in_count = out_count = 1;
     is_label = true;
     update_list();
@@ -368,7 +341,6 @@ void MainWindow::on_train_start_clicked()
     train.param.learning_rate = ui->learning_rate->value();
     train.param.epoch = ui->epoch->value();
     train.param.is_label = is_label;
-    train.param.relations = relations;
 
     train.param.options.clear();
     for(auto& each : option->treemodel->name_data_mapping)
@@ -376,7 +348,6 @@ void MainWindow::on_train_start_clicked()
 
     if(train.running)
     {
-        train.update_epoch_count();
         train.pause = !train.pause;
         return;
     }
@@ -438,46 +409,101 @@ void MainWindow::on_train_stop_clicked()
 
 void MainWindow::plot_error()
 {
-    if(train.cur_epoch > 1)
+    if(train.cur_epoch > 1 && train.running && !train.pause)
     {
         size_t x_size = ui->error_x_size->value();
         size_t y_size = ui->error_y_size->value();
+        auto x_scale = std::min<float>(5.0f, float(x_size) / float(train.cur_epoch + 1));
         const int left_border = 40;
+        const int right_border = 60; // Space for error names
         const int upper_border = 10;
-        QImage image(x_size+left_border+5,y_size+upper_border+20,QImage::Format_RGB32);
+
+        x_size = std::max<size_t>(x_size,ui->error_view->width()-left_border-right_border-5);
+        QImage image(x_size + left_border + right_border, y_size + upper_border + 20, QImage::Format_RGB32);
         QPainter painter(&image);
+        painter.setRenderHint(QPainter::Antialiasing, true);
         painter.fillRect(image.rect(), Qt::white);
+
+        // Background Grid
         painter.setPen(QPen(Qt::gray, 2));
-        painter.drawRect(left_border,upper_border + y_size/4, x_size,y_size/2);
-        painter.drawLine(left_border,upper_border + y_size/2,left_border + x_size,upper_border + y_size/2);
-        painter.drawText(QRect(0,upper_border-8,left_border-4,16), Qt::AlignRight,"1");
-        painter.drawText(QRect(0,upper_border-8+y_size/4,left_border-4,16), Qt::AlignRight,"0.1");
-        painter.drawText(QRect(0,upper_border-8+y_size/2,left_border-4,16), Qt::AlignRight,"0.01");
-        painter.drawText(QRect(0,upper_border-8+y_size*3/4,left_border-4,16), Qt::AlignRight,"0.001");
-        painter.drawText(QRect(0,upper_border-8+y_size,left_border-4,16), Qt::AlignRight,"0.0001");
-        painter.drawText(left_border + x_size/2-16,upper_border+y_size+16,"Epoch");
-        painter.setPen(QPen(Qt::red, 2));
+        painter.drawRect(left_border, upper_border + y_size/3, x_size, y_size/3);
+
+        painter.setPen(Qt::black);
+        painter.drawText(QRect(0, upper_border-8, left_border-4, 16), Qt::AlignRight, "1");
+        painter.drawText(QRect(0, upper_border-8 + y_size/3, left_border-4, 16), Qt::AlignRight, "0.1");
+        painter.drawText(QRect(0, upper_border-8 + y_size*2/3, left_border-4, 16), Qt::AlignRight, "0.01");
+        painter.drawText(QRect(0, upper_border-8 + y_size, left_border-4, 16), Qt::AlignRight, "0.001");
+        painter.drawText(left_border + x_size/2-16, upper_border + y_size + 16, "Epoch");
+
+
+
+        // Vertical Epoch Lines
+        {
+            auto x_interval_100 = 100.0f * x_scale;
+            auto x_interval_500 = 500.0f * x_scale;
+
+            for (size_t j = 100; ; j += 100) {
+                float x = float(j) * x_scale + left_border;
+
+                // Strictly prevent drawing outside the horizontal plot area
+                if (x >= left_border + x_size) break;
+
+                bool is_500 = (j % 500 == 0);
+                if ((!is_500 && x_interval_100 < 50.0f) || (is_500 && x_interval_500 < 50.0f))
+                    continue;
+
+                painter.setPen(QPen(is_500 ? Qt::darkGray : Qt::gray, 1, Qt::DashLine));
+                painter.drawLine(QPointF(x, upper_border), QPointF(x, upper_border + y_size));
+
+                painter.setPen(Qt::black);
+                painter.drawText(QRectF(x - 20, upper_border + y_size + 2, 40, 14),
+                                 Qt::AlignCenter, QString::number(j));
+            }
+        }
 
         painter.setPen(QPen(Qt::black, 2));
-        painter.drawRect(left_border,upper_border,x_size ,y_size);
+        painter.drawRect(left_border, upper_border, x_size, y_size);
 
-        std::vector<std::vector<float> > all_errors;
-        for(size_t i = 0;i < train.test_error.size();++i)
-            all_errors.push_back(std::vector<float>(train.test_error[i].begin(),train.test_error[i].begin()+train.cur_epoch));
+        std::vector<std::vector<float>> all_errors(train.test_error);
+        std::vector<QColor> colors = {QColor(244,177,131), QColor(197,90,17), QColor(142,170,219), QColor(47,84,150)};
 
-        std::vector<QColor> colors = {QColor(0,0,0),QColor(244,177,131),QColor(197,90,17),QColor(142,170,219),QColor(47,84,150)};
-        auto x_scale = std::min<float>(5.0f,float(x_size)/float(train.cur_epoch+1));
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        for(size_t i = 0;i < all_errors.size() && i < colors.size();++i)
+        for(size_t i = 0; i < all_errors.size() && i < colors.size(); ++i)
         {
-            if(all_errors[i].empty())
-                continue;
+            if(all_errors[i].empty()) continue;
             QVector<QPointF> points;
-            for(size_t j = 0;j < all_errors[i].size();++j)
-                points << QPointF(float(j)*x_scale+left_border,-std::log10(all_errors[i][j])*y_size/4.0f+upper_border);
+            float last_y = 0;
+            for(size_t j = 0; j < all_errors[i].size(); ++j) {
+                last_y = -std::log10(all_errors[i][j]) * y_size / 3.0f + upper_border;
+                points << QPointF(float(j) * x_scale + left_border, last_y);
+            }
 
-            painter.setPen(QPen(colors[i],1.5f));
+            painter.setPen(QPen(colors[i], 1.5f));
             painter.drawPolyline(points);
+
+            // Draw line name at the end position
+            if (i < train.test_error_name.size()) {
+                float last_x = points.back().x();
+                // Draw text only if the line is near the right boundary or it's the latest data
+                painter.drawText(last_x + 3, last_y + 5, QString::fromStdString(train.test_error_name[i]));
+            }
+        }
+
+        // QTextBrowser update logic remains the same
+        {
+            int scrollPos = ui->errorBrowser->verticalScrollBar()->value();
+            QTextCursor cursor = ui->errorBrowser->textCursor();
+            QStringList rows;
+            rows << QString::fromStdString("epoch\t" + tipl::merge(train.test_error_name, '\t'));
+            for(size_t i = 0; i < all_errors[0].size(); ++i) {
+                QStringList cols;
+                cols << QString::number(i);
+                for(size_t j = 0; j < all_errors.size(); ++j)
+                    cols << QString::number(all_errors[j][i]);
+                rows << cols.join('\t');
+            }
+            ui->errorBrowser->setText(rows.join('\n'));
+            ui->errorBrowser->setTextCursor(cursor);
+            ui->errorBrowser->verticalScrollBar()->setValue(scrollPos);
         }
 
         error_view_epoch = train.cur_epoch;
@@ -531,7 +557,7 @@ void MainWindow::training()
         ui->train_prog->setMaximum(ui->epoch->value());
         ui->train_prog->setValue(train.cur_epoch+1);
         if(!train.test_error.empty())
-            ui->train_prog->setFormat(QString( "epoch: %1/%2 error: %3" ).arg(train.cur_epoch).arg(ui->train_prog->maximum()).arg(train.cur_epoch ? std::to_string(train.test_error[0][train.cur_epoch-1]).c_str():"pending"));
+            ui->train_prog->setFormat(QString( "epoch: %1/%2 error: %3" ).arg(train.cur_epoch).arg(ui->train_prog->maximum()).arg(train.cur_epoch ? std::to_string(train.test_error[0].back()).c_str():"pending"));
     }
     else
         ui->train_prog->setValue(0);
@@ -546,7 +572,6 @@ void MainWindow::training()
         ui->statusbar->showMessage((train.get_status() + "|" + train.reading_status+"/"+train.augmentation_status+"/"+train.training_status).c_str());
 }
 
-std::vector<size_t> get_label_count(const tipl::image<3>& label,size_t out_count);
 void MainWindow::on_list1_currentRowChanged(int currentRow)
 {
     if(ui->list2->currentRow() != currentRow)
