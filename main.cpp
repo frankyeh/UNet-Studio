@@ -19,7 +19,7 @@ int run_cmd(void)
         return 1;
     if(!po.has("network"))
     {
-        tipl::out() << "ERROR: please specify --network";
+        tipl::error() << "please specify --network";
         return 1;
     }
 
