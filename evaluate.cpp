@@ -183,7 +183,7 @@ void postproc_actions(const std::string& command,
     if(command =="soft_max")
     {
         float soft_min_prob = param1;
-        tipl::adaptive_par_for(dim.size(),[&](size_t pos)
+        tipl::par_for(dim.size(),[&](size_t pos)
         {
             float m = 0.0f;
             for(size_t i = pos;i < this_image.size();i += dim.size())
@@ -204,7 +204,7 @@ void postproc_actions(const std::string& command,
     if(command =="to_3d_label")
     {
         tipl::image<3> I(dim);
-        tipl::adaptive_par_for(dim.size(),[&](size_t pos)
+        tipl::par_for(dim.size(),[&](size_t pos)
         {
             for(size_t i = pos,label = 1;i < this_image.size();i += dim.size(),++label)
                 if(this_image[i])
@@ -217,7 +217,7 @@ void postproc_actions(const std::string& command,
         is_label = true;
         return;
     }
-    tipl::out() << "ERROR: unknown command " << command << std::endl;
+    tipl::error() << "unknown command " << command << std::endl;
 }
 
 template<typename T, typename U>
@@ -262,14 +262,12 @@ void evaluate_unet::read_file(void)
         tipl::vector<3> template_image_vs;
         if(proc_strategy.match_resolution && !proc_strategy.template_file_name.empty())
         {
-            tipl::io::gz_nifti in;
-            if(in.open(proc_strategy.template_file_name,std::ios::in))
+            if(!(tipl::io::gz_nifti(proc_strategy.template_file_name,std::ios::in) >> std::tie(template_image,template_image_vs)))
             {
-                in >> template_image;
-                in.get_voxel_size(template_image_vs);
+                tipl::error() << (error_msg = "cannot read template file: " + proc_strategy.template_file_name);
+                aborted = true;
+                return;
             }
-            else
-                tipl::out() << "cannot read template file: " << proc_strategy.template_file_name << std::endl;
         }
         for(size_t i = 0;i < evaluate_input.size() && !aborted;++i)
         {
@@ -281,9 +279,9 @@ void evaluate_unet::read_file(void)
                     return;
                 status = "evaluating";
             }
-            tipl::out() << "reading " << param.image_file_name[i] << std::endl;
-            tipl::io::gz_nifti in;
-            if(!in.open(param.image_file_name[i],std::ios::in))
+            tipl::out() << "reading " << param.image_file_name[i];
+            tipl::io::gz_nifti in(param.image_file_name[i],std::ios::in);
+            if(!in)
             {
                 error_msg = in.error_msg;
                 aborted = true;
@@ -291,14 +289,12 @@ void evaluate_unet::read_file(void)
             }
             if(in.dim(4) != model->in_count)
             {
-                error_msg = param.image_file_name[i];
-                error_msg += " has inconsistent input channel";
+                error_msg = param.image_file_name[i] + " has inconsistent input channel";
                 aborted = true;
                 return;
             }
             tipl::image<3> raw_image;
-            in >> raw_image;
-            in.get_voxel_size(raw_image_vs[i]);
+            in >> std::tie(raw_image,raw_image_vs[i]);
             raw_image_flip_swap[i] = in.flip_swap_seq;
             raw_image_shape[i] = raw_image.shape();
 
@@ -318,8 +314,7 @@ void evaluate_unet::read_file(void)
                     auto image = evaluate_input[i].alias(c*raw_image_shape[i].size(),raw_image_shape[i]);
                     if(!(in >> image))
                     {
-                        error_msg = param.image_file_name[i];
-                        error_msg += " reading failed";
+                        error_msg = param.image_file_name[i] + " reading failed";
                         aborted = true;
                         return;
                     }
@@ -416,49 +411,6 @@ void evaluate_unet::proc_actions(const char* cmd,float param1,float param2)
                  is_label[cur_output]);
 }
 
-template<typename T,typename U,typename V>
-inline void postproc_actions_Knn(T& label_prob,
-                             T& fg_prob,
-                             const U& eval_input,
-                             const U& eval_output,
-                             const V& raw_image,
-                             tipl::transformation_matrix<float,3> trans,
-                             size_t model_out_count,float prob_threshold)
-{
-    tipl::shape<3> dim_from(eval_output.shape().divide(tipl::shape<3>::z,model_out_count)),
-                   dim_to(raw_image.shape());
-    label_prob.resize(dim_to.multiply(tipl::shape<3>::z,model_out_count));
-    trans.inverse();
-    tipl::par_for(model_out_count,[&](int i)
-    {
-        auto from_out = eval_output.alias(dim_from.size()*i,dim_from);
-        auto to = label_prob.alias(dim_to.size()*i,dim_to);
-        for(tipl::pixel_index<3> index(dim_to);index < dim_to.size();++index)
-        {
-            auto cur_v = dim_to[index.index()];
-            tipl::vector<3> pos;
-            trans(index,pos);
-            pos.round();
-            auto input = tipl::get_window(tipl::pixel_index<3>(pos[0],pos[1],pos[2],eval_input.shape()),eval_input,2);
-            for(auto& each : input)
-                each = std::fabs(each-cur_v);
-            auto output = tipl::get_window(tipl::pixel_index<3>(pos[0],pos[1],pos[2],from_out.shape()),from_out,2);
-            std::vector<size_t> p(input.size());
-            std::iota(p.begin(), p.end(), 0);
-            std::sort(p.begin(), p.end(),[&](size_t i, size_t j){ return input[i] < input[j]; });
-            std::vector<float> sorted_output(p.size());
-            for (size_t i = 0; i < p.size(); ++i)
-                sorted_output[i] = output[p[i]];
-            to[index.index()] = tipl::mean(sorted_output.begin(),
-                                           sorted_output.begin() + std::min<size_t>(sorted_output.size()/2,5));
-        }
-        tipl::preserve(to.begin(),to.end(),raw_image.begin());
-
-    },model_out_count);
-    auto I = tipl::make_image(label_prob.data(),dim_to.expand(label_prob.depth()/dim_to[2]));
-    fg_prob = tipl::ml3d::defragment4d(I,prob_threshold);
-}
-
 void evaluate_unet::output(void)
 {
     label_prob = std::vector<tipl::image<3> >(param.image_file_name.size());
@@ -486,15 +438,23 @@ void evaluate_unet::output(void)
                 }
                 if(evaluate_output[cur_output].empty())
                     continue;
+                const auto& cur_shape = raw_image_shape[cur_output];
+                auto& cur_label_prob = label_prob[cur_output];
 
-                tipl::ml3d::postproc_actions(label_prob[cur_output],
+                tipl::ml3d::postproc_actions(cur_label_prob,
                                              evaluate_output[cur_output],
-                                             raw_image_shape[cur_output],
+                                             cur_shape,
                                              raw_image_trans[cur_output],
                                              model->out_count,!proc_strategy.match_fov && !proc_strategy.match_resolution);
 
-                auto label_prob_4d = tipl::make_image(label_prob[cur_output].data(),raw_image_shape[cur_output].expand(model->out_count));
-                foreground_prob[cur_output] = tipl::ml3d::defragment4d(label_prob_4d,param.prob_threshold);
+
+                // compute forground probability
+                auto& cur_forground_prob = foreground_prob[cur_output];
+                cur_forground_prob = tipl::make_image(cur_label_prob.data(),cur_shape);
+                tipl::upper_lower_threshold(cur_forground_prob.begin(),cur_forground_prob.end(),0.0f,1.0f);
+                tipl::negate(cur_forground_prob.begin(),cur_forground_prob.end(),1.0f);
+                tipl::morphology::defragment_by_threshold(cur_forground_prob,param.prob_threshold);
+                tipl::filter::gaussian(cur_forground_prob);
 
                 if(aborted)
                     return;
@@ -503,30 +463,49 @@ void evaluate_unet::output(void)
                 switch(proc_strategy.output_format)
                 {
                     case 0: // 3D label
+                        {
+                            // remove background channel
+                            {
+                                size_t new_total_size = cur_shape.size()*(model->out_count-1);
+                                size_t shift = cur_shape.size();
+                                for(size_t i = 0;i < new_total_size;++i)
+                                    cur_label_prob[i] = cur_label_prob[i + shift];
+                                cur_label_prob.resize(cur_shape.multiply(tipl::shape<3>::z,model->out_count-1));
+                            }
+                            // adjust tissue prob
+                            tipl::image<3> tissue_prob(cur_shape);
+                            tipl::sum_partial(tipl::make_image(cur_label_prob.data(),cur_shape.expand(model->out_count-1)),tissue_prob);
+
+                            for(size_t label = 0; label < model->out_count-1;++label)
+                            {
+                                auto I = tipl::make_image(cur_label_prob.data() + cur_shape.size()*label,cur_shape);
+                                for(size_t pos = 0;pos < I.size();++pos)
+                                    if(tissue_prob[pos] != 0.0f)
+                                        I[pos] *= cur_forground_prob[pos]/tissue_prob[pos];
+                            }
+
+                        }
                         proc_actions("soft_max",param.prob_threshold);
                         proc_actions("to_3d_label");
                     break;
                     case 2: // skull strip
                         {
                             tipl::image<3> I;
-                            tipl::io::gz_nifti in;
-                            tipl::image<3> foreground_mask;
-                            tipl::threshold(foreground_prob[cur_output],foreground_mask,param.prob_threshold,1,0);
-                            tipl::filter::gaussian(foreground_mask);
-
-                            if(in.open(param.image_file_name[cur_output],std::ios::in))
+                            if(!(tipl::io::gz_nifti(param.image_file_name[cur_output],std::ios::in) >> I))
                             {
-                                in >> I;
-                                for(size_t pos = 0;pos < I.size() && pos < foreground_mask.size();++pos)
-                                    I[pos] *= foreground_mask[pos];
+                                tipl::error() << "cannot read image file:" << param.image_file_name[cur_output];
+                                label_prob[cur_output].clear();
+                                break;
                             }
+                            for(size_t pos = 0;pos < I.size() && pos < cur_forground_prob.size();++pos)
+                                I[pos] *= cur_forground_prob[pos];
                             tipl::normalize(I);
                             label_prob[cur_output].swap(I);
                         }
                     break;
                     case 3: // mask
-                        label_prob[cur_output] = foreground_prob[cur_output];
-                        tipl::upper_threshold(label_prob[cur_output],param.prob_threshold);
+                        label_prob[cur_output] = cur_forground_prob;
+                        tipl::upper_threshold(label_prob[cur_output].begin(),label_prob[cur_output].end(),param.prob_threshold);
                         tipl::filter::gaussian(label_prob[cur_output]);
                         tipl::normalize(label_prob[cur_output]);
                     break;
@@ -545,7 +524,8 @@ void evaluate_unet::output(void)
         catch(...)
         {
         }
-        tipl::out() << error_msg << std::endl;
+        if(!error_msg.empty())
+            tipl::error() << error_msg;
         aborted = true;
         status = "complete";
     };
@@ -670,7 +650,7 @@ int eval(void)
             return 1;
         if(!po.get_files("source",eval.param.image_file_name))
         {
-            tipl::out() << "ERROR: " << eval.error_msg;
+            tipl::error() << eval.error_msg;
             return 1;
         }
     }
@@ -679,13 +659,13 @@ int eval(void)
     {
         if(!std::filesystem::exists(network))
         {
-            tipl::out() << "ERROR: cannot find the network file " << network;
+            tipl::error() << "cannot find the network file " << network;
             return 1;
         }
         tipl::out() << "loading network " << network;
         if(!load_from_file(eval.model,network.c_str()))
         {
-            tipl::out() << "ERROR: failed to load model from " << network;
+            tipl::error() << "failed to load model from " << network;
             return 1;
         }
         tipl::out() << eval.model->get_info();
@@ -708,7 +688,7 @@ int eval(void)
     }
     if(!eval.error_msg.empty())
     {
-        tipl::out() << "ERROR: " << eval.error_msg;
+        tipl::error() << eval.error_msg;
         return 1;
     }
     {
@@ -718,7 +698,7 @@ int eval(void)
             auto file_name = eval.param.image_file_name[i] + ".result.nii.gz";
             tipl::out() << "save to " << file_name;
             if(!eval.save_to_file(i,file_name.c_str()))
-                tipl::out() << "ERROR: " << eval.error_msg;
+                tipl::error() << eval.error_msg;
         }
     }
 
