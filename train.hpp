@@ -10,7 +10,6 @@
 struct training_param{
     std::vector<std::string> image_file_name,test_image_file_name;
     std::vector<std::string> label_file_name,test_label_file_name;
-    std::vector<std::vector<size_t> > relations;
     std::vector<float> subject_label_weight;
     int batch_size = 8;
     int epoch = 4000;
@@ -55,7 +54,7 @@ public:
 private:
     std::vector<tipl::image<3> > train_image,train_label;
     std::vector<bool> train_image_is_template;
-    std::vector<torch::Tensor> test_in_tensor,test_out_tensor,test_out_mask;
+    std::vector<torch::Tensor> test_in_tensor,test_out_tensor;
     bool test_data_ready = false;
     std::shared_ptr<std::thread> read_images;
 private:
@@ -75,17 +74,16 @@ private:
     void train(void);
 public:
     size_t cur_epoch = 0;
+    std::vector<std::string> test_error_name;
     std::vector<std::vector<float> > test_error;
-    void update_epoch_count();
+    std::mutex error_mutex;
     bool save_error_to(const char* file_name);
     std::string get_status(void);
 private:
-    UNet3d output_model;
-    bool need_output_model = false;
+    UNet3d test_model;
 public:
-    UNet3d& get_model(void);
-public:
-    UNet3d model;
+    std::mutex output_model_mutex;
+    UNet3d model,output_model;
     std::vector<UNet3d> other_models;
     ~train_unet(void)
     {
