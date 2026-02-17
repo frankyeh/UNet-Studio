@@ -254,8 +254,8 @@ void MainWindow::on_action_train_new_network_triggered()
         return;
     }
     auto feature = QInputDialog::getText(this,"","Please Specify Network Structure",QLineEdit::Normal,
-                                         out_count <= 6 ? "8x8+16x16+32x32+64x64+128x128" :
-                                         (out_count <= 10 ? "16x16+32x32+64x64+128x128+128x128" : "32x32+64x64+128x128+128x128+256x256"));
+                                         out_count <= 4 ? "8x8+16x16+32x32+64x64+128x128" :
+                                         (out_count <= 8 ? "16x16+32x32+64x64+128x128+128x128" : "32x32+64x64+128x128+128x128+256x256"));
     if(feature.isEmpty())
         return;
     torch::manual_seed(0);
@@ -293,7 +293,8 @@ void MainWindow::on_action_train_save_network_triggered()
     QString fileName = QFileDialog::getSaveFileName(this,"Save network file",
                                                 settings.value("network_dir").toString() + "/" +
                                                 train_name + ".net.gz","Network files (*net.gz);;All files (*)");
-    if(!fileName.isEmpty() && save_to_file(train.get_model(),fileName.toStdString().c_str()))
+    std::scoped_lock<std::mutex> lock(train.output_model_mutex);
+    if(!fileName.isEmpty() && save_to_file(train.output_model,fileName.toStdString().c_str()))
     {
         QMessageBox::information(this,"","Network Saved");
         settings.setValue("network_dir",QFileInfo(fileName).absolutePath());
@@ -409,7 +410,7 @@ void MainWindow::on_train_stop_clicked()
 
 void MainWindow::plot_error()
 {
-    if(train.cur_epoch > 1 && train.running && !train.pause)
+    if(train.cur_epoch > 1)
     {
         size_t x_size = ui->error_x_size->value();
         size_t y_size = ui->error_y_size->value();
@@ -489,6 +490,7 @@ void MainWindow::plot_error()
         }
 
         // QTextBrowser update logic remains the same
+        if(error_view_epoch != train.cur_epoch)
         {
             int scrollPos = ui->errorBrowser->verticalScrollBar()->value();
             QTextCursor cursor = ui->errorBrowser->textCursor();
