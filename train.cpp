@@ -6,41 +6,6 @@ bool load_from_file(UNet3d& model,const char* file_name);
 bool save_to_file(UNet3d& model,const char* file_name);
 using namespace std::chrono_literals;
 
-void preprocess_label(UNet3d& model,tipl::image<3>& train_label,const training_param& param)
-{
-    if(param.relations.empty())
-    {
-        tipl::expand_label_to_dimension(train_label,model->out_count);
-        return;
-    }
-
-    tipl::image<3> relation_map(model->dim.multiply(tipl::shape<3>::z,model->out_count));
-    for(const auto& each_relation : param.relations)
-    {
-        std::vector<char> relation_mask(model->out_count+1);
-        std::vector<size_t> relation_pose;
-        for(auto v : each_relation)
-        {
-            relation_mask[v+1] = 1;
-            relation_pose.push_back(v*model->dim.size());
-        }
-        float added_weight = 0.5f/float(param.
-                                        relations.size());
-        for(size_t i = 0;i < train_label.size();++i)
-        {
-            int label = int(train_label[i]);
-            if(!label || !relation_mask[label])
-                continue;
-            for(auto p : relation_pose)
-                relation_map[p+i] += added_weight;
-        }
-    }
-
-    tipl::expand_label_to_dimension(train_label,model->out_count);
-
-    for(size_t i = 0;i < train_label.size();++i)
-        train_label[i] = std::max<float>(relation_map[i],train_label[i]);
-}
 
 bool read_image_and_label(const std::string& image_name,
                           const std::string& label_name,
@@ -51,8 +16,8 @@ bool read_image_and_label(const std::string& image_name,
 {
     tipl::matrix<4,4,float> image_t((tipl::identity_matrix()));
     {
-        tipl::io::gz_nifti nii;
-        if(!nii.open(image_name,std::ios::in) || nii.dim(4) != in_count)
+        tipl::io::gz_nifti nii(image_name,std::ios::in);
+        if(!nii || nii.dim(4) != in_count)
             return false;
         nii.get_image_dimension(image_shape);
         if(image_shape.size() > 256*256*196)
@@ -66,8 +31,8 @@ bool read_image_and_label(const std::string& image_name,
         nii >> image_t;
     }
 
-    tipl::io::gz_nifti nii;
-    if(!nii.open(label_name,std::ios::in))
+    tipl::io::gz_nifti nii(label_name,std::ios::in);
+    if(!nii)
         return false;
     label.clear();
     label.resize(image_shape);
@@ -88,18 +53,6 @@ bool read_image_and_label(const std::string& image_name,
 }
 
 
-std::vector<size_t> get_label_count(const tipl::image<3>& label,size_t out_count)
-{
-    std::vector<size_t> sum(out_count);
-    for(size_t i = 0;i < label.size();++i)
-        if(label[i])
-        {
-            auto v = label[i]-1;
-            if(v < out_count)
-                ++sum[v];
-        }
-    return sum;
-}
 void preprocessing(tipl::image<3>& image,tipl::image<3>& label,tipl::shape<3> from_dim,tipl::shape<3> to_dim)
 {
     if(from_dim != to_dim)
@@ -139,7 +92,6 @@ void train_unet::read_file(void)
     test_data_ready = false;
     test_in_tensor.clear();
     test_out_tensor.clear();
-    test_out_mask.clear();
 
     // read training data
     read_images.reset(new std::thread([=]()
@@ -150,11 +102,10 @@ void train_unet::read_file(void)
             {
                 reading_status = "checking ";
                 reading_status += param.image_file_name[i];
-                tipl::io::gz_nifti in;
-                if(!in.open(param.image_file_name[i].c_str(),std::ios::in))
+                tipl::io::gz_nifti in(param.image_file_name[i].c_str(),std::ios::in);
+                if(!in)
                 {
-                    error_msg = "invalid NIFTI file: ";
-                    error_msg += param.image_file_name[i];
+                    error_msg = in.error_msg;
                     aborted = true;
                     return;
                 }
@@ -211,26 +162,15 @@ void train_unet::read_file(void)
 
 
                 if(model->out_count > 1)
-                    preprocess_label(model,input_label,param);
+                    tipl::expand_label_to_dimension(input_label,model->out_count,false);
                 else
                     tipl::normalize(input_label);
-
-                tipl::image<3,char> mask(model->dim.multiply(tipl::shape<3>::z,model->out_count));
-                {
-                    auto I = mask.alias(0,model->dim);
-                    tipl::threshold(input_label,I,0);
-                    for(size_t i = 1;i < model->out_count;++i)
-                        std::copy(mask.begin(),mask.begin()+model->dim.size(),mask.begin()+model->dim.size()*i);
-                }
-
 
                 try{
                 test_in_tensor.push_back(torch::from_blob(input_image.data(),
                     {1,model->in_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device));
                 test_out_tensor.push_back(torch::from_blob(input_label.data(),
                     {1,model->out_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device));
-                test_out_mask.push_back(torch::from_blob(mask.data(),
-                    {1,model->out_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])},torch::kUInt8).to(param.device));
                 }
                 catch(const c10::Error& error)
                 {
@@ -337,7 +277,7 @@ void train_unet::read_file(void)
 
                 visual_perception_augmentation(param.options,in_data_thread,out_data_thread,param.is_label,model->dim,seed);
                 if(model->out_count > 1)
-                    preprocess_label(model,out_data_thread,param);
+                    tipl::expand_label_to_dimension(out_data_thread,model->out_count,false);
 
                 while(data_ready[thread] || pause)
                 {
@@ -356,11 +296,6 @@ void train_unet::read_file(void)
     }));
 }
 
-void train_unet::update_epoch_count()
-{
-    for(auto& each : test_error)
-        each.resize(param.epoch);
-}
 std::string train_unet::get_status(void)
 {
     std::string s1,s2;
@@ -376,6 +311,32 @@ std::string train_unet::get_status(void)
 
 void train_unet::train(void)
 {
+    auto calc_losses = [](torch::Tensor& pred_raw, torch::Tensor& target_all, int C)
+        -> std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+    {
+        // 1. Probabilistic Clamping for ReLU outputs
+        auto pred_clamped = pred_raw.clamp(0.0, 1.0);
+
+        // 2. Scaled Categorical Cross Entropy
+        // Normalize by log(C) so a random guess is always ~1.0
+        auto ce = -torch::mean(torch::sum(target_all * torch::log(pred_clamped + 1e-7), 1));
+        float ce_normalization = std::log(static_cast<float>(C));
+        ce /= (ce_normalization > 0.5f ? ce_normalization : 1.0f);
+
+        // 3. Dice Loss (Overlap-based)
+        // Inherently normalized between 0 and 1
+        auto dims = std::vector<int64_t>{2, 3, 4};
+        auto intersection = torch::sum(pred_clamped * target_all, dims);
+        auto cardinality = torch::sum(pred_clamped + target_all, dims);
+        auto dice = 1.0f - torch::mean((2.f * intersection + 1e-5) / (cardinality + 1e-5));
+
+        // 4. Scaled MSE
+        // Multiply by C to balance the average-over-channels denominator
+        auto mse = torch::mse_loss(pred_raw, target_all) * static_cast<float>(C);
+
+        return {ce, dice, mse};
+    };
+
     auto run_training = [=](){
         struct exist_guard
         {
@@ -386,7 +347,14 @@ void train_unet::train(void)
 
         try{
 
-            std::shared_ptr<torch::optim::Optimizer> optimizer(new torch::optim::Adam(model->parameters(), torch::optim::AdamOptions(param.learning_rate)));
+            std::shared_ptr<torch::optim::Optimizer> optimizer(
+                        new torch::optim::Adam(model->parameters(),
+                            torch::optim::AdamOptions(param.learning_rate)));
+            float best_val_error = std::numeric_limits<float>::max();
+            int patience_counter = 0;
+            int max_patience = 8;
+            const float decay_factor = 0.5f;
+            const float min_lr = 1e-7f;
 
             while(!test_data_ready || pause)
             {
@@ -395,9 +363,6 @@ void train_unet::train(void)
                     return;
             }
 
-            tipl::out()     << "1                        0.1                        0.01                   0.001";
-            tipl::out()     << "|-------------------------|--------------------------|-------------------------|";
-            std::string line = "|                         |                          |                         |";
             auto to_chart = [](float error)->int{return int(std::max<float>(0.0f,std::min<float>(79.0f,(-std::log10(error))*80.0f/3.0f)));};
             for (size_t cur_data_index = 0; cur_epoch < param.epoch && !aborted;cur_epoch++,cur_data_index += param.batch_size)
             {
@@ -405,25 +370,6 @@ void train_unet::train(void)
                 {
                     tipl::out() << "set learning rate to " << param.learning_rate << std::endl;
                     optimizer->defaults().set_lr(param.learning_rate);
-                }
-
-                if(need_output_model || !test_in_tensor.empty())
-                {
-                    output_model->copy_from(*model);
-                    need_output_model = false;
-                }
-
-                float mse_error = 0.0f;
-                if(!test_in_tensor.empty())
-                {
-                    output_model->eval();
-                    torch::NoGradGuard no_grad; // Disable gradient for validation
-                    for(size_t i = 0;i < test_in_tensor.size();++i)
-                    {
-                        auto f = output_model->forward(test_in_tensor[i])[0];
-                        mse_error += (test_error[i+1][cur_epoch] = torch::mse_loss(f,test_out_tensor[i]).item().toFloat());
-                    }
-                    mse_error /= test_in_tensor.size();
                 }
 
                 training_status = "training ";
@@ -446,10 +392,8 @@ void train_unet::train(void)
                                 if(b >= param.batch_size)
                                     break;
                                 thread = (cur_data_index+(b++))%data_ready.size();
-                                training_status += std::to_string(in_data_read_id[thread]);
-                                training_status += ".";
-                                training_status += std::to_string(model_id);
-                                training_status += train_image_is_template[in_data_read_id[thread]] ? "t":"s";
+                                training_status += std::to_string(in_data_read_id[thread]) + "." + std::to_string(model_id) +
+                                                   (train_image_is_template[in_data_read_id[thread]] ? "t":"s");
                             }
 
                             while(!data_ready[thread] || pause)
@@ -469,11 +413,6 @@ void train_unet::train(void)
 
                             torch::Tensor total_loss;
                             {
-
-
-                                // target_probs shape: (Batch, Channels, D, H, W)
-                                // Channels can be any number (2, 5, 10, etc.)
-
                                 for(size_t k = 0; k < outputs.size(); ++k)
                                 {
                                     // 1. Handle Downsampling for Target
@@ -486,34 +425,9 @@ void train_unet::train(void)
                                             .size(std::vector<int64_t>{outputs[k].size(2), outputs[k].size(3), outputs[k].size(4)})
                                             .mode(torch::kTrilinear).align_corners(false));
 
-                                    // 2. CREATE Background PROBABILITY MAPS
-                                    //auto pred_tissues = outputs[k].clamp(0.0, 1.0);
-
-                                    /*
-                                    // Calculate Background: 1.0 - sum(tissues)
-                                    // We clamp to 0-1 to ensure numerical stability
-                                    auto pred_bg = (1.0 - pred_tissues.sum(1, true)).clamp(0.0, 1.0);
-                                    auto target_bg = (1.0 - cur_target_probs.sum(1, true)).clamp(0.0, 1.0);
-
-                                    // Concatenate: Channel 0 = Background, Channels 1-5 = Tissues
-                                    auto pred_all = torch::cat({pred_bg, pred_tissues}, 1);
-                                    auto target_all = torch::cat({target_bg, cur_target_probs}, 1);
-
-                                    // Use Binary Cross Entropy since channels are independent ReLU-based estimates
-                                    // We use a small epsilon (1e-7) to avoid log(0)
-                                    auto bce = -torch::mean(target_all * torch::log(pred_all + 1e-7) +
-                                                              (1.0 - target_all) * torch::log(1.0 - pred_all + 1e-7));
-                                    // 4. DICE LOSS (6-Channel)
-                                    auto dims = std::vector<int64_t>{2, 3, 4};
-                                    auto intersection = torch::sum(pred_all * target_all, dims);
-                                    auto cardinality = torch::sum(pred_all + target_all, dims);
-                                    auto dice = 1.0f - torch::mean((2.f * intersection + 1e-5) / (cardinality + 1e-5));
-                                    */
-                                    // MSE (Excellent for ReLU regression to target probabilities)
-                                    auto mse = torch::mse_loss(outputs[k], cur_target_probs);
-
+                                    auto [ce, dice, mse] = calc_losses(outputs[k], cur_target_probs,cur_model->out_count);
                                     float level_weight = 1.0f / (1 << k);
-                                    auto level_loss = (mse) * level_weight;
+                                    auto level_loss = (ce + dice + mse) * level_weight;
 
                                     if(total_loss.defined()) total_loss += level_loss;
                                     else total_loss = level_loss;
@@ -544,20 +458,67 @@ void train_unet::train(void)
 
                 }
 
+                std::vector<float> errors;
+                if(!test_in_tensor.empty())
                 {
-                    auto out = line;
-                    out[to_chart(test_error[0][cur_epoch] = tipl::mean(error_each_model))] = 'E';
-                    out[to_chart(mse_error)] = 'T';
+                    test_model->copy_from(*model);
+                    test_model->eval();
+                    torch::NoGradGuard no_grad; // Disable gradient for validation
+                    float cur_error = 0.0f;
+                    for(size_t i = 0;i < test_in_tensor.size();++i)
+                    {
+                        float ce_v,dice_v,mse_v;
+                        auto [ce, dice, mse] = calc_losses(test_model->forward(test_in_tensor[i])[0], test_out_tensor[i],test_model->out_count);
+                        errors.push_back(ce_v = ce.item().toFloat());
+                        errors.push_back(dice_v = dice.item().toFloat());
+                        errors.push_back(mse_v = mse.item().toFloat());
+                        cur_error += ce_v + dice_v + mse_v;
+                    }
+                    if(test_error.empty())
+                    {
+                        test_error.resize(errors.size());
+                        test_error_name = {"ce","dice","mse"};
+                    }
+                    for(size_t i = 0;i < errors.size();++i)
+                        test_error[i].push_back(errors[i]);
 
-                    std::string out2("|epoch:");
-                    out2 += std::to_string(cur_epoch);
-                    out2 += " test:";
-                    out2 += std::to_string(test_error[0][cur_epoch]);
-                    out2 += " mse:";
-                    out2 += std::to_string(mse_error);
-                    std::copy(out2.begin(),out2.end(),out.begin());
+                    if (cur_error < best_val_error * 0.999f) // 0.1% improvement threshold
+                    {
+                        best_val_error = cur_error;
+                        patience_counter = 0;
+                        std::scoped_lock<std::mutex> lock(output_model_mutex);
+                        output_model->copy_from(*model);
+                    }
+                    else
+                    {
+                        patience_counter++;
+                        if (patience_counter >= max_patience && param.learning_rate > min_lr)
+                        {
+                            param.learning_rate *= decay_factor;
+                            patience_counter = 0;
+                            max_patience *= 2;
+                        }
+                    }
+                }
 
+
+                {
+                    if(!cur_epoch)
+                        tipl::out()     << "1                        0.1                        0.01                   0.001";
+                    std::string out = cur_epoch % 100 ?
+                            "|                         |                          |                         |":
+                            "|-------------------------|--------------------------|-------------------------|";
+                    if(!errors.empty())
+                    {
+                        out[to_chart(errors[0])] = 'C';
+                        out[to_chart(errors[1])] = 'D';
+                        out[to_chart(errors[2])] = 'M';
+                    }
+
+                    std::string epoch_string = "|" + std::to_string(cur_epoch);
+                    std::copy(epoch_string.begin(),epoch_string.end(),out.begin());
                     tipl::out() << out;
+
                 }
 
                 if(po.has("network") &&
@@ -565,11 +526,11 @@ void train_unet::train(void)
                 {
                     if(!save_to_file(model,po.get("network").c_str()))
                     {
-                        error_msg = "ERROR: failed to save network";
+                        error_msg = "failed to save network";
                         aborted = true;
                     }
                     if(!save_error_to(po.get("error",po.get("network") + ".error.txt").c_str()))
-                        error_msg = "ERROR: failed to save error";
+                        error_msg = "failed to save error";
                 }
             }
             tipl::out() << (training_status = "training completed");
@@ -605,6 +566,7 @@ void train_unet::start(void)
         running = true;
         error_msg.clear();
         test_error.clear();
+        test_error_name.clear();
         cur_epoch = 0;
     }
 
@@ -617,11 +579,10 @@ void train_unet::start(void)
 
     if(model->total_training_count == 0)
     {
-        tipl::io::gz_nifti in;
-        if(!in.open(param.image_file_name[0],std::ios::in))
+        tipl::io::gz_nifti in(param.image_file_name[0],std::ios::in);
+        if(!in)
         {
-            error_msg = "Invalid NIFTI format";
-            error_msg += param.image_file_name[0];
+            error_msg = in.error_msg;
             aborted = true;
             return;
         }
@@ -633,13 +594,17 @@ void train_unet::start(void)
         tipl::out() << "set network input sizes: " << model->dim << " with resolution:" << model->voxel_size <<std::endl;
     }
 
-    test_error = std::vector<std::vector<float> >(param.test_image_file_name.size() + 1);
-    update_epoch_count();
-
     model->to(param.device);
     model->train();
     output_model = UNet3d(model->in_count,model->out_count,model->feature_string);
     output_model->to(param.device);
+    output_model->copy_from(*model);
+
+    if(!param.test_image_file_name.empty())
+    {
+        test_model = UNet3d(model->in_count,model->out_count,model->feature_string);
+        test_model->to(param.device);
+    }
 
     tipl::out() << "gpu count: " << torch::cuda::device_count();
 
@@ -654,22 +619,6 @@ void train_unet::start(void)
 
     read_file();
     train();        
-}
-UNet3d& train_unet::get_model(void)
-{
-    if(running)
-    {
-        need_output_model = true;
-        tipl::progress p("copying network");
-        while(need_output_model && p(0,1))
-        {
-            std::this_thread::sleep_for(100ms);
-        }
-        if(p.aborted())
-            return model;
-        return output_model;
-    }
-    return model;
 }
 void train_unet::join(void)
 {
@@ -699,10 +648,12 @@ bool train_unet::save_error_to(const char* file_name)
     std::ofstream out(file_name);
     if(!out || test_error.empty())
         return false;
-    for(size_t i = 0;i < test_error[0].size() && i < cur_epoch;++i)
+    out << "epoch\t" << tipl::merge(test_error_name,'\t') << std::endl;
+    for(size_t i = 0;i < test_error[0].size();++i)
     {
+        out << i << "\t";
         for(size_t j = 0;j < test_error.size();++j)
-            out << test_error[j][i] << "\t";
+            out << test_error[j][i];
         out << std::endl;
     }
     return true;
@@ -738,18 +689,18 @@ int tra(void)
         if(!po.get_files("source",train.param.image_file_name) ||
            !po.get_files("label",train.param.label_file_name))
         {
-            tipl::out() << "ERROR: " << po.error_msg;
+            tipl::error() << po.error_msg;
             return 1;
         }
 
         if(train.param.image_file_name.size() != train.param.label_file_name.size())
         {
-            tipl::out() << "ERROR: different number of files found for image and label";
+            tipl::error() << "different number of files found for image and label";
             return 1;
         }
         if(train.param.image_file_name.empty())
         {
-            tipl::out() << "ERROR: no available training images";
+            tipl::error() << "no available training images";
             return 1;
         }
         for(size_t i = 0;i < train.param.image_file_name.size();++i)
@@ -762,7 +713,7 @@ int tra(void)
         tipl::out() << "loading existing network " << network;
         if(!load_from_file(train.model,network.c_str()))
         {
-            tipl::out() << "ERROR: failed to load model from " << network;
+            tipl::error() << "failed to load model from " << network;
             return 1;
         }
         tipl::out() << train.model->get_info();
@@ -779,7 +730,7 @@ int tra(void)
         std::vector<int> label_count;
         if(!get_label_info(train.param.label_file_name[0].c_str(),label_count,train.param.is_label))
         {
-            tipl::out() << "ERROR: cannot open the label file" << train.param.label_file_name[0];
+            tipl::error() << "cannot open the label file" << train.param.label_file_name[0];
             return 1;
         }
         size_t in_count = po.get("in_count",1);
@@ -793,7 +744,7 @@ int tra(void)
         }
         catch(...)
         {
-            tipl::out() << "ERROR: invalid network structure ";
+            tipl::error() << "invalid network structure ";
             return 1;
         }
     }
@@ -816,7 +767,7 @@ int tra(void)
         QFile data(":/options.txt");
         if (!data.open(QIODevice::ReadOnly | QIODevice::Text))
         {
-            tipl::out() << "ERROR: cannot load options";
+            tipl::error() << "cannot load options";
             return 1;
         }
         QTextStream in(&data);
@@ -835,7 +786,7 @@ int tra(void)
 
     if(!train.error_msg.empty())
     {
-        tipl::out() << "ERROR: " << train.error_msg;
+        tipl::error() << train.error_msg;
         return 1;
     }
     return 0;
