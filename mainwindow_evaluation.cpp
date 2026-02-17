@@ -48,16 +48,15 @@ void MainWindow::on_action_evaluate_open_images_triggered()
 
 void MainWindow::on_action_evaluate_copy_trained_network_triggered()
 {
-
-    auto& model = train.get_model();
-    if(model->feature_string.empty())
+    std::scoped_lock<std::mutex> lock(train.output_model_mutex);
+    if(train.output_model->feature_string.empty())
     {
         QMessageBox::critical(this,"Error","No trained network");
         return;
     }
     ui->evaluate_builtin_networks->setCurrentIndex(0);
-    evaluate.model = UNet3d(model->in_count,model->out_count,model->feature_string);
-    evaluate.model->copy_from(*model);
+    evaluate.model = UNet3d(train.output_model->in_count,train.output_model->out_count,train.output_model->feature_string);
+    evaluate.model->copy_from(*train.output_model);
     evaluate.model->eval();
     ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name = train_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
