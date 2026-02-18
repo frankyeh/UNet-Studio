@@ -15,9 +15,18 @@ struct UNet3dImpl : torch::nn::Module
 public:
     int in_count = 1;
     int out_count = 1;
-    std::string feature_string;
+    std::string feature_string,report,error_msg;
 public:
     uint32_t total_training_count = 0;
+    std::vector<float> errors;
+    mutable std::mutex error_mutex;
+    auto get_errors(void) const
+    {
+        std::scoped_lock<std::mutex> lock(error_mutex);
+        std::vector<float> result(errors);
+        return result;
+    }
+public:
     tipl::vector<3> voxel_size = {1.0f,1.0f,1.0f};
     tipl::shape<3> dim = {192,224,192};
     std::deque<torch::nn::Sequential> encoding,decoding,up;
@@ -71,6 +80,7 @@ public:
     {
         return parameters().size() && parameters()[0].defined() ? parameters()[0].device() : torch::kCPU;
     }
+    bool init_dimension(const std::string& template_file);
 private:
     torch::nn::Sequential ConvBlock(const std::vector<int>& rhs,size_t ks,torch::nn::Sequential s = torch::nn::Sequential());
 };
