@@ -187,7 +187,7 @@ void train_unet::read_file(void)
         }
         // prepare training data
 
-        size_t seed = model->total_training_count;
+        size_t seed = param.batch_size*(model->errors.size()/3);
         std::mt19937 gen(0);
         std::uniform_int_distribution<int> template_gen(0, std::max<int>(1,template_indices.size())-1);
         std::uniform_int_distribution<int> non_template_gen(0, std::max<int>(1,non_template_indices.size())-1);
@@ -419,7 +419,6 @@ void train_unet::train(void)
                     training_status = "update model";
                     optimizer->step();
                     optimizer->zero_grad();
-                    model->total_training_count += param.batch_size;
                 }
             }
         }
@@ -560,7 +559,7 @@ void train_unet::start(void)
         return;
     }
 
-    if(model->total_training_count == 0 && !model->init_dimension(param.image_file_name[0]))
+    if(model->errors.empty() && !model->init_dimension(param.image_file_name[0]))
     {
         error_msg = model->error_msg;
         aborted = true;

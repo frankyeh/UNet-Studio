@@ -86,7 +86,6 @@ private slots:
     void on_action_evaluate_save_results_triggered();
     void on_error_x_size_valueChanged(int arg1);
     void on_error_y_size_valueChanged(int arg1);
-    void on_save_error_clicked();
 
 
 

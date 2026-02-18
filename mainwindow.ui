@@ -817,9 +817,9 @@
               </layout>
              </item>
              <item>
-              <widget class="QLabel" name="train_network_info">
+              <widget class="QLabel" name="model_info">
                <property name="text">
-                <string/>
+                <string>  </string>
                </property>
               </widget>
              </item>
@@ -1015,6 +1015,16 @@
               </layout>
              </item>
             </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPlainTextEdit" name="model_report">
+            <property name="frameShadow">
+             <enum>QFrame::Plain</enum>
+            </property>
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
            </widget>
           </item>
           <item>

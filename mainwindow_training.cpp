@@ -72,7 +72,7 @@ void MainWindow::on_action_save_training_setting_triggered()
     ini.setValue("epoch",ui->epoch->value());
     ini.setValue("batch_size",ui->batch_size->value());
     ini.setValue("learning_rate",ui->learning_rate->value());
-    if(train.model->total_training_count)
+    if(!train.model->errors.empty())
     {
         ini.setValue("network_dir",settings.value("network_dir").toString());
         ini.setValue("network_file",settings.value("network_file").toString());
@@ -261,7 +261,8 @@ void MainWindow::on_action_train_new_network_triggered()
     at::globalContext().setDeterministicCuDNN(true);
     qputenv("CUDNN_DETERMINISTIC", "1");
     train.model = UNet3d(in_count,out_count,feature.toStdString());
-    ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
+    ui->model_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
+    ui->model_report->setPlainText(train.model->report.c_str());
     has_network();
 
 }
@@ -274,8 +275,11 @@ void MainWindow::load_network(QString fileName)
     }
     settings.setValue("network_dir",QFileInfo(fileName).absolutePath());
     settings.setValue("network_file",train_name = QFileInfo(fileName.remove(".net.gz")).fileName());
-    ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
+    ui->model_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
+    ui->model_report->setPlainText(train.model->report.c_str());
     has_network();
+    error_view_epoch = 0;
+    plot_error();
 }
 void MainWindow::on_action_train_open_network_triggered()
 {
@@ -366,8 +370,7 @@ void MainWindow::on_train_start_clicked()
         train.model = new_model;
     }
 
-    //tipl::out() << show_structure(train.model);
-
+    tipl::out() << show_structure(train.model);
 
     train.param.image_file_name.clear();
     train.param.label_file_name.clear();
@@ -394,6 +397,7 @@ void MainWindow::on_train_start_clicked()
     error_view_epoch = 0;
     error_scene << QImage();
 
+    ui->model_report->setPlainText(train.model->report.c_str());
     has_network();
 }
 
@@ -406,11 +410,12 @@ void MainWindow::on_train_stop_clicked()
 
 void MainWindow::plot_error()
 {
-    if(train.cur_epoch > 1)
+    if(train.model.get() && error_view_epoch != train.model->errors.size())
     {
+        size_t total_epoch = train.model->errors.size()/3;
         size_t x_size = ui->error_x_size->value();
         size_t y_size = ui->error_y_size->value();
-        auto x_scale = std::min<float>(5.0f, float(x_size) / float(train.cur_epoch + 1));
+        auto x_scale = std::min<float>(5.0f, float(x_size) / float(total_epoch + 1));
         const int left_border = 40;
         const int right_border = 60; // Space for error names
         const int upper_border = 10;
@@ -463,7 +468,6 @@ void MainWindow::plot_error()
 
         std::vector<float> errors(train.model->get_errors());
         std::vector<std::string> error_name = {"ce","dice","mse"};
-        size_t total_epoch = errors.size()/3;
         std::vector<QColor> colors = {QColor(244,177,131), QColor(197,90,17), QColor(142,170,219), QColor(47,84,150)};
 
         for(size_t i = 0; i < error_name.size() && i < colors.size(); ++i)
@@ -486,7 +490,6 @@ void MainWindow::plot_error()
         }
 
         // QTextBrowser update logic remains the same
-        if(error_view_epoch != train.cur_epoch)
         {
             int scrollPos = ui->errorBrowser->verticalScrollBar()->value();
             QTextCursor cursor = ui->errorBrowser->textCursor();
@@ -505,7 +508,7 @@ void MainWindow::plot_error()
             ui->errorBrowser->verticalScrollBar()->setValue(scrollPos);
         }
 
-        error_view_epoch = train.cur_epoch;
+        error_view_epoch = train.model->errors.size();
         error_scene << image;
     }
 
@@ -523,7 +526,6 @@ void MainWindow::training()
     }
 
     ui->train_start->setText(train.running ? (train.pause ? "Resume":"Pause") : "Start");
-    ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
     ui->batch_size->setEnabled(!train.running || train.pause);
     ui->learning_rate->setEnabled(!train.running || train.pause);
     ui->epoch->setEnabled(!train.running || train.pause);
@@ -562,8 +564,7 @@ void MainWindow::training()
 
     ui->train_stop->setEnabled(train.running);
 
-    if(train.cur_epoch >= error_view_epoch)
-        plot_error();
+    plot_error();
 
     if(ui->tabWidget->currentIndex() == 1)
         ui->statusbar->showMessage((train.get_status() + "|" + train.reading_status+"/"+train.augmentation_status+"/"+train.training_status).c_str());
@@ -709,19 +710,6 @@ void MainWindow::on_pos_valueChanged(int slice_pos)
     train_scene2 << view2;
 }
 
-
-
-void MainWindow::on_save_error_clicked()
-{
-    QString file = QFileDialog::getSaveFileName(this,"Save Error",settings.value("on_save_error_clicked").toString(),"Text values (*.txt);;All files (*)");
-    if(file.isEmpty())
-        return;
-    if(train.save_error_to(file.toStdString().c_str()))
-        QMessageBox::information(this,"","Saved");
-}
-
-
-
 void MainWindow::on_action_train_reorder_output_triggered()
 {
     if(train.running)
@@ -779,7 +767,7 @@ void MainWindow::on_action_train_reorder_output_triggered()
         }
     }
 
-    ui->train_network_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
+    ui->model_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
 }
 
 

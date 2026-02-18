@@ -40,12 +40,25 @@ UNet3dImpl::UNet3dImpl(int32_t in_count_,
     }
 
     std::stringstream ss;
-    ss << "The model is a 3D U-Net with " << features_down.size() << " levels. ";
-    ss << "The encoder utilizes a feature hierarchy of [";
-        for(size_t i = 0; i < features_down.size(); ++i)
-            ss << (i > 0 ? ", " : "") << features_down[i].back();
-    ss << "] channels. Downsampling was performed via 3D max pooling (stride 2), while the decoder employs nearest-neighbor upsampling with skip connections via concatenation. "
-       << "Deep supervision was applied by generating auxiliary outputs at the " << (features_down.size() - 1) << " upper resolution levels.";
+    // 1. Define Scope (Input -> Output)
+    ss << "The implemented model is a 3D U-Net designed to map "
+       << in_count << " input channel" << (in_count > 1 ? "s" : "") << " to "
+       << out_count << " output classes using " << features_down.size() << " resolution levels. ";
+
+    // 2. Define Architecture Depth
+    ss << "The encoder pathway utilizes a feature hierarchy of [";
+    for(size_t i = 0; i < features_down.size(); ++i)
+        ss << (i > 0 ? ", " : "") << features_down[i].back();
+    ss << "] channels. ";
+
+    // 3. Define Mechanisms
+    ss << "Downsampling is performed via 3D max pooling (stride 2), while the decoder employs "
+       << "nearest-neighbor upsampling with skip connections via concatenation. ";
+
+    // 4. Define Training Strategy
+    ss << "To facilitate gradient flow, deep supervision is applied by generating auxiliary outputs "
+       << "at the " << (features_down.size() - 1) << " upper resolution levels.";
+
     report = ss.str();
 }
 
@@ -149,7 +162,6 @@ void UNet3dImpl::copy_from(const UNet3dImpl& r)
     }
 
     // 3. Copy metadata
-    total_training_count = r.total_training_count;
     voxel_size = r.voxel_size;
     dim = r.dim;
     report = r.report;
@@ -173,11 +185,8 @@ std::string UNet3dImpl::get_info(void) const
 {
     std::ostringstream out;
     out << "structure: " << feature_string << std::endl;
-    out << "input: " << in_count << std::endl;
-    out << "output: " << out_count << std::endl;
-    out << "input/output sizes: " << dim << std::endl;
-    out << "resolution: " << voxel_size << std::endl;
-    out << "total training: " << total_training_count << std::endl;
+    out << "in: " << in_count << " out: " << out_count << std::endl;
+    out << "dim: " << dim << " reso: " << voxel_size << std::endl;
     return out.str();
 }
 void UNet3dImpl::print_layers(void)

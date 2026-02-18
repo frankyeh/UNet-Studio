@@ -17,7 +17,6 @@ public:
     int out_count = 1;
     std::string feature_string,report,error_msg;
 public:
-    uint32_t total_training_count = 0;
     std::vector<float> errors;
     mutable std::mutex error_mutex;
     auto get_errors(void) const
