@@ -79,7 +79,6 @@ private:
 public:
     size_t cur_epoch = 0,cur_validation_epoch = 0;
     std::mutex error_mutex;
-    bool save_error_to(const char* file_name);
     std::string get_status(void);
 
 public:
