@@ -19,6 +19,8 @@ void init_application(void)
     QCoreApplication::setApplicationName(QString("UNet Studio"));
     if constexpr(tipl::use_cuda)
     {
+
+        tipl::out() << "Checking CUDA functions"<< std::endl;
         std::string cuda_msg;
         check_cuda(cuda_msg);
         if(cuda_msg.empty())
@@ -29,6 +31,12 @@ void init_application(void)
 }
 int run_cmd(void)
 {
+    init_application();
+    if(!po.parse(argc,argv))
+    {
+        tipl::out() << po.error_msg << std::endl;
+        return 1;
+    }
     if(!po.check("action"))
         return 1;
     if(!po.has("network"))
@@ -36,7 +44,6 @@ int run_cmd(void)
         tipl::error() << "please specify --network";
         return 1;
     }
-    init_application();
     if(po.get("action") == std::string("train"))
         return tra();
     if(po.get("action") == std::string("evaluate"))
@@ -48,15 +55,9 @@ std::string unet_studio_citation = std::string("UNet Studio version (") + __DATE
 
 int main(int argc, char *argv[])
 {
-    std::cout << unet_studio_citation << std::endl;
-    if(!po.parse(argc,argv))
-    {
-        tipl::out() << po.error_msg << std::endl;
-        return 1;
-    }
+    tipl::out() << unet_studio_citation << std::endl;
     if(argc > 2)
         return run_cmd();
-
     tipl::show_prog = true;
     console.attach();
     tipl::progress prog(unet_studio_citation);
