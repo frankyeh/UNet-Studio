@@ -508,16 +508,17 @@ void train_unet::validate(void)
                     tipl::out() << out;
 
                 }
-
-                if(po.has("network") &&
-                   (((cur_validation_epoch + 1) % 500 == 0) || cur_validation_epoch+1 == param.epoch))
-                {
-                    if(!save_to_file(model,po.get("network").c_str()))
-                    {
-                        error_msg = "failed to save network";
-                        aborted = true;
-                    }
-                }
+            }
+            if(!aborted && po.has("network"))
+            {
+                tipl::out() << "save network to " << po.get("network");
+                if(!save_to_file(model,po.get("network").c_str()))
+                    tipl::error() << (error_msg = "failed to save network");
+            }
+            else
+            {
+                std::scoped_lock<std::mutex> lock(output_model_mutex);
+                output_model->copy_from(*model);
             }
         }
         catch(const c10::Error& error)
