@@ -12,8 +12,8 @@ struct training_param{
     std::vector<std::string> label_file_name,test_label_file_name;
     std::vector<float> subject_label_weight;
     int batch_size = 8;
-    int epoch = 4000;
-    float learning_rate = 0.00025f;
+    int epoch = 10000;
+    float learning_rate = 0.001f;
     bool is_label = true;
 
     std::unordered_map<std::string,float> options;
