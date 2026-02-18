@@ -1,43 +1,40 @@
-FROM dsistudio/ubuntu2204_qt6_cuda:latest as builder-stage
+FROM dsistudio/ubuntu2204_qt6_cuda:latest
 
-ENV DEBIAN_FRONTEND noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
+# Add the final binary to PATH so you can run 'unet_studio' from anywhere
+ENV PATH="/opt/unet-studio:$PATH"
 
-# [FIX] Added 'libcudnn8-dev' and 'libsndfile1'
-# 1. libcudnn8-dev: Provides 'cudnn.h' required by CMake to link against PyTorch C++ API.
-# 2. libsndfile1: Required dependency for torchaudio (prevents runtime import errors).
-RUN apt update && apt full-upgrade -y && apt install -y --no-install-recommends \
-    python3-dev python3-pip python3-venv \
+# 1. Install System Dependencies & PyTorch
+# We combine updates and installs to keep the layer clean
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-dev \
+    python3-pip \
     libcudnn8-dev \
-    libsndfile1
+    libsndfile1 \
+    git \
+    ninja-build \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip3 install --no-cache-dir \
+       torch==1.13.0+cu117 \
+       torchvision==0.14.0+cu117 \
+       torchaudio==0.13.0 \
+       --extra-index-url https://download.pytorch.org/whl/cu117
 
-# libtorch
-# RUN pip3 install torch>=1.9.0+cpu torchvision>=0.10.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
-RUN pip3 install torch==1.13.0+cu117 torchvision==0.14.0+cu117 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu117
+# 2. Build Source
+WORKDIR /opt/src
+RUN git clone https://github.com/frankyeh/UNet-Studio.git . \
+    && git clone https://github.com/frankyeh/TIPL.git \
+    # Get the torch path cleanly using python
+    && TORCH_PATH=$(python3 -c "import torch, os; print(os.path.dirname(torch.__file__))") \
+    && cmake -S . -B build -GNinja \
+       -DCMAKE_PREFIX_PATH="${TORCH_PATH}" \
+       -DCMAKE_BUILD_TYPE=Release \
+       -DTIPL_DIR=$(pwd)/TIPL \
+    && cmake --build build --parallel
 
-RUN cd /opt \
-  && git clone https://github.com/frankyeh/UNet-Studio.git \
-  && mv UNet-Studio src \
-  && cd /opt/src \
-  && git clone https://github.com/frankyeh/TIPL.git \
-  && mkdir -p /opt/src/build
-
-# [OPTIONAL] Added -DCaffe2_USE_CUDNN=OFF as a fallback safety, 
-# though installing libcudnn8-dev is the primary fix.
-RUN cd /opt/src \
-  && export TORCH_DIR="$(pip3 show torch | grep 'Location:' | awk '{print $2}')" \
-  && cmake -S . -B build -GNinja \
-     -DCMAKE_PREFIX_PATH=$TORCH_DIR/torch \
-     -DCMAKE_BUILD_TYPE:STRING=Release \
-     -DTIPL_DIR=. \
-  && cmake --build ./build --parallel --config Release
-
-RUN mkdir -p /opt/unet-studio \
-  && cd /opt/unet-studio \
-  && mv /opt/src/build/unet_studio . \
-  && chmod 755 unet_studio \
-  && git clone https://github.com/frankyeh/UNet-Studio-Data.git \
-  && rm -fr UNet-Studio-Data/.git \
-  && mv UNet-Studio-Data/* . \
-  && rm -fr UNet-Studio-Data
-
-ENV PATH="$PATH:/opt/unet-studio"
+# 3. Setup Final Directory & Data
+WORKDIR /opt/unet-studio
+RUN cp /opt/src/build/unet_studio . \
+    && git clone https://github.com/frankyeh/UNet-Studio-Data.git temp_data \
+    && mv temp_data/* . \
+    && rm -rf temp_data /opt/src
