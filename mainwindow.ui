@@ -885,8 +885,11 @@
                <property name="maximum">
                 <number>1000000</number>
                </property>
-               <property name="value">
+               <property name="singleStep">
                 <number>1000</number>
+               </property>
+               <property name="value">
+                <number>10000</number>
                </property>
               </widget>
              </item>
