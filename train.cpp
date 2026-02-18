@@ -111,7 +111,11 @@ void train_unet::read_file(void)
                 }
                 train_image_is_template[i] = in.is_mni();
                 if(train_image_is_template[i])
+                {
                     tipl::out() << "template found: " << param.image_file_name[i];
+                    param.test_image_file_name.push_back(param.image_file_name[i]);
+                    param.test_label_file_name.push_back(param.label_file_name[i]);
+                }
             }
         }
 
@@ -174,8 +178,7 @@ void train_unet::read_file(void)
                 }
                 catch(const c10::Error& error)
                 {
-                    error_msg = "test tensor allocation error: ";
-                    error_msg += error.what();
+                    error_msg = std::string("test tensor allocation error: ") + error.what();
                     aborted = true;
                     return;
                 }
@@ -515,8 +518,6 @@ void train_unet::validate(void)
                         error_msg = "failed to save network";
                         aborted = true;
                     }
-                    if(!save_error_to(po.get("error",po.get("network") + ".error.txt").c_str()))
-                        error_msg = "failed to save error";
                 }
             }
         }
@@ -605,23 +606,6 @@ void train_unet::stop(void)
     pause = aborted = true;
     join();
 }
-bool train_unet::save_error_to(const char* file_name)
-{
-    std::ofstream out(file_name);
-    auto errors = model->get_errors();
-    if(!out || errors.empty())
-        return false;
-    out << "epoch\tce\tdice\tmse\t'" << std::endl;
-    size_t total_epoch = errors.size()/3;
-    for(size_t epoch = 0,pos = 0;epoch < total_epoch;++epoch)
-    {
-        out << epoch;
-        for(size_t j = 0;j < 3;++j,++pos)
-            out  << "\t" << errors[pos];
-        out << std::endl;
-    }
-    return true;
-}
 
 bool get_label_info(const std::string& label_name,std::vector<int>& out_count,bool& is_label);
 
@@ -634,6 +618,10 @@ std::string get_network_path(void)
     if(!std::filesystem::exists(network) && std::filesystem::exists(po.exec_path + "/network/" + network))
         po.set("network",network = po.exec_path + "/network/" + network);
     return network;
+}
+std::string default_feature(int out_count)
+{
+    return out_count <= 4 ? "8x8+16x16+32x32+64x64+128x128" : (out_count <= 8 ? "16x16+32x32+64x64+128x128+128x128" : "32x32+64x64+128x128+128x128+256x256");
 }
 int tra(void)
 {
@@ -699,9 +687,7 @@ int tra(void)
         }
         size_t in_count = po.get("in_count",1);
         size_t out_count = po.get("out_count",label_count.size());
-        std::string feature_string = po.get("feature_string",
-                out_count <= 6 ? "8x8+16x16+32x32+64x64+128x128" :
-                (out_count <= 10 ? "16x16+32x32+64x64+128x128+128x128" : "32x32+64x64+128x128+128x128+256x256"));
+        std::string feature_string = po.get("feature_string",default_feature(out_count));
         try{
             tipl::out() << "create new network with structure " << feature_string;
             train.model = UNet3d(in_count,out_count,feature_string);
