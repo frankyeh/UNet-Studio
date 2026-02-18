@@ -105,14 +105,14 @@ public:
     {
         std::map<QString,OptionItem*>::const_iterator iter = name_data_mapping.find(name);
         if(iter == name_data_mapping.end())
-            throw std::runtime_error(std::string("cannot find ") + name.constData());
+            throw std::runtime_error(std::string("cannot find ") + name.toUtf8().constData());
         return iter->second->value;
     }
     OptionItem& operator[](QString name)
     {
         std::map<QString,OptionItem*>::const_iterator iter = name_data_mapping.find(name);
         if(iter == name_data_mapping.end())
-            throw std::runtime_error(std::string("cannot find ") + name.constData());
+            throw std::runtime_error(std::string("cannot find ") + name.toUtf8().constData());
         return *(iter->second);
     }
     QStringList get_param_list(QString root_name)

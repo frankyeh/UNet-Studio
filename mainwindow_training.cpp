@@ -130,7 +130,7 @@ void MainWindow::on_action_train_open_files_triggered()
     if (fileNames.isEmpty())
         return;
     {
-         tipl::io::gz_nifti nii(fileNames[0].constData(),std::ios::in);
+         tipl::io::gz_nifti nii(fileNames[0].toUtf8().constData(),std::ios::in);
          if(!nii)
          {
              QMessageBox::critical(this,"ERROR",nii.error_msg.c_str());
@@ -199,7 +199,7 @@ void MainWindow::on_action_train_open_labels_triggered()
         return;
     settings.setValue("work_dir",QFileInfo(fileNames[0]).absolutePath());
 
-    if(!get_label_info(fileNames[0].constData(),label_count,is_label))
+    if(!get_label_info(fileNames[0].toUtf8().constData(),label_count,is_label))
     {
         QMessageBox::critical(this,"Error",QString("%1 is not a valid label image").arg(QFileInfo(fileNames[0]).fileName()));
         return;
@@ -219,8 +219,9 @@ void MainWindow::on_action_train_open_labels_triggered()
         if(label_list[index].isEmpty())
         {
             std::string result;
-            if(tipl::match_files(image_list[entry_index].constData(),label_list[entry_index].constData(),
-                                  image_list[index].constData(),result) && QFileInfo(result.c_str()).exists())
+            if(tipl::match_files(std::string(image_list[entry_index].toUtf8().constData()),
+                                 std::string(label_list[entry_index].toUtf8().constData()),
+                                 std::string(image_list[index].toUtf8().constData()),result) && QFileInfo(result.c_str()).exists())
             {
                 label_list[index] = result.c_str();
                 image_last_added_indices.push_back(index);

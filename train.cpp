@@ -727,7 +727,7 @@ int tra(void)
             QStringList list = in.readLine().split('/');
             if(list.size() < 5)
                 continue;
-            train.param.options[list[2].constData()] = po.get(list[2].constData().c_str(),list[4].toFloat());
+            train.param.options[list[2].toUtf8().constData()] = po.get(list[2].toUtf8().constData(),list[4].toFloat());
         }
     }
 

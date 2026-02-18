@@ -70,7 +70,7 @@ void MainWindow::on_action_evaluate_open_network_triggered()
                                                     settings.value("network_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
     if(fileName.isEmpty())
         return;
-    if(!load_from_file(evaluate.model,fileName.constData().c_str()))
+    if(!load_from_file(evaluate.model,fileName.toUtf8().constData()))
     {
         QMessageBox::critical(this,"Error","Invalid file format");
         return;
@@ -331,7 +331,7 @@ void MainWindow::on_action_evaluate_save_results_triggered()
     if(file.isEmpty())
         return;
 
-    if(!evaluate.save_to_file(currentRow,file.constData().c_str()))
+    if(!evaluate.save_to_file(currentRow,file.toUtf8().constData()))
     {
         QMessageBox::critical(this,"Error","Cannot save file");
         return;
@@ -345,8 +345,8 @@ void MainWindow::on_action_evaluate_save_results_triggered()
         if(index != currentRow)
         {
             std::string result;
-            if(tipl::match_files(evaluate_list[currentRow].constData(),file.constData(),
-                                 evaluate_list[index].constData(),result))
+            if(tipl::match_files(evaluate_list[currentRow].toUtf8().constData(),file.toUtf8().constData(),
+                                 evaluate_list[index].toUtf8().constData(),result))
             {
                 if(!evaluate.save_to_file(index,result.c_str()))
                 {
