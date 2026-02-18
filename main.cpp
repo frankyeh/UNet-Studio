@@ -13,6 +13,20 @@ void check_cuda(std::string& error_msg);
 
 int tra(void);
 int eval(void);
+void init_application(void)
+{
+    QCoreApplication::setOrganizationName("LabSolver");
+    QCoreApplication::setApplicationName(QString("UNet Studio"));
+    if constexpr(tipl::use_cuda)
+    {
+        std::string cuda_msg;
+        check_cuda(cuda_msg);
+        if(cuda_msg.empty())
+            tipl::out() << "CPU/GPU computation enabled "<< std::endl;
+        else
+            tipl::error() << cuda_msg;
+    }
+}
 int run_cmd(void)
 {
     if(!po.check("action"))
@@ -22,7 +36,7 @@ int run_cmd(void)
         tipl::error() << "please specify --network";
         return 1;
     }
-
+    init_application();
     if(po.get("action") == std::string("train"))
         return tra();
     if(po.get("action") == std::string("evaluate"))
@@ -30,8 +44,11 @@ int run_cmd(void)
     return 1;
 }
 
+std::string unet_studio_citation = std::string("UNet Studio version (") + __DATE__ + ", http://unet-studio.labsolver.org)";
+
 int main(int argc, char *argv[])
 {
+    std::cout << unet_studio_citation << std::endl;
     if(!po.parse(argc,argv))
     {
         tipl::out() << po.error_msg << std::endl;
@@ -44,14 +61,11 @@ int main(int argc, char *argv[])
 
     tipl::show_prog = true;
     console.attach();
-    if constexpr (tipl::use_cuda)
-    {
-        std::string msg;
-        if(torch::hasCUDA())
-            check_cuda(msg);
-    }
+    tipl::progress prog(unet_studio_citation);
+    init_application();
     QApplication a(argc, argv);
     MainWindow w;
+    w.setWindowTitle(unet_studio_citation.c_str());
     w.show();
     return a.exec();
 
