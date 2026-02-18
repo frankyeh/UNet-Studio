@@ -465,16 +465,18 @@ void MainWindow::plot_error()
         painter.setPen(QPen(Qt::black, 2));
         painter.drawRect(left_border, upper_border, x_size, y_size);
 
-        std::vector<std::vector<float>> all_errors(train.test_error);
+        std::vector<float> errors(train.model->get_errors());
+        std::vector<std::string> error_name = {"ce","dice","mse"};
+        size_t total_epoch = errors.size()/3;
         std::vector<QColor> colors = {QColor(244,177,131), QColor(197,90,17), QColor(142,170,219), QColor(47,84,150)};
 
-        for(size_t i = 0; i < all_errors.size() && i < colors.size(); ++i)
+        for(size_t i = 0; i < error_name.size() && i < colors.size(); ++i)
         {
-            if(all_errors[i].empty()) continue;
             QVector<QPointF> points;
             float last_y = 0;
-            for(size_t j = 0; j < all_errors[i].size(); ++j) {
-                last_y = -std::log10(all_errors[i][j]) * y_size / 3.0f + upper_border;
+            for(size_t j = 0,pos = i; j < total_epoch; ++j,pos += 3)
+            {
+                last_y = -std::log10(errors[pos]) * y_size / 3.0f + upper_border;
                 points << QPointF(float(j) * x_scale + left_border, last_y);
             }
 
@@ -482,11 +484,9 @@ void MainWindow::plot_error()
             painter.drawPolyline(points);
 
             // Draw line name at the end position
-            if (i < train.test_error_name.size()) {
-                float last_x = points.back().x();
-                // Draw text only if the line is near the right boundary or it's the latest data
-                painter.drawText(last_x + 3, last_y + 5, QString::fromStdString(train.test_error_name[i]));
-            }
+            float last_x = points.back().x();
+            // Draw text only if the line is near the right boundary or it's the latest data
+            painter.drawText(last_x + 3, last_y + 5, QString::fromStdString(error_name[i]));
         }
 
         // QTextBrowser update logic remains the same
@@ -495,12 +495,13 @@ void MainWindow::plot_error()
             int scrollPos = ui->errorBrowser->verticalScrollBar()->value();
             QTextCursor cursor = ui->errorBrowser->textCursor();
             QStringList rows;
-            rows << QString::fromStdString("epoch\t" + tipl::merge(train.test_error_name, '\t'));
-            for(size_t i = 0; i < all_errors[0].size(); ++i) {
+            rows << QString::fromStdString("epoch\t" + tipl::merge(error_name, '\t'));
+            for(size_t i = 0,pos = 0; i < total_epoch; ++i)
+            {
                 QStringList cols;
                 cols << QString::number(i);
-                for(size_t j = 0; j < all_errors.size(); ++j)
-                    cols << QString::number(all_errors[j][i]);
+                for(size_t j = 0; j < 3; ++j,++pos)
+                    cols << QString::number(errors[pos]);
                 rows << cols.join('\t');
             }
             ui->errorBrowser->setText(rows.join('\n'));
@@ -544,7 +545,6 @@ void MainWindow::training()
     ui->action_train_auto_match_label_files->setEnabled(!train.running);
 
     ui->train_device->setEnabled(!train.running);
-    ui->save_error->setEnabled(!train.test_error.empty());
     ui->training_gif->setEnabled(train.running);
 
 
@@ -558,8 +558,7 @@ void MainWindow::training()
         ui->train_prog->setEnabled(!train.pause);
         ui->train_prog->setMaximum(ui->epoch->value());
         ui->train_prog->setValue(train.cur_epoch+1);
-        if(!train.test_error.empty())
-            ui->train_prog->setFormat(QString( "epoch: %1/%2 error: %3" ).arg(train.cur_epoch).arg(ui->train_prog->maximum()).arg(train.cur_epoch ? std::to_string(train.test_error[0].back()).c_str():"pending"));
+        ui->train_prog->setFormat(QString("epoch: %1/%2").arg(train.cur_epoch).arg(ui->train_prog->maximum()));
     }
     else
         ui->train_prog->setValue(0);
