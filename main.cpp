@@ -29,14 +29,9 @@ void init_application(void)
             tipl::error() << cuda_msg;
     }
 }
-int run_cmd(int argc, char *argv[])
+int run_cmd(void)
 {
     init_application();
-    if(!po.parse(argc,argv))
-    {
-        tipl::out() << po.error_msg << std::endl;
-        return 1;
-    }
     if(!po.check("action"))
         return 1;
     if(!po.has("network"))
@@ -56,8 +51,13 @@ std::string unet_studio_citation = std::string("UNet Studio version (") + __DATE
 int main(int argc, char *argv[])
 {
     tipl::out() << unet_studio_citation << std::endl;
+    if(!po.parse(argc,argv))
+    {
+        tipl::out() << po.error_msg << std::endl;
+        return 1;
+    }
     if(argc > 2)
-        return run_cmd(argc,argv);
+        return run_cmd();
     tipl::show_prog = true;
     console.attach();
     tipl::progress prog(unet_studio_citation);
