@@ -15,6 +15,7 @@ struct training_param{
     int epoch = 4000;
     float learning_rate = 0.00025f;
     bool is_label = true;
+
     std::unordered_map<std::string,float> options;
     torch::Device device = torch::kCPU;
     inline void set_weight(std::string w)
@@ -50,7 +51,8 @@ public:
     bool aborted = false;
     bool pause = false;
     bool running = false;
-    std::string error_msg,reading_status,augmentation_status,training_status;
+public:
+    std::string error_msg,reading_status,augmentation_status,training_status,validation_status;
 private:
     std::vector<tipl::image<3> > train_image,train_label;
     std::vector<bool> train_image_is_template;
@@ -61,6 +63,7 @@ private:
     std::vector<tipl::image<3> > in_file,out_file;
     std::vector<size_t> in_file_read_id,in_file_seed;
     std::vector<bool> file_ready;
+private:
 
 private:
     size_t thread_count = 1;
@@ -70,21 +73,18 @@ private:
     std::shared_ptr<std::thread> augmentation_thread;
     void read_file(void);
 private:
-    std::shared_ptr<std::thread> train_thread;
+    std::shared_ptr<std::thread> train_thread,validation_thread;
     void train(void);
+    void validate(void);
 public:
-    size_t cur_epoch = 0;
-    std::vector<std::string> test_error_name;
-    std::vector<std::vector<float> > test_error;
+    size_t cur_epoch = 0,cur_validation_epoch = 0;
     std::mutex error_mutex;
     bool save_error_to(const char* file_name);
     std::string get_status(void);
-private:
-    UNet3d test_model;
+
 public:
     std::mutex output_model_mutex;
     UNet3d model,output_model;
-    std::vector<UNet3d> other_models;
     ~train_unet(void)
     {
         stop();
