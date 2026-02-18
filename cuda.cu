@@ -44,47 +44,45 @@ bool distribute_gpu(void)
 }
 
 std::vector<std::string> gpu_names;
+
 void check_cuda(std::string& error_msg)
 {
-    tipl::progress p("Initiating CUDA");
     int Ver;
     if(cudaGetDeviceCount(&gpu_count) != cudaSuccess ||
        cudaDriverGetVersion(&Ver) != cudaSuccess)
     {
-        error_msg = "cannot obtain GPU driver and device information (CUDA ERROR:";
+        error_msg = "Failed to obtain GPU driver and device information (CUDA ERROR ";
         error_msg += std::to_string(int(cudaGetDeviceCount(&gpu_count)));
-        error_msg += "). Please update the Nvidia driver and install CUDA Toolkit.";
+        error_msg += "). Please install CUDA Toolkit or use the CPU version.";
         return;
     }
-    tipl::out() << "CUDA Driver Version: " << Ver << " CUDA Run Time Version: " << CUDART_VERSION << std::endl;
+    std::cout << "├──CUDA Driver Version: " << Ver << " CUDA Run Time Version: " << CUDART_VERSION << std::endl;
     cuda_test<<<1,1>>>();
     if(cudaPeekAtLastError() != cudaSuccess)
     {
-        error_msg = "Failed to lauch cuda kernel:";
+        error_msg = "failed to lauch cuda kernel:";
         error_msg += cudaGetErrorName(cudaGetLastError());
-        error_msg += ". Please update Nvidia driver.";
+        error_msg += ". please update Nvidia driver.";
         return;
     }
 
-    tipl::out() << "Device Count:" << gpu_count << std::endl;
+    std::cout << "│  ├──device count: " << gpu_count << std::endl;
     for (int i = 0; i < gpu_count; i++)
     {
-        tipl::out() << "Device Number:" << std::to_string(i) << std::endl;
+        std::cout << "│  ├──device number: " << std::to_string(i) << std::endl;
         cudaDeviceProp prop;
         if(cudaGetDeviceProperties(&prop, i) != cudaSuccess)
         {
-            error_msg = "Cannot obtain device information. Please update Nvidia driver";
+            error_msg = "cannot obtain device information. please update Nvidia driver";
             return;
         }
         auto arch = prop.major*10+prop.minor;
-        tipl::out() << "Arch: " << arch << std::endl;
-        tipl::out() << "Device name: " << prop.name << std::endl;
-        tipl::out() << "Memory Size (GB): " << float(prop.totalGlobalMem >> 20)/1024.0f << std::endl;
-        tipl::out() << "Memory Clock Rate (KHz): " << prop.memoryClockRate << std::endl;
-        tipl::out() << "Memory Bus Width (bits): " << prop.memoryBusWidth << std::endl;
-        tipl::out() << "Peak Memory Bandwidth (GB/s): " << 2.0*prop.memoryClockRate*(prop.memoryBusWidth/8)/1.0e6 << std::endl;
+        std::cout << "│  ├──arch: " << arch << std::endl;
+        std::cout << "│  ├──device name: " << prop.name << std::endl;
+        std::cout << "│  ├──memory clock rate (KHz): " << prop.memoryClockRate << std::endl;
+        std::cout << "│  ├──memory bus width (bits): " << prop.memoryBusWidth << std::endl;
+        std::cout << "│  ├──peak memory bandwidth (GB/s): " << 2.0*prop.memoryClockRate*(prop.memoryBusWidth/8)/1.0e6 << std::endl;
         gpu_names.push_back(prop.name);
     }
     has_cuda = true;
 }
-
