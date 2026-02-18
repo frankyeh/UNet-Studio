@@ -19,7 +19,7 @@ message(STATUS "Torch_DIR: ${Torch_DIR}")
 find_package(Torch REQUIRED)
 find_package(CUDAToolkit)
 if(CUDAToolkit_FOUND)
-    project(UNet_Studio VERSION "2022.01.17" LANGUAGES CUDA CXX;C)
+    project(UNet_Studio VERSION "2026.02.18" LANGUAGES CUDA CXX;C)
 endif()
 set(UNET_STUDIO_SOURCES
         unet.cpp
