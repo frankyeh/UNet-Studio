@@ -55,9 +55,7 @@ int main(int argc, char *argv[])
         return 1;
     }
     if(argc > 2)
-    {
         return run_cmd();
-    }
 
     tipl::show_prog = true;
     console.attach();
