@@ -39,6 +39,34 @@ UNet3dImpl::UNet3dImpl(int32_t in_count_,
         register_module("output"+std::to_string(level), output[level]);
     }
 
+    std::stringstream ss;
+    ss << "The model is a 3D U-Net with " << features_down.size() << " levels. ";
+    ss << "The encoder utilizes a feature hierarchy of [";
+        for(size_t i = 0; i < features_down.size(); ++i)
+            ss << (i > 0 ? ", " : "") << features_down[i].back();
+    ss << "] channels. Downsampling was performed via 3D max pooling (stride 2), while the decoder employs nearest-neighbor upsampling with skip connections via concatenation. "
+       << "Deep supervision was applied by generating auxiliary outputs at the " << (features_down.size() - 1) << " upper resolution levels.";
+    report = ss.str();
+}
+
+bool UNet3dImpl::init_dimension(const std::string& template_file)
+{
+    tipl::io::gz_nifti in(template_file,std::ios::in);
+    if(!in)
+    {
+        error_msg = in.error_msg;
+        return false;
+    }
+    in.toLPS();
+    in >> std::tie(dim,voxel_size);
+    dim = tipl::ml3d::round_up_size(dim);
+    voxel_size = voxel_size[0];
+
+    tipl::out() << "input dim: " << dim << " voxel size:" << voxel_size;
+    std::stringstream ss;
+    ss << " The input dimension was " << dim << ". The voxel size was " << voxel_size;
+    report += ss.str();
+    return true;
 }
 
 std::vector<torch::Tensor> UNet3dImpl::forward(torch::Tensor inputTensor)
@@ -124,6 +152,8 @@ void UNet3dImpl::copy_from(const UNet3dImpl& r)
     total_training_count = r.total_training_count;
     voxel_size = r.voxel_size;
     dim = r.dim;
+    report = r.report;
+    errors = r.errors;
 }
 void UNet3dImpl::add_gradient_from(const UNet3dImpl& r)
 {
