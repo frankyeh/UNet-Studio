@@ -2,9 +2,10 @@
 #include <QTextStream>
 #include "train.hpp"
 extern tipl::program_option<tipl::out> po;
+using namespace std::chrono_literals;
 bool load_from_file(UNet3d& model,const char* file_name);
 bool save_to_file(UNet3d& model,const char* file_name);
-using namespace std::chrono_literals;
+
 
 
 bool read_image_and_label(const std::string& image_name,
@@ -88,7 +89,6 @@ void train_unet::read_file(void)
     in_data_read_id = in_file_read_id = in_file_seed = std::vector<size_t>(thread_count);
     out_data = in_data = in_file = out_file = std::vector<tipl::image<3> >(thread_count);
     data_ready = file_ready = std::vector<bool>(thread_count,false);
-
     test_data_ready = false;
     test_in_tensor.clear();
     test_out_tensor.clear();
@@ -179,7 +179,6 @@ void train_unet::read_file(void)
                     aborted = true;
                     return;
                 }
-
             }
             test_data_ready = true;
         }
@@ -261,7 +260,6 @@ void train_unet::read_file(void)
                     if(aborted)
                         return;
                 }
-
                 tipl::image<3> in_data_thread,out_data_thread;
                 size_t read_id = in_file_read_id[thread];
                 size_t seed = in_file_seed[thread];
@@ -309,232 +307,118 @@ std::string train_unet::get_status(void)
     return s1 + "|" + s2;
 }
 
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> calc_losses(torch::Tensor& pred_raw, torch::Tensor& target_tissues, int C)
+{
+    auto pred_tissues = pred_raw.clamp(0.0, 1.0);
+
+    // Calculate Background (Virtual Channel)
+    // We do NOT concatenate this. We keep it separate.
+    auto pred_bg = (1.0 - pred_tissues.sum(1, true)).clamp(0.0, 1.0);
+    auto target_bg = (1.0 - target_tissues.sum(1, true)).clamp(0.0, 1.0);
+
+    // B. Optimized Cross Entropy
+    // Formula: -mean( sum(target_t * log(pred_t)) + target_bg * log(pred_bg) )
+    auto term_tissues = torch::sum(target_tissues * torch::log(pred_tissues + 1e-7), 1, true);
+    auto term_bg = target_bg * torch::log(pred_bg + 1e-7);
+
+    float ce_scale = std::log(static_cast<float>(C));
+    auto ce = -torch::mean(term_tissues + term_bg) / ce_scale;
+
+    // C. Optimized Dice
+    // Intersection = sum(pred_t * target_t) + (pred_bg * target_bg)
+    auto dims = std::vector<int64_t>{2, 3, 4};
+
+    auto inter_tissues = torch::sum(pred_tissues * target_tissues, dims);
+    auto inter_bg = torch::sum(pred_bg * target_bg, dims);
+
+    auto card_tissues = torch::sum(pred_tissues + target_tissues, dims);
+    auto card_bg = torch::sum(pred_bg + target_bg, dims);
+
+    // Sum across channel dim (1) implicitly by adding the bg and tissue components
+    auto dice = 1.0f - torch::mean((2.f * (inter_tissues.sum(1) + inter_bg) + 1e-5) /
+                                   (card_tissues.sum(1) + card_bg + 1e-5));
+
+    // D. MSE (On Raw Tissues only, balanced by C)
+    auto mse = torch::mse_loss(pred_raw, target_tissues) * static_cast<float>(C);
+
+    return {ce, dice, mse};
+};
+
 void train_unet::train(void)
 {
-    auto calc_losses = [](torch::Tensor& pred_raw, torch::Tensor& target_all, int C)
-        -> std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
-    {
-        // 1. Probabilistic Clamping for ReLU outputs
-        auto pred_clamped = pred_raw.clamp(0.0, 1.0);
 
-        // 2. Scaled Categorical Cross Entropy
-        // Normalize by log(C) so a random guess is always ~1.0
-        auto ce = -torch::mean(torch::sum(target_all * torch::log(pred_clamped + 1e-7), 1));
-        float ce_normalization = std::log(static_cast<float>(C));
-        ce /= (ce_normalization > 0.5f ? ce_normalization : 1.0f);
-
-        // 3. Dice Loss (Overlap-based)
-        // Inherently normalized between 0 and 1
-        auto dims = std::vector<int64_t>{2, 3, 4};
-        auto intersection = torch::sum(pred_clamped * target_all, dims);
-        auto cardinality = torch::sum(pred_clamped + target_all, dims);
-        auto dice = 1.0f - torch::mean((2.f * intersection + 1e-5) / (cardinality + 1e-5));
-
-        // 4. Scaled MSE
-        // Multiply by C to balance the average-over-channels denominator
-        auto mse = torch::mse_loss(pred_raw, target_all) * static_cast<float>(C);
-
-        return {ce, dice, mse};
-    };
 
     auto run_training = [=](){
-        struct exist_guard
-        {
-            bool& running;
-            exist_guard(bool& running_):running(running_){}
-            ~exist_guard() { running = false; }
-        } guard(running);
-
         try{
 
             std::shared_ptr<torch::optim::Optimizer> optimizer(
                         new torch::optim::Adam(model->parameters(),
                             torch::optim::AdamOptions(param.learning_rate)));
-            float best_val_error = std::numeric_limits<float>::max();
-            int patience_counter = 0;
-            int max_patience = 8;
-            const float decay_factor = 0.5f;
-            const float min_lr = 1e-7f;
-
             while(!test_data_ready || pause)
             {
                 std::this_thread::sleep_for(100ms);
                 if(aborted)
                     return;
             }
+            model->report += " Training was conducted over " + std::to_string(param.epoch) + " epochs "
+                             + "using a batch size of " + std::to_string(param.batch_size) + ". "
+                             + "Optimization employed an initial learning rate of " + std::to_string(param.learning_rate) + ".";
 
-            auto to_chart = [](float error)->int{return int(std::max<float>(0.0f,std::min<float>(79.0f,(-std::log10(error))*80.0f/3.0f)));};
             for (size_t cur_data_index = 0; cur_epoch < param.epoch && !aborted;cur_epoch++,cur_data_index += param.batch_size)
             {
-                if(param.learning_rate != optimizer->defaults().get_lr())
+                double cur_lr = param.learning_rate * std::pow(1.0 - (double)cur_epoch / param.epoch, 0.9);
+                static_cast<torch::optim::AdamOptions&>(optimizer->param_groups()[0].options()).lr(cur_lr);
+
+                training_status = "training";
+                for(int b = 0;b < param.batch_size && !aborted;++b)
                 {
-                    tipl::out() << "set learning rate to " << param.learning_rate << std::endl;
-                    optimizer->defaults().set_lr(param.learning_rate);
+                    size_t thread = (cur_data_index+b)%data_ready.size();
+
+                    while(!data_ready[thread] || pause)
+                    {
+                        std::this_thread::sleep_for(100ms);
+                        if(aborted)
+                            return;
+                    }
+                    torch::Tensor target_probs = torch::from_blob(out_data[thread].data(),
+                            {1,model->out_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(model->device(),/*non_blocking=*/true);
+                    torch::Tensor in_tensor = torch::from_blob(in_data[thread].data(),
+                            {1,model->in_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(model->device(),/*non_blocking=*/true);
+                    data_ready[thread] = false;
+
+                    auto outputs = model->forward(in_tensor);
+
+                    torch::Tensor total_loss;
+                    torch::Tensor active_target = target_probs;
+                    for(size_t k = 0; k < outputs.size(); ++k)
+                    {
+                        if(k > 0)
+                            active_target = torch::avg_pool3d(active_target, /*kernel=*/2, /*stride=*/2);
+                        auto [ce, dice, mse] = calc_losses(outputs[k], active_target, model->out_count);
+
+                        float level_weight = 1.0f / (1 << k);
+                        auto level_loss = (ce + dice + mse) * level_weight;
+
+                        if(total_loss.defined()) total_loss += level_loss;
+                        else total_loss = level_loss;
+                    }
+                    total_loss.backward();
+                    training_status += ".";
                 }
 
-                training_status = "training ";
-                size_t model_count = std::min<int>(1 + other_models.size(),param.batch_size);
-                for(auto& each : other_models)
-                    each->copy_from(*model);
-                std::mutex m;
-                size_t b = 0;
-                std::vector<float> error_each_model(model_count);
-                tipl::par_for(model_count,[&](size_t model_id)
                 {
-                    try{
-
-                        auto& cur_model = (model_id == 0 ? model:other_models[model_id-1]);
-                        while(!aborted)
-                        {
-                            size_t thread = 0;
-                            {
-                                std::lock_guard<std::mutex> lock(m);
-                                if(b >= param.batch_size)
-                                    break;
-                                thread = (cur_data_index+(b++))%data_ready.size();
-                                training_status += std::to_string(in_data_read_id[thread]) + "." + std::to_string(model_id) +
-                                                   (train_image_is_template[in_data_read_id[thread]] ? "t":"s");
-                            }
-
-                            while(!data_ready[thread] || pause)
-                            {
-                                std::this_thread::sleep_for(100ms);
-                                if(aborted)
-                                    return;
-                            }
-
-                            torch::Tensor target_probs = torch::from_blob(out_data[thread].data(),
-                                    {1,cur_model->out_count,int(cur_model->dim[2]),int(cur_model->dim[1]),int(cur_model->dim[0])}).to(cur_model->device());
-                            torch::Tensor in_tensor = torch::from_blob(in_data[thread].data(),
-                                    {1,cur_model->in_count,int(cur_model->dim[2]),int(cur_model->dim[1]),int(cur_model->dim[0])}).to(cur_model->device());
-                            data_ready[thread] = false;
-
-                            auto outputs = cur_model->forward(in_tensor);
-
-                            torch::Tensor total_loss;
-                            {
-                                for(size_t k = 0; k < outputs.size(); ++k)
-                                {
-                                    // 1. Handle Downsampling for Target
-                                    torch::Tensor cur_target_probs;
-                                    if(k == 0)
-                                        cur_target_probs = target_probs;
-                                    else
-                                        cur_target_probs = torch::nn::functional::interpolate(target_probs,
-                                            torch::nn::functional::InterpolateFuncOptions()
-                                            .size(std::vector<int64_t>{outputs[k].size(2), outputs[k].size(3), outputs[k].size(4)})
-                                            .mode(torch::kTrilinear).align_corners(false));
-
-                                    auto [ce, dice, mse] = calc_losses(outputs[k], cur_target_probs,cur_model->out_count);
-                                    float level_weight = 1.0f / (1 << k);
-                                    auto level_loss = (ce + dice + mse) * level_weight;
-
-                                    if(total_loss.defined()) total_loss += level_loss;
-                                    else total_loss = level_loss;
-                                }
-                            };
-                            error_each_model[model_id] = total_loss.item().toFloat();
-                            total_loss.backward();
-                        }
-                    }
-                    catch(const c10::Error& error)
+                    while(cur_validation_epoch == cur_epoch || pause)
                     {
-                        tipl::out() << (error_msg = std::string("during ") + training_status + ":" + error.what());
-                        aborted = true;
-                        return;
+                        std::this_thread::sleep_for(100ms);
+                        if(aborted)
+                            return;
                     }
-
-                },thread_count);
-
-                if(aborted)
-                    return;
-                {
                     training_status = "update model";
-                    for(auto& each : other_models)
-                        model->add_gradient_from(*each);
                     optimizer->step();
                     optimizer->zero_grad();
                     model->total_training_count += param.batch_size;
-
-                }
-
-                std::vector<float> errors;
-                if(!test_in_tensor.empty())
-                {
-                    test_model->copy_from(*model);
-                    test_model->eval();
-                    torch::NoGradGuard no_grad; // Disable gradient for validation
-                    float cur_error = 0.0f;
-                    for(size_t i = 0;i < test_in_tensor.size();++i)
-                    {
-                        float ce_v,dice_v,mse_v;
-                        auto [ce, dice, mse] = calc_losses(test_model->forward(test_in_tensor[i])[0], test_out_tensor[i],test_model->out_count);
-                        errors.push_back(ce_v = ce.item().toFloat());
-                        errors.push_back(dice_v = dice.item().toFloat());
-                        errors.push_back(mse_v = mse.item().toFloat());
-                        cur_error += ce_v + dice_v + mse_v;
-                    }
-                    if(test_error.empty())
-                    {
-                        test_error.resize(errors.size());
-                        test_error_name = {"ce","dice","mse"};
-                    }
-                    for(size_t i = 0;i < errors.size();++i)
-                        test_error[i].push_back(errors[i]);
-
-                    if (cur_error < best_val_error * 0.999f) // 0.1% improvement threshold
-                    {
-                        best_val_error = cur_error;
-                        patience_counter = 0;
-                        std::scoped_lock<std::mutex> lock(output_model_mutex);
-                        output_model->copy_from(*model);
-                    }
-                    else
-                    {
-                        patience_counter++;
-                        if (patience_counter >= max_patience && param.learning_rate > min_lr)
-                        {
-                            param.learning_rate *= decay_factor;
-                            patience_counter = 0;
-                            max_patience *= 2;
-                        }
-                    }
-                }
-
-
-                {
-                    if(!cur_epoch)
-                        tipl::out()     << "1                        0.1                        0.01                   0.001";
-                    std::string out = cur_epoch % 100 ?
-                            "|                         |                          |                         |":
-                            "|-------------------------|--------------------------|-------------------------|";
-                    if(!errors.empty())
-                    {
-                        out[to_chart(errors[0])] = 'C';
-                        out[to_chart(errors[1])] = 'D';
-                        out[to_chart(errors[2])] = 'M';
-                    }
-
-                    std::string epoch_string = "|" + std::to_string(cur_epoch);
-                    std::copy(epoch_string.begin(),epoch_string.end(),out.begin());
-                    tipl::out() << out;
-
-                }
-
-                if(po.has("network") &&
-                   (((cur_epoch + 1) % 500 == 0) || cur_epoch+1 == param.epoch))
-                {
-                    if(!save_to_file(model,po.get("network").c_str()))
-                    {
-                        error_msg = "failed to save network";
-                        aborted = true;
-                    }
-                    if(!save_error_to(po.get("error",po.get("network") + ".error.txt").c_str()))
-                        error_msg = "failed to save error";
                 }
             }
-            tipl::out() << (training_status = "training completed");
-
         }
         catch(const c10::Error& error)
         {
@@ -547,11 +431,111 @@ void train_unet::train(void)
         pause = aborted = true;
     };
 
+    train_thread.reset(new std::thread(run_training));
+}
+void train_unet::validate(void)
+{
+    auto run_validation = [=](){
+    try{
+            struct exist_guard
+            {
+                bool& running;
+                exist_guard(bool& running_):running(running_){}
+                ~exist_guard() { running = false; }
+            } guard(running);
+
+            float best_val_error = std::numeric_limits<float>::max();
+
+            for(;cur_validation_epoch < param.epoch && !aborted;++cur_validation_epoch)
+            {
+                while(cur_epoch < cur_validation_epoch || pause)
+                {
+                    std::this_thread::sleep_for(100ms);
+                    if(aborted)
+                        return;
+                }
+                std::vector<float> errors;
+                if(!test_in_tensor.empty())
+                {
+                    torch::NoGradGuard no_grad; // Disable gradient for validation
+                    float cur_error = 0.0f;
+                    for(size_t i = 0;i < test_in_tensor.size();++i)
+                    {
+                        float ce_v,dice_v,mse_v;
+                        auto [ce, dice, mse] = calc_losses(model->forward(test_in_tensor[i])[0], test_out_tensor[i],model->out_count);
+                        errors.push_back(ce_v = ce.item().toFloat());
+                        errors.push_back(dice_v = dice.item().toFloat());
+                        errors.push_back(mse_v = mse.item().toFloat());
+                        cur_error += ce_v + dice_v + mse_v;
+                    }
+                    {
+                        std::scoped_lock<std::mutex> lock(error_mutex);
+                        for(size_t i = 0;i < errors.size();++i)
+                            model->errors.push_back(errors[i]);
+                    }
+
+                    if (cur_error < best_val_error * 0.999f) // 0.1% improvement threshold
+                    {
+                        best_val_error = cur_error;
+                        std::scoped_lock<std::mutex> lock(output_model_mutex);
+                        output_model->copy_from(*model);
+                    }
+
+                }
+                {
+                    if(!cur_validation_epoch)
+                        tipl::out()     << "1                        0.1                        0.01                   0.001";
+                    std::string out = cur_validation_epoch % 100 ?
+                            "|                         |                          |                         |":
+                            "|-------------------------|--------------------------|-------------------------|";
+                    if(!errors.empty())
+                    {
+                        auto to_chart = [](float error)->int{return int(std::max<float>(0.0f,std::min<float>(79.0f,(-std::log10(error))*80.0f/3.0f)));};
+                        out[to_chart(errors[0])] = 'C';
+                        out[to_chart(errors[1])] = 'D';
+                        out[to_chart(errors[2])] = 'M';
+                    }
+
+                    std::string epoch_string = "|" + std::to_string(cur_validation_epoch);
+                    if(!(cur_validation_epoch % 100))
+                    {
+                        double cur_lr = param.learning_rate * std::pow(1.0 - (double)cur_validation_epoch / param.epoch, 0.9);
+                        epoch_string += " lr:" + std::to_string(cur_lr);
+                    }
+                    std::copy(epoch_string.begin(),epoch_string.end(),out.begin());
+                    tipl::out() << out;
+
+                }
+
+                if(po.has("network") &&
+                   (((cur_validation_epoch + 1) % 500 == 0) || cur_validation_epoch+1 == param.epoch))
+                {
+                    if(!save_to_file(model,po.get("network").c_str()))
+                    {
+                        error_msg = "failed to save network";
+                        aborted = true;
+                    }
+                    if(!save_error_to(po.get("error",po.get("network") + ".error.txt").c_str()))
+                        error_msg = "failed to save error";
+                }
+            }
+        }
+        catch(const c10::Error& error)
+        {
+            tipl::out() << (error_msg = error.what());
+        }
+        catch(...)
+        {
+            tipl::out() << (error_msg = "unknown error in training");
+        }
+        pause = aborted = true;
+    };
+
     if(tipl::show_prog)
-        train_thread.reset(new std::thread(run_training));
+        validation_thread.reset(new std::thread(run_validation));
     else
     {
-        run_training();
+        run_validation();
         join();
     }
 }
@@ -559,15 +543,13 @@ void train_unet::start(void)
 {
     tipl::progress p("starting training");
     // reset
-    reading_status = augmentation_status = training_status = "initializing";
+    reading_status = augmentation_status = training_status = validation_status = "initializing";
     {
         stop();
         pause = aborted = false;
         running = true;
         error_msg.clear();
-        test_error.clear();
-        test_error_name.clear();
-        cur_epoch = 0;
+        cur_epoch = cur_validation_epoch = 0;
     }
 
     if(param.image_file_name.empty())
@@ -577,48 +559,23 @@ void train_unet::start(void)
         return;
     }
 
-    if(model->total_training_count == 0)
+    if(model->total_training_count == 0 && !model->init_dimension(param.image_file_name[0]))
     {
-        tipl::io::gz_nifti in(param.image_file_name[0],std::ios::in);
-        if(!in)
-        {
-            error_msg = in.error_msg;
-            aborted = true;
-            return;
-        }
-        in.toLPS();
-        in.get_image_dimension(model->dim);
-        in.get_voxel_size(model->voxel_size);
-        model->dim = tipl::ml3d::round_up_size(model->dim);
-        model->voxel_size = model->voxel_size[0];
-        tipl::out() << "set network input sizes: " << model->dim << " with resolution:" << model->voxel_size <<std::endl;
+        error_msg = model->error_msg;
+        aborted = true;
+        return;
     }
+
 
     model->to(param.device);
     model->train();
     output_model = UNet3d(model->in_count,model->out_count,model->feature_string);
     output_model->to(param.device);
     output_model->copy_from(*model);
-
-    if(!param.test_image_file_name.empty())
-    {
-        test_model = UNet3d(model->in_count,model->out_count,model->feature_string);
-        test_model->to(param.device);
-    }
-
     tipl::out() << "gpu count: " << torch::cuda::device_count();
-
-    other_models.clear();
-    for(size_t i = 1;i < torch::cuda::device_count();++i)
-    {
-        tipl::out() << "model added at cuda:" << (i % torch::cuda::device_count());
-        other_models.push_back(UNet3d(model->in_count,model->out_count,model->feature_string));
-        other_models.back()->to(torch::Device(torch::kCUDA,i % torch::cuda::device_count()));
-        other_models.back()->train();
-    }
-
     read_file();
-    train();        
+    train();
+    validate();
 }
 void train_unet::join(void)
 {
@@ -637,6 +594,11 @@ void train_unet::join(void)
         train_thread->join();
         train_thread.reset();
     }
+    if(validation_thread.get())
+    {
+        validation_thread->join();
+        validation_thread.reset();
+    }
 }
 void train_unet::stop(void)
 {
@@ -646,14 +608,16 @@ void train_unet::stop(void)
 bool train_unet::save_error_to(const char* file_name)
 {
     std::ofstream out(file_name);
-    if(!out || test_error.empty())
+    auto errors = model->get_errors();
+    if(!out || errors.empty())
         return false;
-    out << "epoch\t" << tipl::merge(test_error_name,'\t') << std::endl;
-    for(size_t i = 0;i < test_error[0].size();++i)
+    out << "epoch\tce\tdice\tmse\t'" << std::endl;
+    size_t total_epoch = errors.size()/3;
+    for(size_t epoch = 0,pos = 0;epoch < total_epoch;++epoch)
     {
-        out << i << "\t";
-        for(size_t j = 0;j < test_error.size();++j)
-            out << test_error[j][i];
+        out << epoch;
+        for(size_t j = 0;j < 3;++j,++pos)
+            out  << "\t" << errors[pos];
         out << std::endl;
     }
     return true;
