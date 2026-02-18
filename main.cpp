@@ -72,6 +72,14 @@ bool load_from_file(UNet3d& model,const char* file_name)
     mat.read("total_training_count",model->total_training_count);
     mat.read("voxel_size",model->voxel_size);
     mat.read("dimension",model->dim);
+    {
+        unsigned int r,c;
+        if(mat.get_col_row("errors",r,c))
+        {
+            model->errors.resize(r*c);
+            mat.read("errors",model->errors);
+        }
+    }
     model->train();
     int id = 0;
     for(auto& tensor : model->parameters())
@@ -160,6 +168,7 @@ bool save_to_file(UNet3d& model,const char* file_name)
     mat.write("total_training_count",model->total_training_count);
     mat.write("voxel_size",model->voxel_size);
     mat.write("dimension",model->dim);
+    mat.write("errors",model->errors,3);
     mat.write("param",std::vector<int>({model->in_count,model->out_count}));
     int id = 0;
     for(const auto& tensor : model->parameters())
