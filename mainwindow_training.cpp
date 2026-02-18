@@ -246,6 +246,7 @@ void MainWindow::has_network(void)
     ui->action_train_save_network->setEnabled(true);
     ui->train_save_network->setEnabled(true);
 }
+std::string default_feature(int out_count);
 void MainWindow::on_action_train_new_network_triggered()
 {
     if(image_list.empty())
@@ -253,9 +254,7 @@ void MainWindow::on_action_train_new_network_triggered()
         QMessageBox::critical(this,"ERROR","Please specify training images");
         return;
     }
-    auto feature = QInputDialog::getText(this,"","Please Specify Network Structure",QLineEdit::Normal,
-                                         out_count <= 4 ? "8x8+16x16+32x32+64x64+128x128" :
-                                         (out_count <= 8 ? "16x16+32x32+64x64+128x128+128x128" : "32x32+64x64+128x128+128x128+256x256"));
+    auto feature = QInputDialog::getText(this,"","Please Specify Network Structure",QLineEdit::Normal,QString::fromStdString(default_feature(out_count)));
     if(feature.isEmpty())
         return;
     torch::manual_seed(0);
@@ -387,9 +386,6 @@ void MainWindow::on_train_start_clicked()
             train.param.label_file_name.push_back(label_list[i].toStdString());
         }
     }
-    train.param.test_image_file_name = train.param.image_file_name;
-    train.param.test_label_file_name = train.param.label_file_name;
-
     train.param.device = ui->train_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->train_device->currentIndex()-1):torch::Device(torch::kCPU);
     train.start();
     ui->train_prog->setValue(1);
