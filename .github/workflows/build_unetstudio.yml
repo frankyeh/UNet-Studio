@@ -5,11 +5,11 @@ on:
       tag:
         description: 'Tag'
         required: true
-        default: '2023.04.17'
+        default: '2026.02.18'
       release_name:
         description: 'Release Name'
         required: true
-        default: '2022.04.17 "Sun" Release'
+        default: '2026.02.18 "Sun" Release'
       build_windows:
         type: boolean
         description: 'Build Windows'
@@ -196,7 +196,7 @@ jobs:
     if: ${{ github.event.inputs.build_mac == 'true' }}
     strategy:
       matrix:
-        os: [macos-13,macos-14,macos-15]
+        os: [macos-14,macos-15]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     env:
