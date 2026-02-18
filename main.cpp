@@ -29,7 +29,7 @@ void init_application(void)
             tipl::error() << cuda_msg;
     }
 }
-int run_cmd(void)
+int run_cmd(int argc, char *argv[])
 {
     init_application();
     if(!po.parse(argc,argv))
@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
 {
     tipl::out() << unet_studio_citation << std::endl;
     if(argc > 2)
-        return run_cmd();
+        return run_cmd(argc,argv);
     tipl::show_prog = true;
     console.attach();
     tipl::progress prog(unet_studio_citation);
