@@ -130,7 +130,7 @@ void MainWindow::on_action_train_open_files_triggered()
     if (fileNames.isEmpty())
         return;
     {
-         tipl::io::gz_nifti nii(fileNames[0].toStdString(),std::ios::in);
+         tipl::io::gz_nifti nii(fileNames[0].toUtf8().constData(),std::ios::in);
          if(!nii)
          {
              QMessageBox::critical(this,"ERROR",nii.error_msg.c_str());
@@ -199,7 +199,7 @@ void MainWindow::on_action_train_open_labels_triggered()
         return;
     settings.setValue("work_dir",QFileInfo(fileNames[0]).absolutePath());
 
-    if(!get_label_info(fileNames[0].toStdString(),label_count,is_label))
+    if(!get_label_info(fileNames[0].toUtf8().constData(),label_count,is_label))
     {
         QMessageBox::critical(this,"Error",QString("%1 is not a valid label image").arg(QFileInfo(fileNames[0]).fileName()));
         return;
@@ -219,9 +219,9 @@ void MainWindow::on_action_train_open_labels_triggered()
         if(label_list[index].isEmpty())
         {
             std::string result;
-            if(tipl::match_files(std::string(image_list[entry_index].toStdString()),
-                                 std::string(label_list[entry_index].toStdString()),
-                                 std::string(image_list[index].toStdString()),result) && QFileInfo(result.c_str()).exists())
+            if(tipl::match_files(std::string(image_list[entry_index].toUtf8().constData()),
+                                 std::string(label_list[entry_index].toUtf8().constData()),
+                                 std::string(image_list[index].toUtf8().constData()),result) && QFileInfo(result.c_str()).exists())
             {
                 label_list[index] = result.c_str();
                 image_last_added_indices.push_back(index);
@@ -261,7 +261,7 @@ void MainWindow::on_action_train_new_network_triggered()
     torch::manual_seed(0);
     at::globalContext().setDeterministicCuDNN(true);
     qputenv("CUDNN_DETERMINISTIC", "1");
-    train.model = UNet3d(in_count,out_count,feature.toStdString());
+    train.model = UNet3d(in_count,out_count,feature.toUtf8().constData());
     ui->model_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
     ui->model_report->setPlainText(train.model->report.c_str());
     has_network();
@@ -269,7 +269,7 @@ void MainWindow::on_action_train_new_network_triggered()
 }
 void MainWindow::load_network(QString fileName)
 {
-    if(!load_from_file(train.model,fileName.toStdString().c_str()))
+    if(!load_from_file(train.model,fileName.toUtf8().constData()))
     {
         QMessageBox::critical(this,"Error","Invalid file format");
         return;
@@ -298,7 +298,7 @@ void MainWindow::on_action_train_save_network_triggered()
                                                 settings.value("network_dir").toString() + "/" +
                                                 train_name + ".net.gz","Network files (*net.gz);;All files (*)");
     std::scoped_lock<std::mutex> lock(train.output_model_mutex);
-    if(!fileName.isEmpty() && save_to_file(train.output_model,fileName.toStdString().c_str()))
+    if(!fileName.isEmpty() && save_to_file(train.output_model,fileName.toUtf8().constData()))
     {
         QMessageBox::information(this,"","Network Saved");
         settings.setValue("network_dir",QFileInfo(fileName).absolutePath());
@@ -331,7 +331,7 @@ void MainWindow::on_actionApply_Label_Weights_triggered()
     default_weight = QInputDialog::getText(this,"","Specify back propagation weights for each label",QLineEdit::Normal,default_weight);
     if(default_weight.isEmpty())
         return;
-    train.param.set_weight(default_weight.toStdString());
+    train.param.set_weight(default_weight.toUtf8().constData());
 }
 
 
@@ -349,7 +349,7 @@ void MainWindow::on_train_start_clicked()
 
     train.param.options.clear();
     for(auto& each : option->treemodel->name_data_mapping)
-        train.param.options[each.first.toStdString()] = each.second->getValue().toFloat();
+        train.param.options[each.first.toUtf8().constData()] = each.second->getValue().toFloat();
 
     if(train.running)
     {
@@ -379,13 +379,13 @@ void MainWindow::on_train_start_clicked()
 
     for(size_t i = 0;i < image_list.size();++i)
     {
-        if(!std::filesystem::exists(image_list[i].toStdString()) ||
-           !std::filesystem::exists(label_list[i].toStdString()))
+        if(!std::filesystem::exists(image_list[i].toUtf8().constData()) ||
+           !std::filesystem::exists(label_list[i].toUtf8().constData()))
             continue;
         if(ui->list1->item(i)->checkState() == Qt::Checked)
         {
-            train.param.image_file_name.push_back(image_list[i].toStdString());
-            train.param.label_file_name.push_back(label_list[i].toStdString());
+            train.param.image_file_name.push_back(image_list[i].toUtf8().constData());
+            train.param.label_file_name.push_back(label_list[i].toUtf8().constData());
         }
     }
     train.param.device = ui->train_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->train_device->currentIndex()-1):torch::Device(torch::kCPU);
@@ -582,7 +582,7 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
     if(currentRow >= 0 && currentRow < image_list.size())
     {
         tipl::shape<3> shape;
-        if(!read_image_and_label(image_list[currentRow].toStdString(),label_list[currentRow].toStdString(),in_count,I1,I2,shape))
+        if(!read_image_and_label(image_list[currentRow].toUtf8().constData(),label_list[currentRow].toUtf8().constData(),in_count,I1,I2,shape))
             I2.clear();
         if(!is_label)
             tipl::segmentation::normalize_otsu_median(I2);
@@ -590,7 +590,7 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
         {
             std::unordered_map<std::string,float> options;
             for(auto& each : option->treemodel->name_data_mapping)
-                options[each.first.toStdString()] = each.second->getValue().toFloat();
+                options[each.first.toUtf8().constData()] = each.second->getValue().toFloat();
 
             visual_perception_augmentation(options,I1,I2,is_label,shape,ui->seed->value());
         }
