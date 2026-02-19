@@ -70,7 +70,7 @@ void MainWindow::on_action_evaluate_open_network_triggered()
                                                     settings.value("network_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
     if(fileName.isEmpty())
         return;
-    if(!load_from_file(evaluate.model,fileName.toUtf8().constData()))
+    if(!load_from_file(evaluate.model,fileName.toStdString().c_str()))
     {
         QMessageBox::critical(this,"Error","Invalid file format");
         return;
@@ -87,7 +87,7 @@ void MainWindow::on_evaluate_builtin_networks_currentIndexChanged(int index)
     if(index > 0)
     {
         QString fileName =  QCoreApplication::applicationDirPath() + "/network/" + ui->evaluate_builtin_networks->currentText() + ".net.gz";
-        if(!load_from_file(evaluate.model,fileName.toUtf8().constData()))
+        if(!load_from_file(evaluate.model,fileName.toStdString().c_str()))
         {
             QMessageBox::critical(this,"Error","Failed to load network");
             return;
@@ -109,7 +109,7 @@ void MainWindow::on_evaluate_clicked()
     evaluate.param.image_file_name.clear();
     evaluate.param.prob_threshold = ui->postproc_prob_threshold->value();
     for(auto s : evaluate_list)
-        evaluate.param.image_file_name.push_back(s.toUtf8().constData());
+        evaluate.param.image_file_name.push_back(s.toStdString());
 
     ui->evaluate->setText("Stop");
     ui->evaluate_progress->setEnabled(true);
@@ -131,7 +131,7 @@ void MainWindow::on_evaluate_clicked()
         {
             if(eval_name.contains(fileInfo.fileName().remove(".nii.gz")))
             {
-                evaluate.proc_strategy.template_file_name = (QCoreApplication::applicationDirPath() + "/template/" + fileInfo.fileName()).constData();
+                evaluate.proc_strategy.template_file_name = (QCoreApplication::applicationDirPath() + "/template/" + fileInfo.fileName()).toStdString();
                 tipl::out() << "rotation template: " << evaluate.proc_strategy.template_file_name << std::endl;
             }
         }
@@ -227,7 +227,7 @@ void MainWindow::on_evaluate_list_currentRowChanged(int currentRow)
         if(eval_I1_buffer[currentRow].empty())
         {
             tipl::vector<3> vs;
-            if(!(tipl::io::gz_nifti(evaluate_list[currentRow].toUtf8().constData(),std::ios::in) >> std::tie(eval_I1_buffer[currentRow],vs)))
+            if(!(tipl::io::gz_nifti(evaluate_list[currentRow].toStdString(),std::ios::in) >> std::tie(eval_I1_buffer[currentRow],vs)))
                 return;
             eval_I1_buffer_max[currentRow] = tipl::max_value(eval_I1_buffer[currentRow]);
         }
@@ -331,7 +331,7 @@ void MainWindow::on_action_evaluate_save_results_triggered()
     if(file.isEmpty())
         return;
 
-    if(!evaluate.save_to_file(currentRow,file.toUtf8().constData()))
+    if(!evaluate.save_to_file(currentRow,file.toStdString().c_str()))
     {
         QMessageBox::critical(this,"Error","Cannot save file");
         return;
@@ -345,9 +345,9 @@ void MainWindow::on_action_evaluate_save_results_triggered()
         if(index != currentRow)
         {
             std::string result;
-            if(tipl::match_files(std::string(evaluate_list[currentRow].toUtf8().constData()),
-                                 std::string(file.toUtf8().constData()),
-                                 std::string(evaluate_list[index].toUtf8().constData()),result))
+            if(tipl::match_files(std::string(evaluate_list[currentRow].toStdString()),
+                                 std::string(file.toStdString()),
+                                 std::string(evaluate_list[index].toStdString()),result))
             {
                 if(!evaluate.save_to_file(index,result.c_str()))
                 {
@@ -479,7 +479,7 @@ void MainWindow::run_action(QString command)
         param1 = eval_option->get<float>("lower_threshold_threshold");
     if(command == "minus")
         param1 = eval_option->get<float>("minus_value");
-    evaluate.proc_actions(command.toUtf8().constData(),param1,param2);
+    evaluate.proc_actions(command.toStdString().c_str(),param1,param2);
     on_eval_pos_valueChanged(ui->eval_pos->value());
 }
 

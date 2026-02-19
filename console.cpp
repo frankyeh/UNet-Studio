@@ -140,7 +140,7 @@ void Console::on_run_cmd_clicked()
 {
     if(ui->cmd_line->text().startsWith("unet_studio "))
         ui->cmd_line->setText(ui->cmd_line->text().remove("unet_studio "));
-    if(!po.parse(ui->cmd_line->text().toUtf8().constData()))
+    if(!po.parse(ui->cmd_line->text().toStdString()))
     {
         QMessageBox::critical(this,"ERROR",po.error_msg.c_str());
         return;

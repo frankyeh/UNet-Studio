@@ -441,7 +441,7 @@ QModelIndex TreeModel::addItem(QString root_name,QString id,QVariant title, QVar
         settings.endGroup();
     }
     else
-        std::cout << "duplicated item name found: " << id.constData() << std::endl;
+        std::cout << "duplicated item name found: " << id.toStdString() << std::endl;
     return createIndex(root_mapping[root_name]->childCount()-1,1,name_data_mapping[id]);
 }
 
@@ -516,7 +516,7 @@ void OptionTableWidget::setDefault(QString parent_id)
 void OptionTableWidget::dataChanged(const QModelIndex &, const QModelIndex &bottomRight)
 {
     //auto cur_node = reinterpret_cast<OptionItem*>(bottomRight.internalPointer());
-    //std::cout << cur_node->id.constData() << std::endl;
+    //std::cout << cur_node->id.toStdString() << std::endl;
 }
 void OptionTableWidget::action()
 {
