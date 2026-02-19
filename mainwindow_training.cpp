@@ -397,6 +397,8 @@ void MainWindow::on_train_start_clicked()
     error_scene << QImage();
 
     ui->model_report->setPlainText(train.model->report.c_str());
+    ui->model_info->setText(train.model->get_info().c_str());
+
     has_network();
 }
 
