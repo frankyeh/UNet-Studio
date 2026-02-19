@@ -371,8 +371,6 @@ void MainWindow::on_train_start_clicked()
         train.model = new_model;
     }
 
-    tipl::out() << show_structure(train.model);
-
     train.param.image_file_name.clear();
     train.param.label_file_name.clear();
     train.param.test_image_file_name.clear();
