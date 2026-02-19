@@ -21,8 +21,6 @@ bool read_image_and_label(const std::string& image_name,
         if(!nii || nii.dim(4) != in_count)
             return false;
         nii.get_image_dimension(image_shape);
-        if(image_shape.size() > 256*256*196)
-            return false;
         input.resize(tipl::shape<3>(image_shape.width(),image_shape.height(),image_shape.depth()*in_count));
         for(int c = 0;c < in_count;++c)
         {
