@@ -357,12 +357,7 @@ void train_unet::train(void)
             std::shared_ptr<torch::optim::Optimizer> optimizer(
                         new torch::optim::Adam(model->parameters(),
                             torch::optim::AdamOptions(param.learning_rate)));
-            while(!test_data_ready || pause)
-            {
-                std::this_thread::sleep_for(100ms);
-                if(aborted)
-                    return;
-            }
+
             model->report += " Training was conducted over " + std::to_string(param.epoch) + " epochs "
                              + "using a batch size of " + std::to_string(param.batch_size) + ". "
                              + "Optimization employed an initial learning rate of " + std::to_string(param.learning_rate) + ".";
@@ -446,11 +441,12 @@ void train_unet::validate(void)
                 ~exist_guard() { running = false; }
             } guard(running);
 
-            float best_val_error = std::numeric_limits<float>::max();
+            tipl::time t;
 
+            float best_val_error = std::numeric_limits<float>::max();
             for(;cur_validation_epoch < param.epoch && !aborted;++cur_validation_epoch)
             {
-                while(cur_epoch < cur_validation_epoch || pause)
+                while(cur_epoch < cur_validation_epoch || !test_data_ready || pause)
                 {
                     std::this_thread::sleep_for(100ms);
                     if(aborted)
@@ -487,9 +483,17 @@ void train_unet::validate(void)
                 {
                     if(!cur_validation_epoch)
                         tipl::out()     << "1                        0.1                        0.01                   0.001";
-                    std::string out = cur_validation_epoch % 100 ?
-                            "|                         |                          |                         |":
-                            "|-------------------------|--------------------------|-------------------------|";
+                    if(cur_validation_epoch % 100 == 0)
+                    {
+                        std::string out = "|-------------------------|--------------------------|-------------------------|";
+                        auto str = t.to_string();
+                        double cur_lr = param.learning_rate * std::pow(1.0 - (double)cur_validation_epoch / param.epoch, 0.9);
+                        str += "-lr:" + std::to_string(cur_lr);
+                        std::copy(str.begin(),str.end(),out.begin()+1);
+                        tipl::out() << out;
+                    }
+
+                    std::string out = "|                         |                          |                         |";
                     if(!errors.empty())
                     {
                         auto to_chart = [](float error)->int{return int(std::max<float>(0.0f,std::min<float>(79.0f,(-std::log10(error))*80.0f/3.0f)));};
@@ -498,24 +502,12 @@ void train_unet::validate(void)
                         out[to_chart(errors[2])] = 'M';
                     }
 
-                    std::string epoch_string = "|" + std::to_string(cur_validation_epoch);
-                    if(!(cur_validation_epoch % 100))
-                    {
-                        double cur_lr = param.learning_rate * std::pow(1.0 - (double)cur_validation_epoch / param.epoch, 0.9);
-                        epoch_string += " lr:" + std::to_string(cur_lr);
-                    }
-                    std::copy(epoch_string.begin(),epoch_string.end(),out.begin());
-                    tipl::out() << out;
+                    tipl::out() << out << cur_validation_epoch;
 
                 }
             }
-            if(!aborted && po.has("network"))
-            {
-                tipl::out() << "save network to " << po.get("network");
-                if(!save_to_file(model,po.get("network").c_str()))
-                    tipl::error() << (error_msg = "failed to save network");
-            }
-            else
+
+            if(!aborted)
             {
                 std::scoped_lock<std::mutex> lock(output_model_mutex);
                 output_model->copy_from(*model);
@@ -714,6 +706,7 @@ int tra(void)
 
     // setting up the parameters for visual perception augmentation
     {
+        tipl::out() << "visual augmentation options";
         QFile data(":/options.txt");
         if (!data.open(QIODevice::ReadOnly | QIODevice::Text))
         {
@@ -738,6 +731,11 @@ int tra(void)
     {
         tipl::error() << train.error_msg;
         return 1;
+    }
+    {
+        tipl::out() << "save model to " << po.get("network","model.net.gz");
+        if(!save_to_file(train.model,po.get("network").c_str()))
+            tipl::error() << "failed to save network to " << po.get("network");
     }
     return 0;
 }
