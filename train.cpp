@@ -15,11 +15,20 @@ bool read_image_and_label(const std::string& image_name,
                           tipl::image<3>& label,
                           tipl::shape<3>& image_shape)
 {
+    std::scoped_lock<std::mutex> lock(tipl::io::nifti_do_not_show_process);
     tipl::matrix<4,4,float> image_t((tipl::identity_matrix()));
     {
         tipl::io::gz_nifti nii(image_name,std::ios::in);
-        if(!nii || nii.dim(4) != in_count)
+        if(!nii)
+        {
+            tipl::error() << nii.error_msg;
             return false;
+        }
+        if(nii.dim(4) != in_count)
+        {
+            tipl::error() << "image channel number does not match model input channel";
+            return false;
+        }
         nii.get_image_dimension(image_shape);
         input.resize(tipl::shape<3>(image_shape.width(),image_shape.height(),image_shape.depth()*in_count));
         for(int c = 0;c < in_count;++c)
@@ -32,7 +41,10 @@ bool read_image_and_label(const std::string& image_name,
 
     tipl::io::gz_nifti nii(label_name,std::ios::in);
     if(!nii)
+    {
+        tipl::error() << nii.error_msg;
         return false;
+    }
     label.clear();
     label.resize(image_shape);
     if(nii.dim(4) > 1)
