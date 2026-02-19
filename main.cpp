@@ -15,9 +15,10 @@ int tra(void);
 int eval(void);
 void init_application(void)
 {
+    QCoreApplication::setOrganizationName("LabSolver");
+    QCoreApplication::setApplicationName(QString("UNet Studio"));
     if constexpr(tipl::use_cuda)
     {
-
         tipl::out() << "Checking CUDA functions"<< std::endl;
         std::string cuda_msg;
         check_cuda(cuda_msg);
