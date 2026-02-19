@@ -582,7 +582,9 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
     if(currentRow >= 0 && currentRow < image_list.size())
     {
         tipl::shape<3> shape;
-        if(!read_image_and_label(image_list[currentRow].toUtf8().constData(),label_list[currentRow].toUtf8().constData(),in_count,I1,I2,shape))
+        if(!QFileInfo(image_list[currentRow]).exists() ||
+           !QFileInfo(label_list[currentRow]).exists() ||
+           !read_image_and_label(image_list[currentRow].toUtf8().constData(),label_list[currentRow].toUtf8().constData(),in_count,I1,I2,shape))
             I2.clear();
         if(!is_label)
             tipl::segmentation::normalize_otsu_median(I2);
