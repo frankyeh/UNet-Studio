@@ -421,6 +421,11 @@ void train_unet::train(void)
                 {
                     auto cur_model = (thread_id == 0) ? model : other_models[thread_id - 1];
                     auto dev = cur_model->device();
+                    if(thread_id == 0)
+                    {
+                        std::scoped_lock<std::mutex> lock(output_model_mutex);
+                        output_model->copy_from(*model);
+                    }
                     while (!aborted)
                     {
                         int b = next_batch_idx.fetch_add(1);
@@ -432,8 +437,8 @@ void train_unet::train(void)
                             std::this_thread::sleep_for(10ms);
                             if (aborted) return;
                         }
-                        auto target = torch::from_blob(out_data[data_idx].data(), {1, cur_model->out_count, int(cur_model->dim[2]), int(cur_model->dim[1]), int(cur_model->dim[0])}).to(dev, true);
-                        auto in = torch::from_blob(in_data[data_idx].data(), {1, cur_model->in_count, int(cur_model->dim[2]), int(cur_model->dim[1]), int(cur_model->dim[0])}).to(dev, true);
+                        auto target = torch::from_blob(out_data[data_idx].data(), {1, cur_model->out_count, int(cur_model->dim[2]), int(cur_model->dim[1]), int(cur_model->dim[0])}).to(dev);
+                        auto in = torch::from_blob(in_data[data_idx].data(), {1, cur_model->in_count, int(cur_model->dim[2]), int(cur_model->dim[1]), int(cur_model->dim[0])}).to(dev);
                         data_ready[data_idx] = false;
 
                         auto outputs = cur_model->forward(in);
@@ -465,6 +470,12 @@ void train_unet::train(void)
                 optimizer->step();
                 optimizer->zero_grad();
             }
+            if(!aborted)
+            {
+                std::scoped_lock<std::mutex> lock(output_model_mutex);
+                output_model->copy_from(*model);
+            }
+
         }
         catch (const c10::Error& e)
         {
@@ -504,29 +515,19 @@ void train_unet::validate(void)
                 if(!test_in_tensor.empty())
                 {
                     torch::NoGradGuard no_grad; // Disable gradient for validation
-                    float cur_error = 0.0f;
                     for(size_t i = 0;i < test_in_tensor.size();++i)
                     {
                         float ce_v,dice_v,mse_v;
-                        auto [ce, dice, mse] = calc_losses(model->forward(test_in_tensor[i])[0], test_out_tensor[i],model->out_count);
+                        auto [ce, dice, mse] = calc_losses(output_model->forward(test_in_tensor[i])[0], test_out_tensor[i],output_model->out_count);
                         errors.push_back(ce_v = ce.item().toFloat());
                         errors.push_back(dice_v = dice.item().toFloat());
                         errors.push_back(mse_v = mse.item().toFloat());
-                        cur_error += ce_v + dice_v + mse_v;
                     }
                     {
                         std::scoped_lock<std::mutex> lock(error_mutex);
                         for(size_t i = 0;i < errors.size();++i)
                             model->errors.push_back(errors[i]);
                     }
-
-                    if (cur_error < best_val_error * 0.999f) // 0.1% improvement threshold
-                    {
-                        best_val_error = cur_error;
-                        std::scoped_lock<std::mutex> lock(output_model_mutex);
-                        output_model->copy_from(*model);
-                    }
-
                 }
                 {
                     if(!cur_validation_epoch)
@@ -553,12 +554,6 @@ void train_unet::validate(void)
                     tipl::out() << out << cur_validation_epoch;
 
                 }
-            }
-
-            if(!aborted)
-            {
-                std::scoped_lock<std::mutex> lock(output_model_mutex);
-                output_model->copy_from(*model);
             }
         }
         catch(const c10::Error& error)
