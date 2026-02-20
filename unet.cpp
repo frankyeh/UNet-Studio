@@ -31,11 +31,12 @@ UNet3dImpl::UNet3dImpl(int32_t in_count_,
             ConvBlock({features_up[level+1].back(),features_down[level].back()},ks[level],
                       torch::nn::Sequential(torch::nn::Upsample(torch::nn::UpsampleOptions().scale_factor(std::vector<double>({2, 2, 2})).mode(torch::kNearest)))));
         register_module("up"+std::to_string(level),up.front());
-        decoding.push_front(
-            ConvBlock(features_up[level],ks[level]));
+
+        decoding.push_front(ConvBlock(features_up[level],ks[level]));
         register_module(std::string("decode")+std::to_string(level),decoding.front());
 
-        output[level] = torch::nn::Sequential(torch::nn::Conv3d(torch::nn::Conv3dOptions(features_up[level].back(), out_count, 1)));
+        output[level] = torch::nn::Sequential();
+        output[level]->push_back("out_conv", torch::nn::Conv3d(torch::nn::Conv3dOptions(features_up[level].back(), out_count, 1)));
         register_module("output"+std::to_string(level), output[level]);
     }
 
@@ -122,14 +123,15 @@ std::vector<torch::Tensor> UNet3dImpl::forward(torch::Tensor inputTensor)
 
 torch::nn::Sequential UNet3dImpl::ConvBlock(const std::vector<int>& rhs,size_t ks,torch::nn::Sequential s)
 {
-    int count = 0;
+    int count = 0, idx = 0;
     for(auto next_count : rhs)
     {
         if(count)
         {
-            s->push_back(torch::nn::Conv3d(torch::nn::Conv3dOptions(count, next_count, ks).padding((ks-1)/2)));
-            s->push_back(torch::nn::InstanceNorm3d(next_count));
-            s->push_back(torch::nn::LeakyReLU(torch::nn::LeakyReLUOptions().inplace(true)));
+            std::string id = std::to_string(idx++);
+            s->push_back("conv"+id, torch::nn::Conv3d(torch::nn::Conv3dOptions(count, next_count, ks).padding((ks-1)/2)));
+            s->push_back("norm"+id, torch::nn::InstanceNorm3d(torch::nn::InstanceNorm3dOptions(next_count).affine(true)));
+            s->push_back("relu"+id, torch::nn::LeakyReLU(torch::nn::LeakyReLUOptions().inplace(true)));
         }
         count = next_count;
     }
