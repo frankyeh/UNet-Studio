@@ -84,6 +84,7 @@ public:
 public:
     std::mutex output_model_mutex;
     UNet3d model,output_model;
+    std::vector<UNet3d> other_models;
     ~train_unet(void)
     {
         stop();
