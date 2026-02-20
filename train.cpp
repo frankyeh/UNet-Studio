@@ -320,42 +320,32 @@ std::string train_unet::get_status(void)
     return s1 + "|" + s2;
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> calc_losses(torch::Tensor& pred_raw, torch::Tensor& target_tissues, int C)
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> calc_losses(const torch::Tensor& pred_raw, const torch::Tensor& target_tissues, int C)
 {
     auto pred_tissues = pred_raw.clamp(0.0, 1.0);
 
-    // Calculate Background (Virtual Channel)
-    // We do NOT concatenate this. We keep it separate.
     auto pred_bg = (1.0 - pred_tissues.sum(1, true)).clamp(0.0, 1.0);
     auto target_bg = (1.0 - target_tissues.sum(1, true)).clamp(0.0, 1.0);
 
-    // B. Optimized Cross Entropy
-    // Formula: -mean( sum(target_t * log(pred_t)) + target_bg * log(pred_bg) )
     auto term_tissues = torch::sum(target_tissues * torch::log(pred_tissues + 1e-7), 1, true);
     auto term_bg = target_bg * torch::log(pred_bg + 1e-7);
 
-    float ce_scale = std::log(static_cast<float>(C));
+    float ce_scale = std::max<float>(1e-5f, std::log(static_cast<float>(C)));
     auto ce = -torch::mean(term_tissues + term_bg) / ce_scale;
 
-    // C. Optimized Dice
-    // Intersection = sum(pred_t * target_t) + (pred_bg * target_bg)
-    auto dims = std::vector<int64_t>{2, 3, 4};
+    auto inter_tissues = torch::sum(pred_tissues * target_tissues, {2, 3, 4});
+    auto inter_bg = torch::sum(pred_bg * target_bg, {2, 3, 4});
 
-    auto inter_tissues = torch::sum(pred_tissues * target_tissues, dims);
-    auto inter_bg = torch::sum(pred_bg * target_bg, dims);
+    auto card_tissues = torch::sum(pred_tissues + target_tissues, {2, 3, 4});
+    auto card_bg = torch::sum(pred_bg + target_bg, {2, 3, 4});
 
-    auto card_tissues = torch::sum(pred_tissues + target_tissues, dims);
-    auto card_bg = torch::sum(pred_bg + target_bg, dims);
-
-    // Sum across channel dim (1) implicitly by adding the bg and tissue components
     auto dice = 1.0f - torch::mean((2.f * (inter_tissues.sum(1) + inter_bg) + 1e-5) /
                                    (card_tissues.sum(1) + card_bg + 1e-5));
 
-    // D. MSE (On Raw Tissues only, balanced by C)
     auto mse = torch::mse_loss(pred_raw, target_tissues) * static_cast<float>(C);
 
     return {ce, dice, mse};
-};
+}
 
 void train_unet::train(void)
 {
@@ -421,6 +411,7 @@ void train_unet::train(void)
                 {
                     auto cur_model = (thread_id == 0) ? model : other_models[thread_id - 1];
                     auto dev = cur_model->device();
+                    torch::DeviceGuard guard(dev);
                     while (!aborted)
                     {
                         int b = next_batch_idx.fetch_add(1);
@@ -498,8 +489,6 @@ void train_unet::validate(void)
             } guard(running);
 
             tipl::time t;
-
-            float best_val_error = std::numeric_limits<float>::max();
             for(;cur_validation_epoch < param.epoch && !aborted;++cur_validation_epoch)
             {
                 while(cur_epoch <= cur_validation_epoch || !test_data_ready || pause)
