@@ -390,6 +390,7 @@ void train_unet::train(void)
 
             for (size_t cur_data_index = 0; cur_epoch < param.epoch && !aborted; cur_epoch++, cur_data_index += param.batch_size)
             {
+                tipl::out() << "a";
                 training_status = "training";
                 double poly = std::pow(1.0 - (double)cur_epoch / param.epoch, 0.9);
                 double cur_lr = param.learning_rate * poly;
@@ -410,7 +411,7 @@ void train_unet::train(void)
                         if (p.grad().defined())
                             p.grad().zero_();
                 }
-
+                tipl::out() << "b";
                 int total_gpus = 1 + other_models.size();
                 int active_threads = std::min<int>(total_gpus, param.batch_size);
                 std::mutex status_mutex;
@@ -421,11 +422,6 @@ void train_unet::train(void)
                 {
                     auto cur_model = (thread_id == 0) ? model : other_models[thread_id - 1];
                     auto dev = cur_model->device();
-                    if(thread_id == 0)
-                    {
-                        std::scoped_lock<std::mutex> lock(output_model_mutex);
-                        output_model->copy_from(*model);
-                    }
                     while (!aborted)
                     {
                         int b = next_batch_idx.fetch_add(1);
@@ -457,25 +453,27 @@ void train_unet::train(void)
                         training_status += '0' + thread_id;
                     }
                 }, active_threads);
+                tipl::out() << "c";
+                if (aborted)
+                    return;
 
-                if (aborted) return;
-                while (cur_validation_epoch == cur_epoch || pause)
-                {
-                    std::this_thread::sleep_for(100ms);
-                    if (aborted) return;
-                }
                 training_status = "update model";
                 for (auto& each : other_models)
                     model->add_gradient_from(*each);
                 optimizer->step();
                 optimizer->zero_grad();
-            }
-            if(!aborted)
-            {
+
+
+                while (cur_validation_epoch < cur_epoch || pause)
+                {
+                    std::this_thread::sleep_for(10ms);
+                    if (aborted)
+                        return;
+                }
                 std::scoped_lock<std::mutex> lock(output_model_mutex);
                 output_model->copy_from(*model);
+                tipl::out() << "d";
             }
-
         }
         catch (const c10::Error& e)
         {
@@ -505,7 +503,7 @@ void train_unet::validate(void)
             float best_val_error = std::numeric_limits<float>::max();
             for(;cur_validation_epoch < param.epoch && !aborted;++cur_validation_epoch)
             {
-                while(cur_epoch < cur_validation_epoch || !test_data_ready || pause)
+                while(cur_epoch <= cur_validation_epoch || !test_data_ready || pause)
                 {
                     std::this_thread::sleep_for(100ms);
                     if(aborted)
@@ -514,7 +512,8 @@ void train_unet::validate(void)
                 std::vector<float> errors;
                 if(!test_in_tensor.empty())
                 {
-                    torch::NoGradGuard no_grad; // Disable gradient for validation
+                    torch::NoGradGuard no_grad;
+                    output_model->eval();
                     for(size_t i = 0;i < test_in_tensor.size();++i)
                     {
                         float ce_v,dice_v,mse_v;
