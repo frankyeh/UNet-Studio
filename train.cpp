@@ -359,124 +359,123 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> calc_losses(torch::Tenso
 
 void train_unet::train(void)
 {
-
-    auto run_training = [=](){
-        try{
-
-            std::shared_ptr<torch::optim::Optimizer> optimizer(
-                        new torch::optim::Adam(model->parameters(),
-                            torch::optim::AdamOptions(param.learning_rate)));
-
+    auto run_training = [=]()
+    {
+        try
+        {
             model->report += " Training was conducted over " + std::to_string(param.epoch) + " epochs "
                              + "using a batch size of " + std::to_string(param.batch_size) + ". "
                              + "Optimization employed an initial learning rate of " + std::to_string(param.learning_rate) + ".";
 
-            for (size_t cur_data_index = 0; cur_epoch < param.epoch && !aborted;cur_epoch++,cur_data_index += param.batch_size)
+            std::vector<torch::Tensor> decay_params, no_decay_params;
+            for (auto& p : model->named_parameters())
+                if (p.key().find("bias") != std::string::npos ||
+                    p.key().find("norm") != std::string::npos ||
+                    p.key().find("bn") != std::string::npos ||
+                    p.key().find("out_conv") != std::string::npos)
+                    no_decay_params.push_back(p.value());
+                else
+                    decay_params.push_back(p.value());
+
+            double base_wd = 1e-4;
+            std::vector<torch::optim::OptimizerParamGroup> groups;
+            auto opt_d = std::make_unique<torch::optim::AdamWOptions>(param.learning_rate);
+            opt_d->weight_decay(base_wd);
+            auto opt_nd = std::make_unique<torch::optim::AdamWOptions>(param.learning_rate);
+            opt_nd->weight_decay(0.0);
+
+            groups.push_back(torch::optim::OptimizerParamGroup(decay_params, std::move(opt_d)));
+            groups.push_back(torch::optim::OptimizerParamGroup(no_decay_params, std::move(opt_nd)));
+            auto optimizer = std::make_shared<torch::optim::AdamW>(groups);
+
+            for (size_t cur_data_index = 0; cur_epoch < param.epoch && !aborted; cur_epoch++, cur_data_index += param.batch_size)
             {
                 training_status = "training";
-                double cur_lr = param.learning_rate * std::pow(1.0 - (double)cur_epoch / param.epoch, 0.9);
-                static_cast<torch::optim::AdamOptions&>(optimizer->param_groups()[0].options()).lr(cur_lr);
+                double poly = std::pow(1.0 - (double)cur_epoch / param.epoch, 0.9);
+                double cur_lr = param.learning_rate * poly;
+                double cur_wd = base_wd * poly;
 
+                for (auto& group : optimizer->param_groups())
+                {
+                    auto& opt = static_cast<torch::optim::AdamWOptions&>(group.options());
+                    opt.lr(cur_lr);
+                    if (opt.weight_decay() > 0)
+                        opt.weight_decay(cur_wd);
+                }
 
-                for(auto& each : other_models) {
+                for (auto& each : other_models)
+                {
                     each->copy_from(*model);
-                    for (auto& param : each->parameters())
-                        if (param.grad().defined())
-                            param.grad().zero_();
+                    for (auto& p : each->parameters())
+                        if (p.grad().defined())
+                            p.grad().zero_();
                 }
 
                 int total_gpus = 1 + other_models.size();
                 int active_threads = std::min<int>(total_gpus, param.batch_size);
-                std::mutex status_mutex; // For thread-safe string updates
-                std::atomic<int> next_batch_idx{0}; // Dynamic dispatcher: tracks the next available batch index
+                std::mutex status_mutex;
+                std::atomic<int> next_batch_idx{0};
+
                 tipl::par_for_running = false;
                 tipl::par_for(active_threads, [&](size_t thread_id)
                 {
-                    auto current_model = (thread_id == 0) ? model : other_models[thread_id - 1];
-                    auto current_device = current_model->device();
-
+                    auto cur_model = (thread_id == 0) ? model : other_models[thread_id - 1];
+                    auto dev = cur_model->device();
                     while (!aborted)
                     {
-                        // Atomically grab the next index and increment the counter
                         int b = next_batch_idx.fetch_add(1);
                         if (b >= param.batch_size)
                             break;
-
                         size_t data_idx = (cur_data_index + b) % data_ready.size();
-
-                        while(!data_ready[data_idx] || pause)
+                        while (!data_ready[data_idx] || pause)
                         {
                             std::this_thread::sleep_for(10ms);
-                            if(aborted) return;
+                            if (aborted) return;
                         }
-
-                        torch::Tensor target_probs = torch::from_blob(out_data[data_idx].data(),
-                                {1, current_model->out_count, int(current_model->dim[2]), int(current_model->dim[1]), int(current_model->dim[0])})
-                                .to(current_device, true);
-
-                        torch::Tensor in_tensor = torch::from_blob(in_data[data_idx].data(),
-                                {1, current_model->in_count, int(current_model->dim[2]), int(current_model->dim[1]), int(current_model->dim[0])})
-                                .to(current_device, true);
-
+                        auto target = torch::from_blob(out_data[data_idx].data(), {1, cur_model->out_count, int(cur_model->dim[2]), int(cur_model->dim[1]), int(cur_model->dim[0])}).to(dev, true);
+                        auto in = torch::from_blob(in_data[data_idx].data(), {1, cur_model->in_count, int(cur_model->dim[2]), int(cur_model->dim[1]), int(cur_model->dim[0])}).to(dev, true);
                         data_ready[data_idx] = false;
 
-                        auto outputs = current_model->forward(in_tensor);
-                        torch::Tensor total_loss;
-                        torch::Tensor active_target = target_probs;
-
-                        for(size_t k = 0; k < outputs.size(); ++k)
+                        auto outputs = cur_model->forward(in);
+                        torch::Tensor total_loss, active_target = target;
+                        for (size_t k = 0; k < outputs.size(); ++k)
                         {
-                            if(k > 0)
+                            if (k > 0)
                                 active_target = torch::avg_pool3d(active_target, 2, 2);
-
-                            auto [ce, dice, mse] = calc_losses(outputs[k], active_target, current_model->out_count);
+                            auto [ce, dice, mse] = calc_losses(outputs[k], active_target, cur_model->out_count);
                             auto level_loss = (ce + dice + mse) * (1.0f / (1 << k));
-
-                            if(total_loss.defined()) total_loss += level_loss;
+                            if (total_loss.defined()) total_loss += level_loss;
                             else total_loss = level_loss;
                         }
-
                         total_loss.backward();
-
                         std::lock_guard<std::mutex> lock(status_mutex);
-                        training_status += '0'+thread_id;
+                        training_status += '0' + thread_id;
                     }
-                },active_threads);
+                }, active_threads);
 
-                if(aborted)
-                    return;
-
+                if (aborted) return;
+                while (cur_validation_epoch == cur_epoch || pause)
                 {
-                    while(cur_validation_epoch == cur_epoch || pause)
-                    {
-                        std::this_thread::sleep_for(100ms);
-                        if(aborted)
-                            return;
-                    }
-
-                    training_status = "update model";
-
-                    for(auto& each : other_models) {
-                        model->add_gradient_from(*each);
-                    }
-
-                    optimizer->step();
-                    optimizer->zero_grad();
-
+                    std::this_thread::sleep_for(100ms);
+                    if (aborted) return;
                 }
+                training_status = "update model";
+                for (auto& each : other_models)
+                    model->add_gradient_from(*each);
+                optimizer->step();
+                optimizer->zero_grad();
             }
         }
-        catch(const c10::Error& error)
+        catch (const c10::Error& e)
         {
-            tipl::out() << (error_msg = std::string("during ") + training_status + ":" + error.what());
+            tipl::out() << (error_msg = std::string("during ") + training_status + ":" + e.what());
         }
-        catch(...)
+        catch (...)
         {
             tipl::out() << (error_msg = "unknown error in training");
         }
         pause = aborted = true;
     };
-
     train_thread.reset(new std::thread(run_training));
 }
 void train_unet::validate(void)
@@ -674,7 +673,7 @@ std::string get_network_path(void)
 }
 std::string default_feature(int out_count)
 {
-    return out_count <= 4 ? "8x8+16x16+32x32+64x64+128x128" : (out_count <= 8 ? "16x16+32x32+64x64+128x128+128x128" : "32x32+64x64+128x128+128x128+256x256");
+    return out_count <= 8 ? "8x8+16x16+32x32+64x64+128x128" : (out_count <= 16 ? "16x16+32x32+64x64+128x128+128x128" : "32x32+64x64+128x128+128x128+256x256");
 }
 int tra(void)
 {
