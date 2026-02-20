@@ -55,21 +55,21 @@ public:
     std::string error_msg,reading_status,augmentation_status,training_status,validation_status;
 private:
     std::vector<tipl::image<3> > train_image,train_label;
-    std::vector<bool> train_image_is_template;
+    std::vector<char> train_image_is_template;
     std::vector<torch::Tensor> test_in_tensor,test_out_tensor;
     bool test_data_ready = false;
     std::shared_ptr<std::thread> read_images;
 private:
     std::vector<tipl::image<3> > in_file,out_file;
     std::vector<size_t> in_file_read_id,in_file_seed;
-    std::vector<bool> file_ready;
+    std::vector<char> file_ready;
 private:
 
 private:
     size_t thread_count = 1;
     std::vector<tipl::image<3> > in_data,out_data;
     std::vector<size_t> in_data_read_id;
-    std::vector<bool> data_ready;
+    std::vector<char> data_ready;
     std::shared_ptr<std::thread> augmentation_thread;
     void read_file(void);
 private:
