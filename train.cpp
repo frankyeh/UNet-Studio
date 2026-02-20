@@ -94,11 +94,11 @@ void train_unet::read_file(void)
 
     train_image = std::vector<tipl::image<3> >(param.image_file_name.size());
     train_label = std::vector<tipl::image<3> >(param.image_file_name.size());
-    train_image_is_template = std::vector<bool>(param.image_file_name.size(),true);
+    train_image_is_template = std::vector<char>(param.image_file_name.size(),false);
 
     in_data_read_id = in_file_read_id = in_file_seed = std::vector<size_t>(thread_count);
     out_data = in_data = in_file = out_file = std::vector<tipl::image<3> >(thread_count);
-    data_ready = file_ready = std::vector<bool>(thread_count,false);
+    data_ready = file_ready = std::vector<char>(thread_count,false);
     test_data_ready = false;
     test_in_tensor.clear();
     test_out_tensor.clear();
@@ -390,7 +390,6 @@ void train_unet::train(void)
 
             for (size_t cur_data_index = 0; cur_epoch < param.epoch && !aborted; cur_epoch++, cur_data_index += param.batch_size)
             {
-                tipl::out() << "a";
                 training_status = "training";
                 double poly = std::pow(1.0 - (double)cur_epoch / param.epoch, 0.9);
                 double cur_lr = param.learning_rate * poly;
@@ -411,7 +410,7 @@ void train_unet::train(void)
                         if (p.grad().defined())
                             p.grad().zero_();
                 }
-                tipl::out() << "b";
+
                 int total_gpus = 1 + other_models.size();
                 int active_threads = std::min<int>(total_gpus, param.batch_size);
                 std::mutex status_mutex;
@@ -453,7 +452,8 @@ void train_unet::train(void)
                         training_status += '0' + thread_id;
                     }
                 }, active_threads);
-                tipl::out() << "c";
+
+
                 if (aborted)
                     return;
 
@@ -472,7 +472,6 @@ void train_unet::train(void)
                 }
                 std::scoped_lock<std::mutex> lock(output_model_mutex);
                 output_model->copy_from(*model);
-                tipl::out() << "d";
             }
         }
         catch (const c10::Error& e)
