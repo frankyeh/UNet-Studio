@@ -360,7 +360,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> calc_losses(torch::Tenso
 void train_unet::train(void)
 {
 
-
     auto run_training = [=](){
         try{
 
@@ -374,45 +373,78 @@ void train_unet::train(void)
 
             for (size_t cur_data_index = 0; cur_epoch < param.epoch && !aborted;cur_epoch++,cur_data_index += param.batch_size)
             {
+                training_status = "training";
                 double cur_lr = param.learning_rate * std::pow(1.0 - (double)cur_epoch / param.epoch, 0.9);
                 static_cast<torch::optim::AdamOptions&>(optimizer->param_groups()[0].options()).lr(cur_lr);
 
-                training_status = "training";
-                for(int b = 0;b < param.batch_size && !aborted;++b)
-                {
-                    size_t thread = (cur_data_index+b)%data_ready.size();
 
-                    while(!data_ready[thread] || pause)
-                    {
-                        std::this_thread::sleep_for(100ms);
-                        if(aborted)
-                            return;
-                    }
-                    torch::Tensor target_probs = torch::from_blob(out_data[thread].data(),
-                            {1,model->out_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(model->device(),/*non_blocking=*/true);
-                    torch::Tensor in_tensor = torch::from_blob(in_data[thread].data(),
-                            {1,model->in_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(model->device(),/*non_blocking=*/true);
-                    data_ready[thread] = false;
-
-                    auto outputs = model->forward(in_tensor);
-
-                    torch::Tensor total_loss;
-                    torch::Tensor active_target = target_probs;
-                    for(size_t k = 0; k < outputs.size(); ++k)
-                    {
-                        if(k > 0)
-                            active_target = torch::avg_pool3d(active_target, /*kernel=*/2, /*stride=*/2);
-                        auto [ce, dice, mse] = calc_losses(outputs[k], active_target, model->out_count);
-
-                        float level_weight = 1.0f / (1 << k);
-                        auto level_loss = (ce + dice + mse) * level_weight;
-
-                        if(total_loss.defined()) total_loss += level_loss;
-                        else total_loss = level_loss;
-                    }
-                    total_loss.backward();
-                    training_status += ".";
+                for(auto& each : other_models) {
+                    each->copy_from(*model);
+                    for (auto& param : each->parameters())
+                        if (param.grad().defined())
+                            param.grad().zero_();
                 }
+
+                int total_gpus = 1 + other_models.size();
+                int active_threads = std::min<int>(total_gpus, param.batch_size);
+                std::mutex status_mutex; // For thread-safe string updates
+                std::atomic<int> next_batch_idx{0}; // Dynamic dispatcher: tracks the next available batch index
+                tipl::par_for_running = false;
+                tipl::par_for(active_threads, [&](size_t thread_id)
+                {
+                    auto current_model = (thread_id == 0) ? model : other_models[thread_id - 1];
+                    auto current_device = current_model->device();
+
+                    while (!aborted)
+                    {
+                        // Atomically grab the next index and increment the counter
+                        int b = next_batch_idx.fetch_add(1);
+                        if (b >= param.batch_size)
+                            break;
+
+                        size_t data_idx = (cur_data_index + b) % data_ready.size();
+
+                        while(!data_ready[data_idx] || pause)
+                        {
+                            std::this_thread::sleep_for(10ms);
+                            if(aborted) return;
+                        }
+
+                        torch::Tensor target_probs = torch::from_blob(out_data[data_idx].data(),
+                                {1, current_model->out_count, int(current_model->dim[2]), int(current_model->dim[1]), int(current_model->dim[0])})
+                                .to(current_device, true);
+
+                        torch::Tensor in_tensor = torch::from_blob(in_data[data_idx].data(),
+                                {1, current_model->in_count, int(current_model->dim[2]), int(current_model->dim[1]), int(current_model->dim[0])})
+                                .to(current_device, true);
+
+                        data_ready[data_idx] = false;
+
+                        auto outputs = current_model->forward(in_tensor);
+                        torch::Tensor total_loss;
+                        torch::Tensor active_target = target_probs;
+
+                        for(size_t k = 0; k < outputs.size(); ++k)
+                        {
+                            if(k > 0)
+                                active_target = torch::avg_pool3d(active_target, 2, 2);
+
+                            auto [ce, dice, mse] = calc_losses(outputs[k], active_target, current_model->out_count);
+                            auto level_loss = (ce + dice + mse) * (1.0f / (1 << k));
+
+                            if(total_loss.defined()) total_loss += level_loss;
+                            else total_loss = level_loss;
+                        }
+
+                        total_loss.backward();
+
+                        std::lock_guard<std::mutex> lock(status_mutex);
+                        training_status += '0'+thread_id;
+                    }
+                },active_threads);
+
+                if(aborted)
+                    return;
 
                 {
                     while(cur_validation_epoch == cur_epoch || pause)
@@ -421,9 +453,16 @@ void train_unet::train(void)
                         if(aborted)
                             return;
                     }
+
                     training_status = "update model";
+
+                    for(auto& each : other_models) {
+                        model->add_gradient_from(*each);
+                    }
+
                     optimizer->step();
                     optimizer->zero_grad();
+
                 }
             }
         }
@@ -572,6 +611,18 @@ void train_unet::start(void)
 
     model->to(param.device);
     model->train();
+
+    other_models.clear();
+    for(int i = 1,gpu_count = torch::cuda::device_count(); i < gpu_count; ++i)
+    {
+        tipl::out() << "model added at cuda:" << i << std::endl;
+        auto new_model = UNet3d(model->in_count, model->out_count, model->feature_string);
+        new_model->to(torch::Device(torch::kCUDA, i));
+        new_model->train();
+        other_models.push_back(new_model);
+    }
+
+
     output_model = UNet3d(model->in_count,model->out_count,model->feature_string);
     output_model->to(param.device);
     output_model->copy_from(*model);
