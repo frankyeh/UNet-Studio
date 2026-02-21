@@ -403,7 +403,6 @@ void train_unet::train(void)
 
                 int total_gpus = 1 + other_models.size();
                 int active_threads = std::min<int>(total_gpus, param.batch_size);
-                std::mutex status_mutex;
                 std::atomic<int> next_batch_idx{0};
 
                 tipl::par_for(active_threads, [&](size_t thread_id)
