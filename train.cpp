@@ -406,7 +406,6 @@ void train_unet::train(void)
                 std::mutex status_mutex;
                 std::atomic<int> next_batch_idx{0};
 
-                tipl::par_for_running = false;
                 tipl::par_for(active_threads, [&](size_t thread_id)
                 {
                     auto cur_model = (thread_id == 0) ? model : other_models[thread_id - 1];
@@ -439,8 +438,6 @@ void train_unet::train(void)
                             else total_loss = level_loss;
                         }
                         total_loss.backward();
-                        std::lock_guard<std::mutex> lock(status_mutex);
-                        training_status += '0' + thread_id;
                     }
                 }, active_threads);
 
