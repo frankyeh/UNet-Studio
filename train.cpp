@@ -432,7 +432,7 @@ void train_unet::train(void)
                             if (k > 0)
                                 active_target = torch::avg_pool3d(active_target, 2, 2);
                             auto [ce, dice, mse] = calc_losses(outputs[k], active_target, cur_model->out_count);
-                            auto level_loss = (ce + dice + mse) * (1.0f / (1 << k));
+                            auto level_loss = (/*ce + dice + */mse) * (1.0f / (1 << k));
                             if (total_loss.defined()) total_loss += level_loss;
                             else total_loss = level_loss;
                         }
