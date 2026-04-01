@@ -1,5 +1,4 @@
-#include "TIPL/reg/linear.hpp"
-#include "TIPL/prog.hpp"
+#include "TIPL/reg/linear_cu.hpp"
 #include <iostream>
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -8,20 +7,6 @@ __global__ void cuda_test(){
 }
 
 
-namespace tipl::reg
-{
-
-template
-float optimize_mi_cuda<tipl::out,false,unsigned char,3>(
-            std::shared_ptr<tipl::reg::linear_reg_param<3,unsigned char,tipl::out> > reg,
-                        tipl::reg::cost_type cost_type,
-                        bool& terminated);
-template
-float optimize_mi_cuda<tipl::out,true,unsigned char,3>(
-            std::shared_ptr<tipl::reg::linear_reg_param<3,unsigned char,tipl::out> > reg,
-                        tipl::reg::cost_type cost_type,
-                        bool& terminated);
-}
 
 bool has_cuda = true;
 int gpu_count = 0;
