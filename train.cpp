@@ -666,25 +666,14 @@ int tra(void)
 
     // loading training data
     {
-        train.param.image_file_name.clear();
-        train.param.label_file_name.clear();
-        if(!po.get_files("source",train.param.image_file_name) ||
-           !po.get_files("label",train.param.label_file_name))
-        {
-            tipl::error() << po.error_msg;
-            return 1;
-        }
+        if((train.param.image_file_name = po.get_files("source")).empty() ||
+           (train.param.label_file_name = po.get_files("label")).empty())
+            return tipl::error() << po.error_msg,1;
 
         if(train.param.image_file_name.size() != train.param.label_file_name.size())
-        {
-            tipl::error() << "different number of files found for image and label";
-            return 1;
-        }
+            return tipl::error() << "different number of files found for image and label",1;
         if(train.param.image_file_name.empty())
-        {
-            tipl::error() << "no available training images";
-            return 1;
-        }
+            return tipl::error() << "no available training images",1;
         for(size_t i = 0;i < train.param.image_file_name.size();++i)
             tipl::out() << std::filesystem::path(train.param.image_file_name[i]).filename().string() << "=>" << std::filesystem::path(train.param.label_file_name[i]).filename().string();
 
@@ -694,10 +683,8 @@ int tra(void)
     {
         tipl::out() << "loading existing network " << network;
         if(!load_from_file(train.model,network.c_str()))
-        {
-            tipl::error() << "failed to load model from " << network;
-            return 1;
-        }
+            return tipl::error() << "failed to load model from " << network,1;
+
         tipl::out() << train.model->get_info();
         if(po.get("out_count",train.model->out_count) != train.model->out_count)
         {
