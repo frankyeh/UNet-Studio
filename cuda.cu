@@ -1,4 +1,5 @@
 #include "TIPL/reg/linear_cu.hpp"
+#include "TIPL/reg/cdm_cu.hpp"
 #include <iostream>
 #include <cuda.h>
 #include <cuda_runtime.h>
