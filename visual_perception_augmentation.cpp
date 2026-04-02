@@ -282,7 +282,7 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
     tipl::image<3> output_label(image_shape);
     {
         auto resolution = range(1.0f/options["scaling_up"],1.0f/options["scaling_down"]);
-        tipl::affine_transform<float> transform = {
+        tipl::affine_param<float> transform = {
                     one()*float(options["translocation_ratio"])*image_shape[0],
                     one()*float(options["translocation_ratio"])*image_shape[1],
                     one()*float(options["translocation_ratio"])*image_shape[2],
@@ -356,10 +356,10 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
         };
         if(apply("rubber_stamping"))
         {
-            std::vector<tipl::affine_transform<float> > args;
+            std::vector<tipl::affine_param<float> > args;
             float pi2 = std::acos(-1)*2.0f;
             for(size_t iter = 0;iter < 5;++iter)
-                args.push_back(tipl::affine_transform<float>{one()*image_shape[0]*0.5f,
+                args.push_back(tipl::affine_param<float>{one()*image_shape[0]*0.5f,
                                                     one()*image_shape[1]*0.5f,
                                                     one()*image_shape[2]*0.5f,
                                                     one()*pi2,one()*pi2,one()*pi2,
