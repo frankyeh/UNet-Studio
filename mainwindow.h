@@ -124,5 +124,7 @@ private slots:
     void on_action_train_reorder_output_triggered();
     void on_action_train_copy_all_view_triggered();
     void on_actionApply_Label_Weights_triggered();
+    void on_evaluate_output_currentIndexChanged(int index);
+    void on_template_list_currentIndexChanged(int index);
 };
 #endif // MAINWINDOW_H
