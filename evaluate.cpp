@@ -20,40 +20,12 @@ size_t linear_cuda(const tipl::image<3,float>& from,
                               tipl::vector<3> from_vs,
                               const tipl::image<3,float>& to,
                               tipl::vector<3> to_vs,
-                              tipl::affine_transform<float>& arg,
+                              tipl::affine_param<float>& arg,
                               tipl::reg::reg_type reg_type,
                               bool& terminated,
                               const float* bound);
 
 
-template<int dim>
-inline auto subject_image_pre(tipl::image<dim>&& I)
-{
-    tipl::image<dim,unsigned char> out;
-    tipl::filter::gaussian(I);
-    tipl::segmentation::normalize_otsu_median(I);
-    tipl::normalize_upper_lower2(I,out,255.999f);
-    return out;
-}
-template<int dim>
-inline auto subject_image_pre(const tipl::image<dim>& I)
-{
-    return subject_image_pre(tipl::image<dim>(I));
-}
-
-inline size_t linear_with_mi(const tipl::image<3,float>& from,
-                            const tipl::vector<3>& from_vs,
-                            const tipl::image<3,float>& to,
-                            const tipl::vector<3>& to_vs,
-                              tipl::affine_transform<float>& arg,
-                              tipl::reg::reg_type reg_type,
-                              bool& terminated,
-                              const float bound[3][8] = tipl::reg::reg_bound)
-{
-    return tipl::reg::linear<tipl::out>(tipl::reg::make_list(subject_image_pre(from)),from_vs,
-                                        tipl::reg::make_list(subject_image_pre(to)),to_vs,
-                                        arg,reg_type,terminated,bound);
-}
 
 inline void rotate_to_template(tipl::image<3>& images,
                          const tipl::shape<3>& image_dim,
@@ -65,11 +37,12 @@ inline void rotate_to_template(tipl::image<3>& images,
                          tipl::transformation_matrix<float>& trans)
 {
     tipl::out() << "rotate to template";
-    tipl::affine_transform<float> arg_rotated;
+    tipl::affine_param<float> arg_rotated;
     auto image0 = images.alias(0,image_dim);
     bool terminated = false;
-    linear_with_mi(template_image,template_image_vs,image0,image_vs,arg_rotated,
-                                  tipl::reg::rigid_body,terminated,tipl::reg::large_bound);
+    tipl::reg::linear<tipl::out>(tipl::reg::make_list(tipl::reg::template_image_pre(template_image)),template_image_vs,
+                                 tipl::reg::make_list(tipl::reg::subject_image_pre(tipl::image<3>(image0))),image_vs,
+                                            arg_rotated,{tipl::reg::rigid_body,tipl::reg::mutual_info,tipl::reg::large_bound},terminated);
     trans = tipl::transformation_matrix<float>(arg_rotated,model_dim,model_vs,image_dim,image_vs);
 
     int in_channel = images.depth()/image_dim[2];
@@ -248,11 +221,13 @@ void upsample8(T& I, const U& subI,size_t sub_index)
             I[index.index()] = subI[sub_pos++];
 }
 
+
 void evaluate_unet::read_file(void)
 {
     evaluate_input = std::vector<tipl::image<3> >(param.image_file_name.size());
     raw_image_shape = std::vector<tipl::shape<3> >(param.image_file_name.size());
     raw_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
+    untouched_srow = raw_image_srow = std::vector<tipl::matrix<4,4,float> >(param.image_file_name.size());
     raw_image_trans = std::vector<tipl::transformation_matrix<float> >(param.image_file_name.size());
     raw_image_flip_swap = std::vector<std::vector<char> >(param.image_file_name.size());
     data_ready = std::vector<bool> (param.image_file_name.size());
@@ -293,8 +268,10 @@ void evaluate_unet::read_file(void)
                 aborted = true;
                 return;
             }
+            in.get_image_transformation(untouched_srow[i]);
+
             tipl::image<3> raw_image;
-            in >> std::tie(raw_image,raw_image_vs[i]);
+            in >> raw_image >> raw_image_vs[i] >> raw_image_srow[i];
             raw_image_flip_swap[i] = in.flip_swap_seq;
             raw_image_shape[i] = raw_image.shape();
 
@@ -410,7 +387,8 @@ void evaluate_unet::proc_actions(const char* cmd,float param1,float param2)
                  raw_image_shape[cur_output],
                  is_label[cur_output]);
 }
-
+extern std::vector<std::string> seg_template_list;
+extern std::vector<std::vector<std::string> > atlas_file_name_list;;
 void evaluate_unet::output(void)
 {
     label_prob = std::vector<tipl::image<3> >(param.image_file_name.size());
@@ -424,6 +402,32 @@ void evaluate_unet::output(void)
             exist_guard(bool& running_):running(running_){}
             ~exist_guard() { running = false;}
         } guard(running);
+
+
+        std::vector<std::vector<int64_t>> shifts;
+        if(!template_I.empty())
+        {
+            const int radius = 4;
+            const int max_dis = radius*radius;
+            shifts.resize(max_dis+1);
+            int64_t wh = int64_t(template_I.plane_size());
+            int64_t w = int64_t(template_I.width());
+            for(int64_t z = -radius;z <= radius;++z)
+            {
+                int64_t zwh = z*wh;
+                for(int64_t y = -radius;y <= radius;++y)
+                {
+                    int64_t yw = y*w;
+                    for(int64_t x = -radius;x <= radius;++x)
+                    {
+                        int dis = x*x + y*y + z*z;
+                        if(dis <= max_dis)
+                            shifts[dis].push_back(x+yw+zwh);
+                    }
+                }
+            }
+        }
+
 
         try{
             for (cur_output = 0;cur_output < label_prob.size() && !aborted; cur_output++)
@@ -487,7 +491,71 @@ void evaluate_unet::output(void)
                         }
                         proc_actions("soft_max",param.prob_threshold);
                         proc_actions("to_3d_label");
-                    break;
+                        if(!template_I.empty())
+                        {
+                            auto cur_label = tipl::image<3,unsigned char>(label_prob[cur_output]);
+                            tipl::reg::mm_reg<tipl::out> reg;
+                            tipl::progress prog("register to template");
+                            tipl::expand_label_to_images(template_I,reg.It,4 /* exclude csf */);
+                            tipl::expand_label_to_images(cur_label,reg.I,4 /* exclude csf */);
+                            reg.ItR = template_R;
+                            reg.IR = raw_image_srow[cur_output];
+                            reg.Itvs = template_vs;
+                            reg.Ivs = raw_image_vs[cur_output];
+                            reg.Its = template_I.shape();
+                            reg.Is = cur_shape;
+                            reg.match_resolution(true);
+                            reg.param.speed = 1.0f;
+                            reg.param.smoothing = 0.0f;
+
+                            reg.linear_reg(aborted);
+                            reg.nonlinear_reg(aborted);
+                            reg.to_It_space(template_I.shape(),template_R);
+                            reg.to_I_space(cur_shape,raw_image_srow[cur_output]);
+                            const auto& from2to = reg.from2to;
+
+                            label_prob[cur_output] = 0;
+                            tipl::par_for(cur_shape.size(),[&](size_t index)
+                            {
+                                auto c = cur_label[index];
+                                auto pos = from2to[index];
+                                label_prob[cur_output][index] = tipl::estimate<tipl::majority>(atlas_I,pos);
+
+                                if(tipl::estimate<tipl::majority>(template_I,pos) != c)
+                                {
+                                    std::vector<std::pair<unsigned short,size_t>> candidates;
+                                    candidates.reserve(8);
+                                    for(const auto& each : shifts)
+                                    {
+                                        bool found = false;
+                                        for(auto shift_val : each)
+                                        {
+                                            int64_t at = int64_t(index) + shift_val;
+                                            if(at >= 0 && at < int64_t(template_I.size()) && template_I[at] == c)
+                                            {
+                                                auto val = atlas_I[at];
+                                                auto it = std::find_if(candidates.begin(),candidates.end(),
+                                                                       [val](const auto& p){return p.first == val;});
+                                                if(it != candidates.end())
+                                                    it->second++;
+                                                else
+                                                    candidates.push_back({val,1});
+
+                                                found = true;
+                                            }
+                                        }
+                                        if(found)
+                                        {
+                                            auto best = std::max_element(candidates.begin(),candidates.end(),
+                                                                         [](const auto& a,const auto& b){return a.second < b.second;});
+                                            label_prob[cur_output][index] = best->first;
+                                            break;
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                        break;
                     case 2: // skull strip
                         {
                             tipl::image<3> I;
@@ -581,29 +649,16 @@ bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
 {
     if(currentRow >= label_prob.size())
         return false;
-    tipl::out() << "reader header information from " << param.image_file_name[currentRow];
-    tipl::io::gz_nifti in,out;
-    if(!in.open(param.image_file_name[currentRow],std::ios::in))
-    {
-        error_msg = in.error_msg;
-        return false;
-    }
+    tipl::io::gz_nifti out;
     if(!out.open(file_name,std::ios::out))
-    {
-        error_msg = out.error_msg;
-        return false;
-    }
-    tipl::matrix<4,4,float> trans;
-    tipl::vector<3> vs;
-    in >> std::tie(trans,vs);
-    out << std::tie(trans,vs);
-
+        return error_msg = out.error_msg,false;
+    out << untouched_srow[currentRow] << raw_image_vs[currentRow];
     tipl::out() << "save " << file_name;
-    in.flip_swap_seq = raw_image_flip_swap[currentRow];
+    out.flip_swap_seq = raw_image_flip_swap[currentRow];
     if(is_label[currentRow])
     {
         tipl::image<3,unsigned char> label(label_prob[currentRow]);
-        in.apply_flip_swap_seq(label,true);
+        out.apply_flip_swap_seq(label,true);
 
         if(label_prob[currentRow].depth() == raw_image_shape[currentRow][2])
             out << label;
@@ -617,8 +672,7 @@ bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
     else
     {
         tipl::image<3> prob(label_prob[currentRow]);
-        in.apply_flip_swap_seq(prob,true);
-
+        out.apply_flip_swap_seq(prob,true);
         if(label_prob[currentRow].depth() == raw_image_shape[currentRow][2])
             out << prob;
         else
@@ -644,31 +698,29 @@ int eval(void)
 
 
     // loading images data
-    {
-        eval.param.image_file_name.clear();
-        if(!po.check("source"))
-            return 1;
-        if(!po.get_files("source",eval.param.image_file_name))
-        {
-            tipl::error() << eval.error_msg;
-            return 1;
-        }
-    }
+    if(!po.check("source"))
+        return 1;
+    if((eval.param.image_file_name = po.get_files("source")).empty())
+        return tipl::error() << "no file specified at --source",1;
 
     auto network = get_network_path();
     {
         if(!std::filesystem::exists(network))
-        {
-            tipl::error() << "cannot find the network file " << network;
-            return 1;
-        }
+            return tipl::error() << "cannot find the network file " << network,1;
         tipl::out() << "loading network " << network;
         if(!load_from_file(eval.model,network.c_str()))
-        {
-            tipl::error() << "failed to load model from " << network;
-            return 1;
-        }
+            return tipl::error() << "failed to load model from " << network,1;
         tipl::out() << eval.model->get_info();
+    }
+
+    if(po.has("template") && po.has("atlas"))
+    {
+        size_t seg_id = po.get("template",seg_template_list,0);
+        if(seg_id >= seg_template_list.size())
+            return tipl::error() << "invalid template",1;
+        if(!eval.load_template(seg_template_list[seg_id]) ||
+           !eval.load_atlas(po.get("atlas",atlas_file_name_list[seg_id],atlas_file_name_list[seg_id][0])))
+            return tipl::error() << eval.error_msg,1;
     }
 
     eval.param.prob_threshold = po.get("prob_threshold",0.5f);
@@ -686,21 +738,16 @@ int eval(void)
         eval.start();
         eval.join();
     }
-    if(!eval.error_msg.empty())
-    {
-        tipl::error() << eval.error_msg;
-        return 1;
-    }
-    {
-        tipl::progress p("saving results");
-        for(size_t i = 0;p(i,eval.param.image_file_name.size());++i)
-        {
-            auto file_name = eval.param.image_file_name[i] + ".result.nii.gz";
-            tipl::out() << "save to " << file_name;
-            if(!eval.save_to_file(i,file_name.c_str()))
-                tipl::error() << eval.error_msg;
-        }
-    }
 
+    if(!eval.error_msg.empty())
+        return tipl::error() << eval.error_msg,1;
+    tipl::progress p("saving results");
+    for(size_t i = 0;p(i,eval.param.image_file_name.size());++i)
+    {
+        auto file_name = eval.param.image_file_name[i] + ".result.nii.gz";
+        tipl::out() << "save to " << file_name;
+        if(!eval.save_to_file(i,file_name.c_str()))
+            tipl::error() << eval.error_msg;
+    }
     return 0;
 }
