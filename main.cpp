@@ -1,19 +1,91 @@
+#include <filesystem>
 #include "zlib.h"
 #include "unet.hpp"
 #include "TIPL/tipl.hpp"
 
 
 #include <QApplication>
+#include <QMessageBox>
 #include "mainwindow.h"
 #include "console.h"
 
 tipl::program_option<tipl::out> po;
+
+std::string find_full_path(const std::string& name)
+{
+    std::filesystem::path file_path(name);
+
+    std::filesystem::path app_dir_file = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString())/file_path;
+    if(std::filesystem::exists(app_dir_file))
+        return app_dir_file.string();
+
+    std::filesystem::path cwd_file = std::filesystem::current_path()/file_path;
+    if(std::filesystem::exists(cwd_file))
+        return cwd_file.string();
+
+    return name;
+}
+std::vector<std::string> seg_template_list;
+std::vector<std::vector<std::string> > atlas_file_name_list;
+bool load_file_name(void)
+{
+    namespace fs = std::filesystem;
+
+    fs::path dir = fs::path(QCoreApplication::applicationDirPath().toStdString())/"atlas";
+    if(!fs::exists(dir) && !fs::exists(dir = fs::current_path()/"atlas"))
+        return false;
+
+    std::vector<std::string> name_list(tipl::get_directories(dir));
+
+    auto get_rank = [](const std::string& d)
+    {
+        int rank = 0;
+        for(const auto& k : {"human","chimpanzee","rhesus","marmoset","rat","mouse"})
+        {
+            if(d.find(k) != std::string::npos)
+                return rank;
+            ++rank;
+        }
+        return rank;
+    };
+
+    std::stable_sort(name_list.begin(),name_list.end(),[&](const std::string& a,const std::string& b)
+    {
+        return get_rank(a) < get_rank(b);
+    });
+
+    for(const auto& name : name_list)
+    {
+        fs::path t_dir = dir/name;
+        fs::path seg_file = t_dir/(name+".seg.nii.gz");
+
+        if(!fs::exists(seg_file))
+            continue;
+
+        seg_template_list.push_back(seg_file.string());
+
+        std::vector<std::string> atlas_list,file_list;
+        for(const auto& entry : fs::directory_iterator(t_dir))
+            if(entry.is_regular_file() && tipl::ends_with(entry.path().filename().string(),{".nii",".nii.gz"}))
+                atlas_list.push_back(entry.path().filename().string());
+
+        std::sort(atlas_list.begin(),atlas_list.end());
+
+        for(const auto& each : atlas_list)
+            if(each.substr(0,each.find('.')) != name)
+                file_list.push_back((t_dir/each).string());
+
+        atlas_file_name_list.push_back(std::move(file_list));
+    }
+
+    return !seg_template_list.empty();
+}
+
 extern console_stream console;
 void check_cuda(std::string& error_msg);
-
 int tra(void);
 int eval(void);
-void init_application(void)
+bool init_application(void)
 {
     QCoreApplication::setOrganizationName("LabSolver");
     QCoreApplication::setApplicationName(QString("UNet Studio"));
@@ -27,10 +99,14 @@ void init_application(void)
         else
             tipl::error() << cuda_msg;
     }
+    if(!load_file_name())
+        return tipl::error() << "cannot find template and atlases",false;
+    return true;
 }
 int run_cmd(void)
 {
-    init_application();
+    if(!init_application())
+        return 1;
     if(!po.check("action"))
         return 1;
     if(!po.has("network"))
@@ -47,20 +123,23 @@ int run_cmd(void)
 
 std::string unet_studio_citation = std::string("UNet Studio version (") + __DATE__ + ", http://unet-studio.labsolver.org)";
 
+
+
 int main(int argc, char *argv[])
 {
     tipl::out() << unet_studio_citation << std::endl;
     if(!po.parse(argc,argv))
-    {
-        tipl::out() << po.error_msg << std::endl;
-        return 1;
-    }
+        return tipl::out() << po.error_msg,1;
     if(argc > 2)
         return run_cmd();
     tipl::show_prog = true;
     console.attach();
     tipl::progress prog(unet_studio_citation);
-    init_application();
+    if(!init_application())
+    {
+        QMessageBox::critical(nullptr,"ERROR","cannot find template");
+        return 1;
+    }
     QApplication a(argc, argv);
     MainWindow w;
     w.setWindowTitle(unet_studio_citation.c_str());
