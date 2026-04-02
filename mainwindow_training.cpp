@@ -663,13 +663,17 @@ void label_on_images(QImage& I,float display_ratio,
     }
 
     std::vector<tipl::rgb> colors(std::max<int>(5,out_count));
-    colors[0] = tipl::rgb(255,255,255);
-    colors[1] = tipl::rgb(80,170,255);
-    colors[2] = tipl::rgb(255,170,0);
-    colors[3] = tipl::rgb(244,126,113);
-    colors[4] = tipl::rgb(255,255,255);
-    for(size_t i = 5;i < out_count;++i)
-        colors[i] = tipl::rgb(111,111,255);
+    if(out_count <= 5)
+    {
+        colors[0] = tipl::rgb(255,255,255);
+        colors[1] = tipl::rgb(80,170,255);
+        colors[2] = tipl::rgb(255,170,0);
+        colors[3] = tipl::rgb(244,126,113);
+        colors[4] = tipl::rgb(255,255,255);
+    }
+    else
+        for(size_t i = 0;i < out_count;++i)
+            colors[i] = tipl::rgb(111,111,255);
 
     {
         QPainter painter(&I);
