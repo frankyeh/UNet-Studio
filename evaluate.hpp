@@ -28,12 +28,31 @@ public:
     std::vector<tipl::image<3> > evaluate_input,evaluate_output;
     std::vector<tipl::shape<3> > raw_image_shape;
     std::vector<tipl::vector<3> > raw_image_vs;
+    std::vector<tipl::matrix<4,4,float> > untouched_srow,raw_image_srow;
     std::vector<tipl::transformation_matrix<float> > raw_image_trans;
     std::vector<std::vector<char> > raw_image_flip_swap;
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;
     void read_file(void);
     void get_result(size_t index);
+public:
+    tipl::image<3,unsigned char> template_I,atlas_I;
+    tipl::matrix<4,4,float> template_R;
+    tipl::vector<3> template_vs;
+    size_t atlas_region_count = 0;
+    bool load_template(const std::string& file_name)
+    {
+        return tipl::io::gz_nifti(file_name,std::ios::in) >> template_I >> template_R >> template_vs
+                >> [&](const std::string& e){error_msg = e;};
+    }
+    bool load_atlas(const std::string& file_name)
+    {
+        atlas_I.resize(template_I.shape());
+        if(!(tipl::io::gz_nifti(file_name,std::ios::in).to_space<tipl::majority>(atlas_I,template_R) >> [&](const std::string& e){error_msg = e;}))
+            return false;
+        atlas_region_count = tipl::max_value(atlas_I);
+        return true;
+    }
 public:
     bool aborted = false;
     bool running = false;
