@@ -52,14 +52,14 @@ bool read_image_and_label(const std::string& image_name,
         for(size_t index = 1;index <= nii.dim(4);++index)
         {
             tipl::image<3> I(image_shape);
-            nii.to_space(I,image_t);
+            nii.to_space<tipl::majority>(I,image_t);
             for(size_t pos = 0;pos < I.size();++pos)
                 if(I[pos])
                     label[pos] = index;
         }
     }
     else
-        nii.to_space(label,image_t);
+        nii.to_space<tipl::majority>(label,image_t);
     return true;
 }
 
