@@ -10,6 +10,8 @@
 #include <QSettings>
 QSettings settings("settings.ini",QSettings::IniFormat);
 extern std::vector<std::string> gpu_names;
+extern std::vector<std::string> seg_template_list;
+extern std::vector<std::vector<std::string> > atlas_file_name_list;
 void gen_list(std::vector<std::string>& network_list);
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),ui(new Ui::MainWindow)
@@ -71,6 +73,13 @@ MainWindow::MainWindow(QWidget *parent)
             ui->evaluate_builtin_networks->addItem(fileInfo.fileName().remove(".net.gz"));
         ui->evaluate_builtin_networks->setCurrentText(settings.value("eval_network").toString());
     }
+    //populate template
+    {
+        ui->template_list->addItem("none");
+        for(const auto& each: seg_template_list)
+            ui->template_list->addItem(QString::fromStdString(tipl::remove_all_suffix(std::filesystem::path(each).filename().string())));
+        ui->template_list->setCurrentIndex(0);
+    }
 
     timer = new QTimer(this);
     timer->setInterval(100);
@@ -120,4 +129,29 @@ void MainWindow::on_actionConsole_triggered()
     con->showNormal();
 }
 
+
+
+void MainWindow::on_evaluate_output_currentIndexChanged(int index)
+{
+    if(index != 0)
+        ui->template_list->setCurrentIndex(0);
+    ui->atlas_label->setVisible(index == 0);
+    ui->template_list->setVisible(index == 0);
+    ui->atlas_list->setVisible(index == 0);
+}
+
+
+void MainWindow::on_template_list_currentIndexChanged(int index)
+{
+    if(index > 0 && index <= atlas_file_name_list.size())
+    {
+        ui->atlas_list->clear();
+        for(const auto& each : atlas_file_name_list[index-1])
+            ui->atlas_list->addItem(QString::fromStdString(tipl::remove_all_suffix(std::filesystem::path(each).filename().string())));
+        ui->atlas_list->setCurrentIndex(0);
+        ui->atlas_list->show();
+    }
+    else
+        ui->atlas_list->hide();
+}
 
