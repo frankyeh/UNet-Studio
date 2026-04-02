@@ -96,7 +96,8 @@ void MainWindow::on_evaluate_builtin_networks_currentIndexChanged(int index)
         ui->evaluate->setEnabled(evaluate_list.size());
     }
 }
-
+extern std::vector<std::string> seg_template_list;
+extern std::vector<std::vector<std::string> > atlas_file_name_list;
 void MainWindow::on_evaluate_clicked()
 {
     tipl::progress p("initiate evaluation");
@@ -105,6 +106,24 @@ void MainWindow::on_evaluate_clicked()
         evaluate.stop();
         return;
     }
+
+    if(ui->template_list->currentIndex() > 0 && ui->template_list->currentIndex() <= seg_template_list.size())
+    {
+        if(!evaluate.load_template(seg_template_list[ui->template_list->currentIndex()-1]) ||
+           !evaluate.load_atlas(atlas_file_name_list[ui->template_list->currentIndex()-1][ui->atlas_list->currentIndex()]))
+        {
+            QMessageBox::critical(this,"ERROR",evaluate.error_msg.c_str());
+            return;
+        }
+    }
+    else
+    {
+        evaluate.template_I.clear();
+        evaluate.atlas_I.clear();
+    }
+    ui->template_list->setEnabled(false);
+    ui->atlas_list->setEnabled(false);
+
     evaluate.param.device = ui->evaluate_device->currentIndex() >= 1 ? torch::Device(torch::kCUDA, ui->evaluate_device->currentIndex()-1):torch::Device(torch::kCPU);
     evaluate.param.image_file_name.clear();
     evaluate.param.prob_threshold = ui->postproc_prob_threshold->value();
@@ -159,6 +178,9 @@ void MainWindow::evaluating()
         evaluate.error_msg.clear();
     }
     ui->evaluate->setText(evaluate.running ? "Stop" : "Start");
+
+    ui->template_list->setEnabled(!evaluate.running);
+    ui->atlas_list->setEnabled(!evaluate.running);
 
     ui->action_evaluate_open_images->setEnabled(!evaluate.running);
     ui->evaluate_open_images->setEnabled(!evaluate.running);
@@ -286,7 +308,7 @@ void MainWindow::get_evaluate_views(QImage& view1,QImage& view2,float display_ra
                             d,
                             slice_pos,
                             evaluate.model->out_count-1,
-                            evaluate.model->out_count-1);
+                            ui->template_list->currentIndex() > 0 ? evaluate.atlas_region_count : evaluate.model->out_count-1);
 
         ui->eval_label_slider->setMaximum(eval_output_count-1);
         ui->eval_label_slider->setVisible(eval_output_count > 1);
