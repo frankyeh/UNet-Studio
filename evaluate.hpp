@@ -36,23 +36,22 @@ public:
     void read_file(void);
     void get_result(size_t index);
 public:
-    tipl::image<3,unsigned char> template_I,atlas_I;
+    std::vector<std::string> tissue_names = {"background","white matter","gray matter","cerebellar gray matter","subcortical"};
+    tipl::image<3,unsigned char> template_I;
+    tipl::image<3,unsigned short> atlas_I;
     tipl::matrix<4,4,float> template_R;
     tipl::vector<3> template_vs;
     size_t atlas_region_count = 0;
     bool load_template(const std::string& file_name)
     {
-        return tipl::io::gz_nifti(file_name,std::ios::in) >> template_I >> template_R >> template_vs
-                >> [&](const std::string& e){error_msg = e;};
-    }
-    bool load_atlas(const std::string& file_name)
-    {
-        atlas_I.resize(template_I.shape());
-        if(!(tipl::io::gz_nifti(file_name,std::ios::in).to_space<tipl::majority>(atlas_I,template_R) >> [&](const std::string& e){error_msg = e;}))
+        if(!(tipl::io::gz_nifti(file_name,std::ios::in) >> template_I >> template_R >> template_vs
+                >> [&](const std::string& e){error_msg = e;}))
             return false;
-        atlas_region_count = tipl::max_value(atlas_I);
+        // remove csf region
+        std::replace_if(template_I.begin(),template_I.end(),[](auto v){return v >= 5;},0);
         return true;
     }
+    bool load_atlas(const std::string& file_name);
 public:
     bool aborted = false;
     bool running = false;
