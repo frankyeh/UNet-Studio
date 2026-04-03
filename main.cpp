@@ -131,16 +131,19 @@ int main(int argc, char *argv[])
     if(!po.parse(argc,argv))
         return tipl::out() << po.error_msg,1;
     if(argc > 2)
+    {
+        QCoreApplication a(argc,argv);
         return run_cmd();
+    }
     tipl::show_prog = true;
     console.attach();
     tipl::progress prog(unet_studio_citation);
+    QApplication a(argc, argv);
     if(!init_application())
     {
         QMessageBox::critical(nullptr,"ERROR","cannot find template");
         return 1;
     }
-    QApplication a(argc, argv);
     MainWindow w;
     w.setWindowTitle(unet_studio_citation.c_str());
     w.show();
