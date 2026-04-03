@@ -222,6 +222,75 @@ void upsample8(T& I, const U& subI,size_t sub_index)
 }
 
 
+bool evaluate_unet::load_atlas(const std::string& file_name)
+{
+    std::string corrected_file_name;
+    {
+        std::filesystem::path corrected_dir = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString())/"corrected_atlas";
+        if(!std::filesystem::exists(corrected_dir))
+            std::filesystem::create_directories(corrected_dir);
+        corrected_file_name = (corrected_dir/(tipl::remove_all_suffix(std::filesystem::path(file_name).filename().string()) + ".corrected.nii.gz")).string();
+    }
+
+    atlas_I.resize(template_I.shape());
+    if(std::filesystem::exists(corrected_file_name))
+        return tipl::io::gz_nifti(corrected_file_name,std::ios::in).to_space<tipl::majority>(atlas_I,template_R) >> [&](const std::string& e){error_msg = e;};
+
+    if(!(tipl::io::gz_nifti(file_name,std::ios::in).to_space<tipl::majority>(atlas_I,template_R) >> [&](const std::string& e){error_msg = e;}))
+        return false;
+
+    // in template_I is the tissue segmentation, 0 is background, 1: white matter 2: gray matter 3: cerebellar gray matter 4: subcortical
+    const size_t template_region_count = 5;
+    atlas_region_count = tipl::max_value(atlas_I);
+
+    // zero atlas_I where template_I is zero
+    tipl::preserve(atlas_I.begin(),atlas_I.end(),template_I.begin());
+
+    std::vector<size_t> tissue_total;
+    tipl::histogram(template_I,tissue_total,0,template_region_count,template_region_count);
+
+
+
+    std::vector<float> tissue_coverage(template_region_count,0.0f);
+    {
+        tipl::progress prog("checking tissue coverage of the atlas");
+        std::vector<size_t> atlas_covered(template_region_count,0);
+        for(size_t pos = 0;pos < atlas_I.size();++pos)
+            if(atlas_I[pos] > 0 && template_I[pos] < template_region_count)
+                ++atlas_covered[template_I[pos]];
+        for(size_t cur_tissue = 1;cur_tissue < template_region_count;++cur_tissue)
+        {
+            if(tissue_total[cur_tissue] == 0)
+                continue;
+            tissue_coverage[cur_tissue] = float(atlas_covered[cur_tissue])/float(tissue_total[cur_tissue]);
+            tipl::out() << tissue_names[cur_tissue] << " coverage: " << int(tissue_coverage[cur_tissue]*100.0f) << "%";
+        }
+    }
+
+    {
+        tipl::progress prog("checking tissue classification of each atlas region");
+        tipl::morphology::reclassify_labels_by_template<tipl::out>(template_I,atlas_I);
+    }
+
+    {
+        tipl::progress prog("region growing to make up missing voxels");
+        tipl::image<3,unsigned char> mask(template_I.shape());
+
+        for(size_t cur_tissue = 1;cur_tissue < template_region_count;++cur_tissue)
+        {
+            if(tissue_coverage[cur_tissue] <= 0.75f)
+                continue;
+            tipl::out() << "work on " << tissue_names[cur_tissue];
+            for(size_t pos = 0;pos < template_I.size();++pos)
+                mask[pos] = (template_I[pos] == cur_tissue);
+            tipl::morphology::fill_and_smooth_labels<tipl::out>(mask,atlas_I);
+        }
+    }
+
+    tipl::io::gz_nifti(corrected_file_name,std::ios::out) << template_vs << template_R << true << atlas_I;
+    return true;
+}
+
 void evaluate_unet::read_file(void)
 {
     evaluate_input = std::vector<tipl::image<3> >(param.image_file_name.size());
@@ -387,6 +456,10 @@ void evaluate_unet::proc_actions(const char* cmd,float param1,float param2)
                  raw_image_shape[cur_output],
                  is_label[cur_output]);
 }
+
+
+
+
 extern std::vector<std::string> seg_template_list;
 extern std::vector<std::vector<std::string> > atlas_file_name_list;;
 void evaluate_unet::output(void)
@@ -402,32 +475,6 @@ void evaluate_unet::output(void)
             exist_guard(bool& running_):running(running_){}
             ~exist_guard() { running = false;}
         } guard(running);
-
-
-        std::vector<std::vector<int64_t>> shifts;
-        if(!template_I.empty())
-        {
-            const int radius = 4;
-            const int max_dis = radius*radius;
-            shifts.resize(max_dis+1);
-            int64_t wh = int64_t(template_I.plane_size());
-            int64_t w = int64_t(template_I.width());
-            for(int64_t z = -radius;z <= radius;++z)
-            {
-                int64_t zwh = z*wh;
-                for(int64_t y = -radius;y <= radius;++y)
-                {
-                    int64_t yw = y*w;
-                    for(int64_t x = -radius;x <= radius;++x)
-                    {
-                        int dis = x*x + y*y + z*z;
-                        if(dis <= max_dis)
-                            shifts[dis].push_back(x+yw+zwh);
-                    }
-                }
-            }
-        }
-
 
         try{
             for (cur_output = 0;cur_output < label_prob.size() && !aborted; cur_output++)
@@ -493,11 +540,12 @@ void evaluate_unet::output(void)
                         proc_actions("to_3d_label");
                         if(!template_I.empty())
                         {
+                            const size_t max_tissue_count = 4;/* exclude csf */
                             auto cur_label = tipl::image<3,unsigned char>(label_prob[cur_output]);
                             tipl::reg::mm_reg<tipl::out> reg;
                             tipl::progress prog("register to template");
-                            tipl::expand_label_to_images(template_I,reg.It,4 /* exclude csf */);
-                            tipl::expand_label_to_images(cur_label,reg.I,4 /* exclude csf */);
+                            tipl::expand_label_to_images(template_I,reg.It,max_tissue_count);
+                            tipl::expand_label_to_images(cur_label,reg.I,max_tissue_count);
                             reg.ItR = template_R;
                             reg.IR = raw_image_srow[cur_output];
                             reg.Itvs = template_vs;
@@ -512,48 +560,43 @@ void evaluate_unet::output(void)
                             reg.nonlinear_reg(aborted);
                             reg.to_It_space(template_I.shape(),template_R);
                             reg.to_I_space(cur_shape,raw_image_srow[cur_output]);
-                            const auto& from2to = reg.from2to;
+                            auto template_J = reg.apply_warping<false,tipl::majority>(template_I);
+                            auto atlas = reg.apply_warping<false,tipl::majority>(atlas_I);
 
-                            label_prob[cur_output] = 0;
-                            tipl::par_for(cur_shape.size(),[&](size_t index)
+                            // apply mask from current segmentation to warpped template and atlas
+                            tipl::preserve(atlas.begin(),atlas.end(),cur_label.begin());
+                            tipl::preserve(template_J.begin(),template_J.end(),cur_label.begin());
+
+                            size_t size = cur_shape.size();
+                            tipl::image<3,unsigned char> mask(cur_shape);
+                            for(size_t cur_tissue = 1;cur_tissue <= max_tissue_count;++cur_tissue)
                             {
-                                auto c = cur_label[index];
-                                auto pos = from2to[index];
-                                label_prob[cur_output][index] = tipl::estimate<tipl::majority>(atlas_I,pos);
-
-                                if(tipl::estimate<tipl::majority>(template_I,pos) != c)
-                                {
-                                    std::vector<std::pair<unsigned short,size_t>> candidates;
-                                    candidates.reserve(8);
-                                    for(const auto& each : shifts)
+                                tipl::out() << "checking tissue:" << tissue_names[cur_tissue];
+                                size_t total = 0,has_atlas = 0;
+                                for(size_t i = 0;i < size;++i)
+                                    if(template_J[i] == cur_tissue && atlas[i])
                                     {
-                                        bool found = false;
-                                        for(auto shift_val : each)
-                                        {
-                                            int64_t at = int64_t(index) + shift_val;
-                                            if(at >= 0 && at < int64_t(template_I.size()) && template_I[at] == c)
-                                            {
-                                                auto val = atlas_I[at];
-                                                auto it = std::find_if(candidates.begin(),candidates.end(),
-                                                                       [val](const auto& p){return p.first == val;});
-                                                if(it != candidates.end())
-                                                    it->second++;
-                                                else
-                                                    candidates.push_back({val,1});
-
-                                                found = true;
-                                            }
-                                        }
-                                        if(found)
-                                        {
-                                            auto best = std::max_element(candidates.begin(),candidates.end(),
-                                                                         [](const auto& a,const auto& b){return a.second < b.second;});
-                                            label_prob[cur_output][index] = best->first;
-                                            break;
-                                        }
+                                        ++total;
+                                        if(atlas[i])
+                                            ++has_atlas;
                                     }
+
+                                if(!has_atlas)
+                                {
+                                    tipl::out() << tissue_names[cur_tissue] << " has no label in current atlas, assign zeros";
+                                    for(size_t i = 0;i < size;++i)
+                                        if(template_J[i] == cur_tissue)
+                                            atlas[i] = 0;
                                 }
-                            });
+                                if(float(has_atlas)/float(total) > 0.75f)
+                                {
+                                    tipl::out() << tissue_names[cur_tissue] << " has labels, fill empty labels and smooth atlas";
+                                    for(size_t i = 0;i < size;++i)
+                                        mask[i] = (template_J[i] == cur_tissue);
+                                    tipl::morphology::fill_and_smooth_labels<tipl::out>(mask,atlas);
+                                }
+                            }
+                            label_prob[cur_output] = atlas;
                         }
                         break;
                     case 2: // skull strip
