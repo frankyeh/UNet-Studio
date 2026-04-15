@@ -9,7 +9,6 @@
 #endif
 #include "TIPL/tipl.hpp"
 
-
 struct UNet3dImpl : torch::nn::Module
 {
 public:
@@ -29,29 +28,8 @@ public:
     tipl::vector<3> voxel_size = {1.0f,1.0f,1.0f};
     tipl::shape<3> dim = {192,224,192};
     std::deque<torch::nn::Sequential> encoding,decoding,up;
-    std::vector<torch::nn::BatchNorm3d> bn_layers;
     std::vector<torch::nn::Sequential> output;
 public:
-    auto parse_feature_string(std::vector<int>& kernel_size) const
-    {
-        std::vector<std::vector<int> > features_down;
-        std::vector<std::vector<int> > features_up;
-        int input_feature = in_count;
-        for(auto feature_string_per_level : tipl::split(feature_string,'+'))
-        {
-            auto level_feature_string = tipl::split(feature_string_per_level,',');
-            if(level_feature_string.size() == 2)
-                kernel_size.push_back(std::stoi(level_feature_string.back()));
-            else
-                kernel_size.push_back(3);
-            features_down.push_back(std::vector<int>({input_feature}));
-            for(auto s : tipl::split(feature_string_per_level,'x'))
-                features_down.back().push_back(input_feature = std::stoi(s));
-            features_up.push_back(std::vector<int>(features_down.back().rbegin(),features_down.back().rend()-1));
-            features_up.back()[0] *= 2; // due to input concatenation
-        }
-        return std::make_pair(features_down,features_up);
-    }
     std::string get_info(void) const;
 public:
     UNet3dImpl(void){}
