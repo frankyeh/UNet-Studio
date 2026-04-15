@@ -492,52 +492,31 @@ void evaluate_unet::output(void)
                 const auto& cur_shape = raw_image_shape[cur_output];
                 auto& cur_label_prob = label_prob[cur_output];
 
-                tipl::ml3d::postproc_actions(cur_label_prob,
+                // 1. Use the new postproc_actions to handle normalization and bg removal
+                // Note: Ensure `deep_supervision` (or equivalent bg flag) is accessible in this class scope
+                cur_label_prob = tipl::ml3d::postproc_actions(
                                              evaluate_output[cur_output],
                                              cur_shape,
                                              raw_image_trans[cur_output],
-                                             model->out_count,!proc_strategy.match_fov && !proc_strategy.match_resolution);
+                                             model->out_count,
+                                             true /*deep_supervision*/);
 
-
-                // compute forground probability
-                auto& cur_forground_prob = foreground_prob[cur_output];
-                cur_forground_prob = tipl::make_image(cur_label_prob.data(),cur_shape);
-                tipl::upper_lower_threshold(cur_forground_prob.begin(),cur_forground_prob.end(),0.0f,1.0f);
-                tipl::negate(cur_forground_prob.begin(),cur_forground_prob.end(),1.0f);
-                tipl::morphology::defragment_by_threshold(cur_forground_prob,param.prob_threshold);
-                tipl::filter::gaussian(cur_forground_prob);
+                // 2. Compute foreground probability
+                auto label_prob_4d = tipl::make_image(cur_label_prob.data(), cur_shape.expand(model->out_count - 1));
+                auto& cur_forground_prob = foreground_prob[cur_output] = tipl::ml3d::defragment4d(label_prob_4d, param.prob_threshold);
 
                 if(aborted)
                     return;
 
-
                 switch(proc_strategy.output_format)
                 {
                     case 0: // 3D label
-                        {
-                            // remove background channel
-                            {
-                                size_t new_total_size = cur_shape.size()*(model->out_count-1);
-                                size_t shift = cur_shape.size();
-                                for(size_t i = 0;i < new_total_size;++i)
-                                    cur_label_prob[i] = cur_label_prob[i + shift];
-                                cur_label_prob.resize(cur_shape.multiply(tipl::shape<3>::z,model->out_count-1));
-                            }
-                            // adjust tissue prob
-                            tipl::image<3> tissue_prob(cur_shape);
-                            tipl::sum_partial(tipl::make_image(cur_label_prob.data(),cur_shape.expand(model->out_count-1)),tissue_prob);
+                        // Background removal and tissue probability adjustments were deleted!
+                        // The new `postproc_actions` handles it upstream.
 
-                            for(size_t label = 0; label < model->out_count-1;++label)
-                            {
-                                auto I = tipl::make_image(cur_label_prob.data() + cur_shape.size()*label,cur_shape);
-                                for(size_t pos = 0;pos < I.size();++pos)
-                                    if(tissue_prob[pos] != 0.0f)
-                                        I[pos] *= cur_forground_prob[pos]/tissue_prob[pos];
-                            }
-
-                        }
                         proc_actions("soft_max",param.prob_threshold);
                         proc_actions("to_3d_label");
+
                         if(!template_I.empty())
                         {
                             const size_t max_tissue_count = 4;/* exclude csf */
