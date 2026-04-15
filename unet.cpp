@@ -13,9 +13,8 @@ UNet3dImpl::UNet3dImpl(int32_t in_count_,
             feature_string(feature_string_)
 {
     std::vector<int> ks;
-    auto features = parse_feature_string(ks);
-    std::vector<std::vector<int> > features_down(std::move(features.first));
-    std::vector<std::vector<int> > features_up(std::move(features.second));
+    std::vector<std::vector<int> > features_down,features_up;
+    tipl::ml3d::parse_feature_string(feature_string,in_count,features_down,features_up,ks);
     output.resize(features_down.size() - 1);
 
     for(int level=0; level< features_down.size(); level++)
