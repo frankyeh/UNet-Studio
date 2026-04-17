@@ -651,7 +651,7 @@ std::string get_network_path(void)
 }
 std::string default_feature(int out_count)
 {
-    return out_count <= 8 ? "8x8+16x16+32x32+64x64+128x128" : (out_count <= 16 ? "16x16+32x32+64x64+128x128+128x128" : "32x32+64x64+128x128+128x128+256x256");
+    return "32x32+64x64+128x128+256x256+256x256";
 }
 int tra(void)
 {
