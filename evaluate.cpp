@@ -99,7 +99,7 @@ void postproc_actions(const std::string& command,
         tipl::par_for(this_image_frames,[&](size_t label)
         {
             auto I = this_image.alias(dim.size()*label,dim);
-            for(size_t i = 0;i < I.size();++i)
+            for(size_t i = 0,sz = I.size();i < sz;++i)
                 I[i] -= minus_value;
         });
         is_label = false;
@@ -113,11 +113,11 @@ void postproc_actions(const std::string& command,
         {
             auto I = this_image.alias(dim.size()*label,dim);
             tipl::image<3,char> mask(I.shape()),mask2;
-            for(size_t i = 0;i < I.size();++i)
+            for(size_t i = 0,sz = I.size();i < sz;++i)
                 mask[i] = (I[i] > defragment_each_threshold ? 1:0);
             mask2 = mask;
             tipl::morphology::defragment_by_size_ratio(mask);
-            for(size_t i = 0;i < I.size();++i)
+            for(size_t i = 0,sz = I.size();i < sz;++i)
                 if(!mask[i] && mask[2])
                     I[i] = 0;
         });
@@ -255,7 +255,7 @@ bool evaluate_unet::load_atlas(const std::string& file_name)
     {
         tipl::progress prog("checking tissue coverage of the atlas");
         std::vector<size_t> atlas_covered(template_region_count,0);
-        for(size_t pos = 0;pos < atlas_I.size();++pos)
+        for(size_t pos = 0,sz = atlas_I.size();pos < sz;++pos)
             if(atlas_I[pos] > 0 && template_I[pos] < template_region_count)
                 ++atlas_covered[template_I[pos]];
         for(size_t cur_tissue = 1;cur_tissue < template_region_count;++cur_tissue)
@@ -281,7 +281,7 @@ bool evaluate_unet::load_atlas(const std::string& file_name)
             if(tissue_coverage[cur_tissue] <= 0.75f)
                 continue;
             tipl::out() << "work on " << tissue_names[cur_tissue];
-            for(size_t pos = 0;pos < template_I.size();++pos)
+            for(size_t pos = 0,sz = template_I.size();pos < sz;++pos)
                 mask[pos] = (template_I[pos] == cur_tissue);
             tipl::morphology::fill_and_smooth_labels<tipl::out>(mask,atlas_I);
         }
@@ -491,20 +491,16 @@ void evaluate_unet::output(void)
                     continue;
                 const auto& cur_shape = raw_image_shape[cur_output];
                 auto& cur_label_prob = label_prob[cur_output];
+                auto& cur_foreground_prob = foreground_prob[cur_output];
 
-                // 1. Use the new postproc_actions to handle normalization and bg removal
-                // Note: Ensure `deep_supervision` (or equivalent bg flag) is accessible in this class scope
-                cur_label_prob = tipl::ml3d::postproc_actions(
-                                             evaluate_output[cur_output],
-                                             cur_shape,
-                                             raw_image_trans[cur_output],
-                                             model->out_count,
-                                             true /*deep_supervision*/);
-
-                // 2. Compute foreground probability
-                auto label_prob_4d = tipl::make_image(cur_label_prob.data(), cur_shape.expand(model->out_count - 1));
-                auto& cur_forground_prob = foreground_prob[cur_output] = tipl::ml3d::defragment4d(label_prob_4d, param.prob_threshold);
-
+                tipl::ml3d::postproc(evaluate_output[cur_output],
+                                     cur_shape,
+                                     raw_image_trans[cur_output],
+                                     model->out_count,
+                                     true, /* has_bg_channel / deep_supervision */
+                                     param.prob_threshold,
+                                     cur_label_prob,
+                                     cur_foreground_prob);
                 if(aborted)
                     return;
 
@@ -587,14 +583,14 @@ void evaluate_unet::output(void)
                                 label_prob[cur_output].clear();
                                 break;
                             }
-                            for(size_t pos = 0;pos < I.size() && pos < cur_forground_prob.size();++pos)
-                                I[pos] *= cur_forground_prob[pos];
+                            for(size_t pos = 0,sz = std::min<size_t>(I.size(),cur_foreground_prob.size());pos < sz;++pos)
+                                I[pos] *= cur_foreground_prob[pos];
                             tipl::normalize(I);
                             label_prob[cur_output].swap(I);
                         }
                     break;
                     case 3: // mask
-                        label_prob[cur_output] = cur_forground_prob;
+                        label_prob[cur_output] = cur_foreground_prob;
                         tipl::upper_threshold(label_prob[cur_output].begin(),label_prob[cur_output].end(),param.prob_threshold);
                         tipl::filter::gaussian(label_prob[cur_output]);
                         tipl::normalize(label_prob[cur_output]);
