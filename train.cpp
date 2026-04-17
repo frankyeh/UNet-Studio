@@ -322,27 +322,23 @@ std::string train_unet::get_status(void)
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> calc_losses(const torch::Tensor& pred_raw, const torch::Tensor& target_tissues, int C)
 {
-    auto pred_tissues = pred_raw.clamp(0.0, 1.0);
+    // 1. Cross-Entropy Loss
+    // PyTorch's cross_entropy handles raw logits natively for excellent numerical stability.
+    // It supports target probabilities directly (shapes N, C, D, H, W).
+    auto ce = torch::nn::functional::cross_entropy(pred_raw, target_tissues);
 
-    auto pred_bg = (1.0 - pred_tissues.sum(1, true)).clamp(0.0, 1.0);
-    auto target_bg = (1.0 - target_tissues.sum(1, true)).clamp(0.0, 1.0);
+    // 2. Dice Loss
+    // Requires applying Softmax first to get bounded probabilities.
+    auto pred_probs = torch::softmax(pred_raw, 1);
+    auto inter = torch::sum(pred_probs * target_tissues, {2, 3, 4});
+    auto card = torch::sum(pred_probs + target_tissues, {2, 3, 4});
 
-    auto term_tissues = torch::sum(target_tissues * torch::log(pred_tissues + 1e-7), 1, true);
-    auto term_bg = target_bg * torch::log(pred_bg + 1e-7);
+    // Average Dice across batch and channels
+    auto dice = 1.0f - torch::mean((2.f * inter + 1e-5) / (card + 1e-5));
 
-    float ce_scale = std::max<float>(1e-5f, std::log(static_cast<float>(C)));
-    auto ce = -torch::mean(term_tissues + term_bg) / ce_scale;
-
-    auto inter_tissues = torch::sum(pred_tissues * target_tissues, {2, 3, 4});
-    auto inter_bg = torch::sum(pred_bg * target_bg, {2, 3, 4});
-
-    auto card_tissues = torch::sum(pred_tissues + target_tissues, {2, 3, 4});
-    auto card_bg = torch::sum(pred_bg + target_bg, {2, 3, 4});
-
-    auto dice = 1.0f - torch::mean((2.f * (inter_tissues.sum(1) + inter_bg) + 1e-5) /
-                                   (card_tissues.sum(1) + card_bg + 1e-5));
-
-    auto mse = torch::mse_loss(pred_raw, target_tissues) * static_cast<float>(C);
+    // 3. MSE
+    // Computed strictly for tracking/metrics, using probabilities rather than raw logits.
+    auto mse = torch::mse_loss(pred_probs, target_tissues) * static_cast<float>(C);
 
     return {ce, dice, mse};
 }
@@ -355,7 +351,7 @@ void train_unet::train(void)
         {
             model->report += " Training was conducted over " + std::to_string(param.epoch) + " epochs "
                              + "using a batch size of " + std::to_string(param.batch_size) + ". "
-                             + "Optimization employed an initial learning rate of " + std::to_string(param.learning_rate) + ".";
+                             + "Optimization employed an initial learning rate of " + std::to_string(param.learning_rate) + " using SGD with Nesterov momentum.";
 
             std::vector<torch::Tensor> decay_params, no_decay_params;
             for (auto& p : model->named_parameters())
@@ -367,30 +363,35 @@ void train_unet::train(void)
                 else
                     decay_params.push_back(p.value());
 
-            double base_wd = 1e-4;
+
+            double base_wd = 3e-5;
             std::vector<torch::optim::OptimizerParamGroup> groups;
-            auto opt_d = std::make_unique<torch::optim::AdamWOptions>(param.learning_rate);
+
+            auto opt_d = std::make_unique<torch::optim::SGDOptions>(param.learning_rate);
+            opt_d->momentum(0.99);
+            opt_d->nesterov(true);
             opt_d->weight_decay(base_wd);
-            auto opt_nd = std::make_unique<torch::optim::AdamWOptions>(param.learning_rate);
+
+            auto opt_nd = std::make_unique<torch::optim::SGDOptions>(param.learning_rate);
+            opt_nd->momentum(0.99);
+            opt_nd->nesterov(true);
             opt_nd->weight_decay(0.0);
 
             groups.push_back(torch::optim::OptimizerParamGroup(decay_params, std::move(opt_d)));
             groups.push_back(torch::optim::OptimizerParamGroup(no_decay_params, std::move(opt_nd)));
-            auto optimizer = std::make_shared<torch::optim::AdamW>(groups);
+            auto optimizer = std::make_shared<torch::optim::SGD>(groups);
 
             for (size_t cur_data_index = 0; cur_epoch < param.epoch && !aborted; cur_epoch++, cur_data_index += param.batch_size)
             {
                 training_status = "training";
+                // Polynomial LR decay
                 double poly = std::pow(1.0 - (double)cur_epoch / param.epoch, 0.9);
                 double cur_lr = param.learning_rate * poly;
-                double cur_wd = base_wd * poly;
 
                 for (auto& group : optimizer->param_groups())
                 {
-                    auto& opt = static_cast<torch::optim::AdamWOptions&>(group.options());
+                    auto& opt = static_cast<torch::optim::SGDOptions&>(group.options());
                     opt.lr(cur_lr);
-                    if (opt.weight_decay() > 0)
-                        opt.weight_decay(cur_wd);
                 }
 
                 for (auto& each : other_models)
@@ -431,8 +432,12 @@ void train_unet::train(void)
                         {
                             if (k > 0)
                                 active_target = torch::avg_pool3d(active_target, 2, 2);
+
                             auto [ce, dice, mse] = calc_losses(outputs[k], active_target, cur_model->out_count);
-                            auto level_loss = (/*ce + dice + */mse) * (1.0f / (1 << k));
+
+                            // 1:1 CE + Dice Loss. MSE is computed above but explicitly excluded from backprop.
+                            auto level_loss = (ce + dice) * (1.0f / (1 << k));
+
                             if (total_loss.defined()) total_loss += level_loss;
                             else total_loss = level_loss;
                         }
@@ -473,6 +478,7 @@ void train_unet::train(void)
     };
     train_thread.reset(new std::thread(run_training));
 }
+
 void train_unet::validate(void)
 {
     auto run_validation = [=](){
