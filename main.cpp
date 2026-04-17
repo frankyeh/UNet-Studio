@@ -57,12 +57,12 @@ bool load_file_name(void)
     for(const auto& name : name_list)
     {
         fs::path t_dir = dir/name;
-        fs::path seg_file = t_dir/(name+".seg.nii.gz");
+        fs::path tissue_file = t_dir/(name+"_tissue.nii.gz");
 
-        if(!fs::exists(seg_file))
+        if(!fs::exists(tissue_file))
             continue;
 
-        seg_template_list.push_back(seg_file.string());
+        seg_template_list.push_back(tissue_file.string());
 
         std::vector<std::string> atlas_list,file_list;
         for(const auto& entry : fs::directory_iterator(t_dir))
@@ -72,7 +72,7 @@ bool load_file_name(void)
         std::sort(atlas_list.begin(),atlas_list.end());
 
         for(const auto& each : atlas_list)
-            if(each.substr(0,each.find('.')) != name)
+            if(each.substr(0,each.find('_')) != name)
                 file_list.push_back((t_dir/each).string());
 
         atlas_file_name_list.push_back(std::move(file_list));
