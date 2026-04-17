@@ -86,7 +86,7 @@ void MainWindow::on_evaluate_builtin_networks_currentIndexChanged(int index)
 {
     if(index > 0)
     {
-        QString fileName =  QCoreApplication::applicationDirPath() + "/network/" + ui->evaluate_builtin_networks->currentText() + ".nz";
+        QString fileName =  QCoreApplication::applicationDirPath() + "/unet/" + ui->evaluate_builtin_networks->currentText() + ".nz";
         if(!load_from_file(evaluate.model,fileName.toUtf8().constData()))
         {
             QMessageBox::critical(this,"Error","Failed to load network");

@@ -636,9 +636,9 @@ std::string get_network_path(void)
     std::string network = po.get("network");
     if(!tipl::ends_with(network,"nz"))
         network += ".nz";
-    if(!std::filesystem::exists(network)&&std::filesystem::exists(po.exec_path+"/network/"+network))
+    if(!std::filesystem::exists(network)&&std::filesystem::exists(po.exec_path+"/unet/"+network))
     {
-        network = po.exec_path+"/network/"+network;
+        network = po.exec_path+"/unet/"+network;
         po.set("network",network);
     }
     return network;

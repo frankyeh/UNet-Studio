@@ -66,7 +66,7 @@ MainWindow::MainWindow(QWidget *parent)
     // populate networks
     {
         ui->evaluate_builtin_networks->addItem("select or open...");
-        QDir dir(QCoreApplication::applicationDirPath() + "/network");
+        QDir dir(QCoreApplication::applicationDirPath() + "/unet");
         dir.setNameFilters(QStringList() << "*.nz");
         QFileInfoList files = dir.entryInfoList(QDir::Files);
         for (const QFileInfo& fileInfo : files)
