@@ -39,7 +39,7 @@ void MainWindow::on_action_open_training_setting_triggered()
 
     if(!ini.value("network_dir").toString().isEmpty())
     {
-        auto fileName = ini.value("network_dir").toString() + "/" + ini.value("network_file").toString() + ".net.gz";
+        auto fileName = ini.value("network_dir").toString() + "/" + ini.value("network_file").toString() + ".nz";
         if(QFileInfo(fileName).exists())
             load_network(fileName);
     }
@@ -275,7 +275,7 @@ void MainWindow::load_network(QString fileName)
         return;
     }
     settings.setValue("network_dir",QFileInfo(fileName).absolutePath());
-    settings.setValue("network_file",train_name = QFileInfo(fileName.remove(".net.gz")).fileName());
+    settings.setValue("network_file",train_name = QFileInfo(fileName.remove(".nz")).fileName());
     ui->model_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
     ui->model_report->setPlainText(train.model->report.c_str());
     has_network();
@@ -286,7 +286,7 @@ void MainWindow::on_action_train_open_network_triggered()
 {
     QString fileName = QFileDialog::getOpenFileName(this,"Open network file",
                                                 settings.value("network_dir").toString() + "/" +
-                                                settings.value("network_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
+                                                settings.value("network_file").toString() + ".nz","Network files (*nz);;All files (*)");
     if(fileName.isEmpty())
         return;
     load_network(fileName);
@@ -296,13 +296,13 @@ void MainWindow::on_action_train_save_network_triggered()
 {
     QString fileName = QFileDialog::getSaveFileName(this,"Save network file",
                                                 settings.value("network_dir").toString() + "/" +
-                                                train_name + ".net.gz","Network files (*net.gz);;All files (*)");
+                                                train_name + ".nz","Network files (*nz);;All files (*)");
     std::scoped_lock<std::mutex> lock(train.output_model_mutex);
     if(!fileName.isEmpty() && save_to_file(train.output_model,fileName.toUtf8().constData()))
     {
         QMessageBox::information(this,"","Network Saved");
         settings.setValue("network_dir",QFileInfo(fileName).absolutePath());
-        settings.setValue("network_file",train_name = QFileInfo(fileName.remove(".net.gz")).fileName());
+        settings.setValue("network_file",train_name = QFileInfo(fileName.remove(".nz")).fileName());
     }
 }
 
@@ -644,7 +644,7 @@ void label_on_images(QImage& I,float display_ratio,
         {
             auto slice = tipl::volume2slice(I2.alias(raw_image_shape.size()*i,raw_image_shape),dim,slice_pos);
             tipl::image<2,char> mask(slice.shape());
-            for(size_t pos = 0;pos < slice.size();++pos)
+            for(size_t pos = 0,sz = slice.size();pos < sz;++pos)
                 mask[pos] = (slice[pos] == 1.0f ? 1:0);
             region_masks[i] = std::move(mask);
         },out_count);
@@ -654,7 +654,7 @@ void label_on_images(QImage& I,float display_ratio,
         auto slice = tipl::volume2slice(I2,dim,slice_pos);
         for(auto& mask : region_masks)
             mask.resize(slice.shape());
-        for(size_t pos = 0;pos < slice.size();++pos)
+        for(size_t pos = 0,sz = slice.size();pos < sz;++pos)
         {
             int id = slice[pos];
             if(id && id <= out_count)
