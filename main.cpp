@@ -15,7 +15,7 @@ std::string find_full_path(const std::string& name)
 {
     std::filesystem::path file_path(name);
 
-    std::filesystem::path app_dir_file = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString())/file_path;
+    std::filesystem::path app_dir_file = std::filesystem::path(QCoreApplication::applicationDirPath().toUtf8().constData())/file_path;
     if(std::filesystem::exists(app_dir_file))
         return app_dir_file.string();
 
@@ -31,7 +31,7 @@ bool load_file_name(void)
 {
     namespace fs = std::filesystem;
 
-    fs::path dir = fs::path(QCoreApplication::applicationDirPath().toStdString())/"atlas";
+    fs::path dir = fs::path(QCoreApplication::applicationDirPath().toUtf8().constData())/"atlas";
     if(!fs::exists(dir) && !fs::exists(dir = fs::current_path()/"atlas"))
         return false;
 
