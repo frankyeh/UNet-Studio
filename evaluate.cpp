@@ -226,7 +226,7 @@ bool evaluate_unet::load_atlas(const std::string& file_name)
 {
     std::string corrected_file_name;
     {
-        std::filesystem::path corrected_dir = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString())/"corrected_atlas";
+        std::filesystem::path corrected_dir = std::filesystem::path(QCoreApplication::applicationDirPath().toUtf8().constData())/"corrected_atlas";
         if(!std::filesystem::exists(corrected_dir))
             std::filesystem::create_directories(corrected_dir);
         corrected_file_name = (corrected_dir/(tipl::remove_all_suffix(std::filesystem::path(file_name).filename().string()) + ".corrected.nii.gz")).string();
