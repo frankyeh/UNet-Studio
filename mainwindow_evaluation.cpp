@@ -67,7 +67,7 @@ void MainWindow::on_action_evaluate_copy_trained_network_triggered()
 void MainWindow::on_action_evaluate_open_network_triggered()
 {
     QString fileName = QFileDialog::getOpenFileName(this,"Open Network File",settings.value("network_dir").toString() + "/" +
-                                                    settings.value("network_file").toString() + ".net.gz","Network files (*net.gz);;All files (*)");
+                                                    settings.value("network_file").toString() + ".nz","Network files (*nz);;All files (*)");
     if(fileName.isEmpty())
         return;
     if(!load_from_file(evaluate.model,fileName.toUtf8().constData()))
@@ -76,7 +76,7 @@ void MainWindow::on_action_evaluate_open_network_triggered()
         return;
     }
     settings.setValue("network_dir",QFileInfo(fileName).absolutePath());
-    settings.setValue("network_file",eval_name = QFileInfo(fileName.remove(".net.gz")).fileName());
+    settings.setValue("network_file",eval_name = QFileInfo(fileName.remove(".nz")).fileName());
     ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name) + evaluate.model->get_info().c_str());
     ui->evaluate->setEnabled(evaluate_list.size());
     ui->evaluate_builtin_networks->setCurrentIndex(0);
@@ -86,7 +86,7 @@ void MainWindow::on_evaluate_builtin_networks_currentIndexChanged(int index)
 {
     if(index > 0)
     {
-        QString fileName =  QCoreApplication::applicationDirPath() + "/network/" + ui->evaluate_builtin_networks->currentText() + ".net.gz";
+        QString fileName =  QCoreApplication::applicationDirPath() + "/network/" + ui->evaluate_builtin_networks->currentText() + ".nz";
         if(!load_from_file(evaluate.model,fileName.toUtf8().constData()))
         {
             QMessageBox::critical(this,"Error","Failed to load network");
