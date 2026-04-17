@@ -67,10 +67,10 @@ MainWindow::MainWindow(QWidget *parent)
     {
         ui->evaluate_builtin_networks->addItem("select or open...");
         QDir dir(QCoreApplication::applicationDirPath() + "/network");
-        dir.setNameFilters(QStringList() << "*.net.gz");
+        dir.setNameFilters(QStringList() << "*.nz");
         QFileInfoList files = dir.entryInfoList(QDir::Files);
         for (const QFileInfo& fileInfo : files)
-            ui->evaluate_builtin_networks->addItem(fileInfo.fileName().remove(".net.gz"));
+            ui->evaluate_builtin_networks->addItem(fileInfo.fileName().remove(".nz"));
         ui->evaluate_builtin_networks->setCurrentText(settings.value("eval_network").toString());
     }
     //populate template
