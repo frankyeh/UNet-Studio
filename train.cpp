@@ -53,7 +53,7 @@ bool read_image_and_label(const std::string& image_name,
         {
             tipl::image<3> I(image_shape);
             nii.to_space<tipl::majority>(I,image_t);
-            for(size_t pos = 0;pos < I.size();++pos)
+            for(size_t pos = 0,sz = I.size();pos < sz;++pos)
                 if(I[pos])
                     label[pos] = index;
         }
@@ -643,8 +643,8 @@ bool get_label_info(const std::string& label_name,std::vector<int>& out_count,bo
 std::string get_network_path(void)
 {
     std::string network = po.get("network");
-    if(!tipl::ends_with(network,"net.gz"))
-        network += ".net.gz";
+    if(!tipl::ends_with(network,"nz"))
+        network += ".nz";
     if(!std::filesystem::exists(network) && std::filesystem::exists(po.exec_path + "/network/" + network))
         po.set("network",network = po.exec_path + "/network/" + network);
     return network;
@@ -758,7 +758,7 @@ int tra(void)
         return 1;
     }
     {
-        tipl::out() << "save model to " << po.get("network","model.net.gz");
+        tipl::out() << "save model to " << po.get("network","model.nz");
         if(!save_to_file(train.model,po.get("network").c_str()))
             tipl::error() << "failed to save network to " << po.get("network");
     }
