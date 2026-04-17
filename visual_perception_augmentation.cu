@@ -310,11 +310,11 @@ bool visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& 
                     {return tipl::vector<3,int>((sp[0]-1)*range(from,to),(sp[1]-1)*range(from,to),(sp[2]-1)*range(from,to));};
 
     tipl::device_image<3> output(input.shape());
-    std::vector<tipl::const_pointer_device_image<3,float> > input_images(input.depth()/image_shape[2]),output_images(input.depth()/image_shape[2]);
+    std::vector<tipl::pointer_device_image<3,float> > input_images(input.depth()/image_shape[2]),output_images(input.depth()/image_shape[2]);
     for(size_t c = 0;c < input_images.size();++c)
     {
-        input_images[c] = tipl::make_device_shared(input);
-        output_images[c] = tipl::make_device_shared(output);
+        input_images[c] = tipl::make_shared(input);
+        output_images[c] = tipl::make_shared(output);
     }
 
 
@@ -430,12 +430,12 @@ bool visual_perception_augmentation_cuda(std::unordered_map<std::string,float>& 
         accumulate_transforms_cuda(displaced,options["lens_distortion"] > 0.0f,options["perspective"] > 0.0f,perspective,trans);
 
         if(is_label)
-            tipl::compose_mapping<tipl::nearest>(label,displaced,output_label);
+            tipl::compose_mapping<tipl::majority>(label,displaced,output_label);
         else
-            tipl::compose_mapping(label,displaced,output_label);
+            tipl::compose_mapping<tipl::linear>(label,displaced,output_label);
 
         for(size_t c = 0;c < output_images.size();++c)
-            tipl::compose_mapping(input_images[c],displaced,output_images[c]);
+            tipl::compose_mapping<tipl::linear>(input_images[c],displaced,output_images[c]);
     }
 
 
