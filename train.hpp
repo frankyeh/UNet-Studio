@@ -5,15 +5,13 @@
 #include "zlib.h"
 #include "unet.hpp"
 
-
-
 struct training_param{
     std::vector<std::string> image_file_name,test_image_file_name;
     std::vector<std::string> label_file_name,test_label_file_name;
     std::vector<float> subject_label_weight;
     int batch_size = 32;
     int epoch = 10000;
-    float learning_rate = 0.001f;
+    float learning_rate = 0.01f;
     bool is_label = true;
 
     std::unordered_map<std::string,float> options;
@@ -27,7 +25,6 @@ struct training_param{
         subject_label_weight = label_weight;
     }
 };
-
 
 bool save_to_file(UNet3d& model,const char* file_name);
 bool load_from_file(UNet3d& model,const char* file_name);
@@ -44,6 +41,7 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
                           bool is_label,
                           const tipl::shape<3>& image_shape,
                           size_t random_seed);
+
 class train_unet{
 public:
     training_param param;
@@ -92,8 +90,6 @@ public:
     void join(void);
     void start(void);
     void stop(void);
-
 };
 
 #endif // TRAIN_HPP
-
