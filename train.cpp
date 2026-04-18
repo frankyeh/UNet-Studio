@@ -86,7 +86,7 @@ void preprocessing(tipl::image<3>& image,tipl::image<3>& label,tipl::shape<3> fr
 
 void train_unet::read_file(void)
 {
-    thread_count = po.get("thread_count",std::min<int>(8,std::thread::hardware_concurrency()));
+    thread_count = po.get("thread_count",std::thread::hardware_concurrency());
 
     train_image = std::vector<tipl::image<3>>(param.image_file_name.size());
     train_label = std::vector<tipl::image<3>>(param.image_file_name.size());
@@ -432,6 +432,11 @@ void train_unet::train(void)
                 training_status = "update model";
                 for(auto& each:other_models)
                     model->add_gradient_from(*each);
+
+                if(active_threads>1)
+                    for(auto& p:model->parameters())
+                        if(p.grad().defined())
+                            p.grad().div_(active_threads);
 
                 optimizer->step();
                 optimizer->zero_grad();
