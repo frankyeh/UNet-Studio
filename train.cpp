@@ -347,6 +347,13 @@ void train_unet::train(void)
 
             auto optimizer = std::make_shared<torch::optim::SGD>(groups,torch::optim::SGDOptions(param.learning_rate));
 
+            if(po.has("network") && cur_epoch && std::filesystem::exists(po.get("network")+".opt"))
+            {
+                torch::load(*optimizer,po.get("network")+".opt");
+                tipl::out() << "optimizer state found. training is resumed at epoch " << cur_epoch;
+            }
+
+
             size_t cur_data_index = 0;
             for(;cur_epoch<param.epoch&&!aborted;++cur_epoch)
             {
@@ -437,6 +444,13 @@ void train_unet::train(void)
                 }
                 std::scoped_lock<std::mutex> lock(output_model_mutex);
                 output_model->copy_from(*model);
+
+                if(po.has("network")&&(cur_epoch+1)%100==0)
+                {
+                    std::string net_path = po.get("network");
+                    save_to_file(model,net_path.c_str());
+                    torch::save(*optimizer,net_path+".opt");
+                }
             }
         }
         catch(const c10::Error& e)
@@ -472,6 +486,7 @@ void train_unet::validate(void)
             } guard(running);
 
             auto start_time = std::chrono::steady_clock::now();
+            size_t start_validation_epoch = cur_validation_epoch;
             tipl::time t;
             for(;cur_validation_epoch<param.epoch&&!aborted;++cur_validation_epoch)
             {
@@ -510,10 +525,10 @@ void train_unet::validate(void)
                         auto str = t.to_string();
                         double cur_lr = param.learning_rate*std::pow(1.0-(double)cur_validation_epoch/param.epoch,0.9);
                         str += "-lr:"+std::to_string(cur_lr);
-                        if(cur_validation_epoch>0)
+                        if(cur_validation_epoch>start_validation_epoch)
                         {
                             auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now()-start_time).count();
-                            auto total_sec = elapsed*param.epoch/cur_validation_epoch;
+                            auto total_sec = elapsed*param.epoch/(cur_validation_epoch-start_validation_epoch);
                             str += " total:"+std::to_string(total_sec/3600)+"h"+std::to_string((total_sec%3600)/60)+"m";
                         }
                         size_t copy_len = std::min(str.length(),out.length()-2);
@@ -566,8 +581,6 @@ void train_unet::start(void)
         aborted = false;
         running = true;
         error_msg.clear();
-        cur_epoch = 0;
-        cur_validation_epoch = 0;
     }
 
     if(param.image_file_name.empty())
@@ -577,12 +590,15 @@ void train_unet::start(void)
         return;
     }
 
-    if(model->errors.empty()&&!model->init_dimension(param.image_file_name[0]))
+    if(model->errors.empty() && !model->init_dimension(param.image_file_name[0]))
     {
         error_msg = model->error_msg;
         aborted = true;
         return;
     }
+
+    cur_epoch = model->errors.size()/3;
+    cur_validation_epoch = cur_epoch;
 
     model->to(param.device);
     model->train();
@@ -667,6 +683,13 @@ int tra(void)
         train.stop();
     }
 
+    train.param.batch_size = po.get("batch_size",train.param.batch_size);
+    train.param.learning_rate = po.get("learning_rate",train.param.learning_rate);
+    train.param.epoch = po.get("epoch",train.param.epoch);
+    train.param.is_label = po.get("is_label",train.param.is_label ? 1 : 0);
+    train.param.device = torch::Device(po.get("device",torch::hasCUDA() ? "cuda:0" : (torch::hasHIP() ? "hip:0" : (torch::hasMPS() ? "mps:0" : "cpu"))));
+
+
     tipl::progress p("start training");
 
     {
@@ -700,6 +723,8 @@ int tra(void)
         }
 
         tipl::out() << train.model->get_info();
+
+
         if(po.get("out_count",train.model->out_count)!=train.model->out_count)
         {
             tipl::out() << "changing output channel\n";
@@ -731,11 +756,6 @@ int tra(void)
         }
     }
 
-    train.param.batch_size = po.get("batch_size",train.param.batch_size);
-    train.param.learning_rate = po.get("learning_rate",train.param.learning_rate);
-    train.param.epoch = po.get("epoch",train.param.epoch);
-    train.param.is_label = po.get("is_label",train.param.is_label ? 1 : 0);
-    train.param.device = torch::Device(po.get("device",torch::hasCUDA() ? "cuda:0" : (torch::hasHIP() ? "hip:0" : (torch::hasMPS() ? "mps:0" : "cpu"))));
 
     if(po.has("label_weight"))
         train.param.set_weight(po.get("label_weight"));
