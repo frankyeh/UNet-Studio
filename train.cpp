@@ -471,6 +471,7 @@ void train_unet::validate(void)
                 }
             } guard(running);
 
+            auto start_time = std::chrono::steady_clock::now();
             tipl::time t;
             for(;cur_validation_epoch<param.epoch&&!aborted;++cur_validation_epoch)
             {
@@ -509,7 +510,14 @@ void train_unet::validate(void)
                         auto str = t.to_string();
                         double cur_lr = param.learning_rate*std::pow(1.0-(double)cur_validation_epoch/param.epoch,0.9);
                         str += "-lr:"+std::to_string(cur_lr);
-                        std::copy(str.begin(),str.end(),out.begin()+1);
+                        if(cur_validation_epoch>0)
+                        {
+                            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now()-start_time).count();
+                            auto total_sec = elapsed*param.epoch/cur_validation_epoch;
+                            str += " total:"+std::to_string(total_sec/3600)+"h"+std::to_string((total_sec%3600)/60)+"m";
+                        }
+                        size_t copy_len = std::min(str.length(),out.length()-2);
+                        std::copy(str.begin(),str.begin()+copy_len,out.begin()+1);
                         tipl::out() << out;
                     }
 
