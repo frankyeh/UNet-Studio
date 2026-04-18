@@ -400,7 +400,8 @@ void train_unet::train(void)
                         {
                             if(k>0)
                             {
-                                auto opt = torch::nn::functional::InterpolateFuncOptions().scale_factor(std::vector<double>({0.5,0.5,0.5})).mode(torch::kTrilinear).align_corners(false);
+                                std::vector<int64_t> target_size = {active_target.size(2)/2,active_target.size(3)/2,active_target.size(4)/2};
+                                auto opt = torch::nn::functional::InterpolateFuncOptions().size(target_size).mode(torch::kTrilinear).align_corners(false);
                                 active_target = torch::nn::functional::interpolate(active_target,opt);
                             }
 
