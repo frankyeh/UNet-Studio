@@ -157,15 +157,21 @@ bool load_from_file(UNet3d& model,const char* file_name)
     tipl::io::gz_mat_read mat;
     tipl::out() << "load " << file_name;
     if(!mat.load_from_file(file_name))
-        return false;
+        return tipl::error() << mat.error_msg,false;
     std::string feature_string;
     std::vector<int> param({1,1});
     if(!mat.read("param",param) || !mat.read("feature_string",feature_string))
-        return false;
+        return tipl::error() << "cannjot find param matrix or feature_string matrix",false;
+    tipl::out() << "in channel:" << param[0];
+    tipl::out() << "out channel:" << param[1];
+    tipl::out() << "feature_string:" << feature_string;
     model = UNet3d(param[0],param[1],feature_string);
-    mat.read("report",model->report);
-    mat.read("voxel_size",model->voxel_size);
-    mat.read("dimension",model->dim);
+    if(mat.read("report",model->report))
+        tipl::out() << "report:" << model->report;
+    if(mat.read("voxel_size",model->voxel_size))
+        tipl::out() << "voxel_size:" << model->voxel_size;
+    if(mat.read("dimension",model->dim))
+        tipl::out() << "dimension:" << model->dim;
     {
         unsigned int r,c;
         if(mat.get_col_row("errors",r,c))
@@ -181,7 +187,9 @@ bool load_from_file(UNet3d& model,const char* file_name)
         unsigned int row,col;
         const auto* data = mat.read_as_type<float>((std::string("tensor")+std::to_string(id)).c_str(),row,col);
         if(!data || row*col != tensor.numel())
-            return false;
+            return tipl::error() << "tensor size mismatch at " << (std::string("tensor")+std::to_string(id)) << " " <<
+                                   row*col << " not the expected of size " << tensor.numel(),false;
+
         std::copy(data,data+tensor.numel(),tensor.data_ptr<float>());
         ++id;
     }
@@ -191,7 +199,8 @@ bool load_from_file(UNet3d& model,const char* file_name)
         unsigned int row,col;
         const auto* data = mat.read_as_type<float>((std::string("buffer")+std::to_string(id)).c_str(),row,col);
         if(!data || row*col != buffer.numel())
-            continue;
+            return tipl::error() << "tensor size mismatch at " << (std::string("buffer")+std::to_string(id)) << " " <<
+                                   row*col << " not the expected of size " << buffer.numel(),false;
         if(buffer.scalar_type() == torch::kFloat)
             std::copy(data,data+buffer.numel(),buffer.data_ptr<float>());
         if(buffer.scalar_type() == torch::kLong)
