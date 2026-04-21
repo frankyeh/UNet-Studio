@@ -408,6 +408,9 @@ void evaluate_unet::evaluate(void)
 
                 evaluate_output[cur_prog].resize(cur_input.shape().multiply(tipl::shape<3>::z,model->out_count).divide(tipl::shape<3>::z,model->in_count));
                 tipl::out() << "input dimension:" << cur_input.shape() << " vs:" << raw_image_vs[cur_prog];
+
+                torch::NoGradGuard no_grad;
+
                 if((cur_input.width()/2 >= model->dim.width() ||
                    raw_image_vs[cur_prog][0] * 2.0f <= model->voxel_size[0]) && model->in_count == 1)
                 {
@@ -417,9 +420,9 @@ void evaluate_unet::evaluate(void)
                         tipl::image<3,float> subI,result;
                         subsample8(cur_input,subI,i);
                         tipl::out() << "inferencing using u-net at subsample " << i;
-                        auto out = model->forward(torch::from_blob(subI.data(),{1,1,int(subI.depth()),int(subI.height()),int(subI.width())}).to(param.device))[0];
+                        auto out = torch::softmax(model->forward(torch::from_blob(subI.data(),{1,1,int(subI.depth()),int(subI.height()),int(subI.width())}).to(param.device))[0],1);
                         result.resize(subI.shape().multiply(tipl::shape<3>::z,model->out_count));
-                        std::memcpy(result.data(),out.to(torch::kCPU).data_ptr<float>(),result.size()*sizeof(float));
+                        std::memcpy(result.data(),out.to(torch::kCPU).contiguous().data_ptr<float>(),result.size()*sizeof(float));
                         for(size_t j = 0;j < model->out_count;++j)
                         {
                             auto eval_output = tipl::make_image(evaluate_output[cur_prog].data() + j*cur_input.size(),cur_input.shape());
@@ -430,9 +433,9 @@ void evaluate_unet::evaluate(void)
                 else
                 {
                     tipl::out() << "inferencing using u-net";
-                    auto out = model->forward(torch::from_blob(cur_input.data(),
-                                              {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device))[0];
-                    std::memcpy(evaluate_output[cur_prog].data(),out.to(torch::kCPU).data_ptr<float>(),evaluate_output[cur_prog].size()*sizeof(float));
+                    auto out = torch::softmax(model->forward(torch::from_blob(cur_input.data(),
+                                              {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device))[0],1);
+                    std::memcpy(evaluate_output[cur_prog].data(),out.to(torch::kCPU).contiguous().data_ptr<float>(),evaluate_output[cur_prog].size()*sizeof(float));
                 }
             }
         }
@@ -456,8 +459,6 @@ void evaluate_unet::proc_actions(const char* cmd,float param1,float param2)
                  raw_image_shape[cur_output],
                  is_label[cur_output]);
 }
-
-
 
 
 extern std::vector<std::string> seg_template_list;
@@ -492,7 +493,6 @@ void evaluate_unet::output(void)
                 const auto& cur_shape = raw_image_shape[cur_output];
                 auto& cur_label_prob = label_prob[cur_output];
                 auto& cur_foreground_prob = foreground_prob[cur_output];
-
                 tipl::ml3d::postproc(evaluate_output[cur_output],
                                      cur_shape,
                                      raw_image_trans[cur_output],
