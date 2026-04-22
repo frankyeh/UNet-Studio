@@ -12,11 +12,6 @@ struct EvaluateParam{
 };
 struct ProcStrategy{
     // preproc
-    bool match_resolution = true;
-    bool match_fov = true;
-    bool match_orientation = false;
-    std::string template_file_name;
-    // postproc
     unsigned char output_format = 0;
 };
 
@@ -25,11 +20,12 @@ public:
     EvaluateParam param;
 public:
     ProcStrategy proc_strategy;
-    std::vector<tipl::image<3> > evaluate_input,evaluate_output;
+    std::vector<std::vector<tipl::image<3>>> evaluate_input,evaluate_output;
+    std::vector<std::vector<tipl::transformation_matrix<float>>> raw_image_trans;
+    std::vector<tipl::image<3,unsigned char> > raw_image_mask;
     std::vector<tipl::shape<3> > raw_image_shape;
     std::vector<tipl::vector<3> > raw_image_vs;
     std::vector<tipl::matrix<4,4,float> > untouched_srow,raw_image_srow;
-    std::vector<tipl::transformation_matrix<float> > raw_image_trans;
     std::vector<std::vector<char> > raw_image_flip_swap;
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;
