@@ -27,39 +27,6 @@ size_t linear_cuda(const tipl::image<3,float>& from,
 
 
 
-inline void rotate_to_template(tipl::image<3>& images,
-                         const tipl::shape<3>& image_dim,
-                         const tipl::vector<3>& image_vs,
-                         const tipl::image<3>& template_image,
-                         const tipl::vector<3>& template_image_vs,
-                         const tipl::shape<3>& model_dim,
-                         const tipl::vector<3>& model_vs,
-                         tipl::transformation_matrix<float>& trans)
-{
-    tipl::out() << "rotate to template";
-    tipl::affine_param<float> arg_rotated;
-    auto image0 = images.alias(0,image_dim);
-    bool terminated = false;
-    tipl::reg::linear<tipl::out>(tipl::reg::make_list(tipl::reg::template_image_pre(template_image)),template_image_vs,
-                                 tipl::reg::make_list(tipl::reg::subject_image_pre(tipl::image<3>(image0))),image_vs,
-                                            arg_rotated,{tipl::reg::rigid_body,tipl::reg::mutual_info,tipl::reg::large_bound},terminated);
-    trans = tipl::transformation_matrix<float>(arg_rotated,model_dim,model_vs,image_dim,image_vs);
-
-    int in_channel = images.depth()/image_dim[2];
-    tipl::image<3> target_images(model_dim.multiply(tipl::shape<3>::z,in_channel));
-    tipl::par_for(in_channel,[&](int c)
-    {
-        auto image = images.alias(image_dim.size()*c,image_dim);
-        auto target_image = target_images.alias(model_dim.size()*c,model_dim);
-        tipl::resample(image,target_image,trans);
-        tipl::normalize(target_image);
-    });
-    target_images.swap(images);
-    tipl::lower_threshold(images,0.0f);
-}
-
-
-
 void postproc_actions(const std::string& command,
                       float param1,float param2,
                       tipl::image<3>& this_image,
@@ -118,7 +85,7 @@ void postproc_actions(const std::string& command,
             mask2 = mask;
             tipl::morphology::defragment_by_size_ratio(mask);
             for(size_t i = 0,sz = I.size();i < sz;++i)
-                if(!mask[i] && mask[2])
+                if(!mask[i] && mask2[i])
                     I[i] = 0;
         });
         return;
@@ -153,7 +120,7 @@ void postproc_actions(const std::string& command,
         is_label = false;
         return;
     }
-    if(command =="soft_max")
+    if(command =="arg_max")
     {
         float soft_min_prob = param1;
         tipl::par_for(dim.size(),[&](size_t pos)
@@ -293,26 +260,17 @@ bool evaluate_unet::load_atlas(const std::string& file_name)
 
 void evaluate_unet::read_file(void)
 {
-    evaluate_input = std::vector<tipl::image<3> >(param.image_file_name.size());
-    raw_image_shape = std::vector<tipl::shape<3> >(param.image_file_name.size());
-    raw_image_vs = std::vector<tipl::vector<3> >(param.image_file_name.size());
-    untouched_srow = raw_image_srow = std::vector<tipl::matrix<4,4,float> >(param.image_file_name.size());
-    raw_image_trans = std::vector<tipl::transformation_matrix<float> >(param.image_file_name.size());
-    raw_image_flip_swap = std::vector<std::vector<char> >(param.image_file_name.size());
+    evaluate_input.resize(param.image_file_name.size());
+    raw_image_trans.resize(param.image_file_name.size());
+    raw_image_mask.resize(param.image_file_name.size());
+    raw_image_shape.resize(param.image_file_name.size());
+    raw_image_vs.resize(param.image_file_name.size());
+    untouched_srow.resize(param.image_file_name.size());
+    raw_image_srow.resize(param.image_file_name.size());;
+    raw_image_flip_swap.resize(param.image_file_name.size());
     data_ready = std::vector<bool> (param.image_file_name.size());
     read_file_thread.reset(new std::thread([=]()
     {
-        tipl::image<3> template_image;
-        tipl::vector<3> template_image_vs;
-        if(proc_strategy.match_resolution && !proc_strategy.template_file_name.empty())
-        {
-            if(!(tipl::io::gz_nifti(proc_strategy.template_file_name,std::ios::in) >> std::tie(template_image,template_image_vs)))
-            {
-                tipl::error() << (error_msg = "cannot read template file: " + proc_strategy.template_file_name);
-                aborted = true;
-                return;
-            }
-        }
         for(size_t i = 0;i < evaluate_input.size() && !aborted;++i)
         {
             while(i > cur_prog+6)
@@ -341,6 +299,7 @@ void evaluate_unet::read_file(void)
 
             tipl::image<3> raw_image;
             in >> raw_image >> raw_image_vs[i] >> raw_image_srow[i];
+
             raw_image_flip_swap[i] = in.flip_swap_seq;
             raw_image_shape[i] = raw_image.shape();
 
@@ -349,39 +308,37 @@ void evaluate_unet::read_file(void)
             tipl::segmentation::normalize_otsu_median(raw_image);
             tipl::out() << "adjust intensity by normalizing otsu median value";
 
-            evaluate_input[i] = raw_image;
-            evaluate_input[i].resize(raw_image_shape[i].multiply(tipl::shape<3>::z,model->in_count));
+            tipl::threshold(raw_image,raw_image_mask[i],0.0f);
+            tipl::morphology::defragment(raw_image_mask[i]);
 
-            if(model->in_count)
+            raw_image.resize(raw_image_shape[i].multiply(tipl::shape<3>::z,model->in_count));
+            if(model->in_count > 1)
             {
                 tipl::out() << "handle multiple channels. model channel count:" << model->in_count;
                 for(size_t c = 1;c < model->in_count;++c)
                 {
-                    auto image = evaluate_input[i].alias(c*raw_image_shape[i].size(),raw_image_shape[i]);
+                    auto image = raw_image.alias(c*raw_image_shape[i].size(),raw_image_shape[i]);
                     if(!(in >> image))
                     {
                         error_msg = param.image_file_name[i] + " reading failed";
                         aborted = true;
                         return;
                     }
-                    tipl::segmentation::normalize_otsu_median(evaluate_input[i]);
+                    tipl::segmentation::normalize_otsu_median(image);
+
                 }
             }
 
-            if(!template_image.empty())
-                rotate_to_template(evaluate_input[i],
-                                   raw_image_shape[i],
-                                   raw_image_vs[i],
-                                   template_image,template_image_vs,
-                                   model->dim,model->voxel_size,
-                                   raw_image_trans[i]);
-            else
-                tipl::ml3d::preproc_actions(evaluate_input[i],
-                                raw_image_shape[i],
-                                raw_image_vs[i],
-                                model->dim,model->voxel_size,
-                                raw_image_trans[i],
-                                proc_strategy.match_resolution,proc_strategy.match_fov);
+
+            tipl::ml3d::preproc_actions(raw_image,
+                                        evaluate_input[i],
+                                        raw_image_trans[i],
+                                        raw_image_mask[i],
+                                        raw_image_shape[i],
+                                        raw_image_vs[i],
+                                        model->dim,
+                                        model->voxel_size);
+            tipl::out() << "total of sliding window:" << evaluate_input[i].size();
             data_ready[i] = true;
         }
     }));
@@ -389,12 +346,11 @@ void evaluate_unet::read_file(void)
 
 void evaluate_unet::evaluate(void)
 {
-    evaluate_output  = std::vector<tipl::image<3> >(param.image_file_name.size());
+    evaluate_output.resize(evaluate_input.size());
     evaluate_thread.reset(new std::thread([=](){
         try{
             for (cur_prog = 0; cur_prog < evaluate_input.size() && !aborted; cur_prog++)
             {
-                auto& cur_input = evaluate_input[cur_prog];
                 while(!data_ready[cur_prog])
                 {
                     using namespace std::chrono_literals;
@@ -403,39 +359,17 @@ void evaluate_unet::evaluate(void)
                         return;
                     status = "preproc_actions";
                 }
-                if(cur_input.empty())
-                    continue;
-
-                evaluate_output[cur_prog].resize(cur_input.shape().multiply(tipl::shape<3>::z,model->out_count).divide(tipl::shape<3>::z,model->in_count));
-                tipl::out() << "input dimension:" << cur_input.shape() << " vs:" << raw_image_vs[cur_prog];
-
+                tipl::out() << "inferencing using u-net";
+                evaluate_output[cur_prog].resize(evaluate_input[cur_prog].size());
                 torch::NoGradGuard no_grad;
-
-                if((cur_input.width()/2 >= model->dim.width() ||
-                   raw_image_vs[cur_prog][0] * 2.0f <= model->voxel_size[0]) && model->in_count == 1)
+                for(size_t i = 0;i < evaluate_input[cur_prog].size();++i)
                 {
-                    tipl::out() << "subsample by 2x to handle large image volume";
-                    for(size_t i = 0;i < 8;++i)
-                    {
-                        tipl::image<3,float> subI,result;
-                        subsample8(cur_input,subI,i);
-                        tipl::out() << "inferencing using u-net at subsample " << i;
-                        auto out = torch::softmax(model->forward(torch::from_blob(subI.data(),{1,1,int(subI.depth()),int(subI.height()),int(subI.width())}).to(param.device))[0],1);
-                        result.resize(subI.shape().multiply(tipl::shape<3>::z,model->out_count));
-                        std::memcpy(result.data(),out.to(torch::kCPU).contiguous().data_ptr<float>(),result.size()*sizeof(float));
-                        for(size_t j = 0;j < model->out_count;++j)
-                        {
-                            auto eval_output = tipl::make_image(evaluate_output[cur_prog].data() + j*cur_input.size(),cur_input.shape());
-                            upsample8(eval_output,tipl::make_image(result.data() + j*subI.size(),subI.shape()),i);
-                        }
-                    }
-                }
-                else
-                {
-                    tipl::out() << "inferencing using u-net";
-                    auto out = torch::softmax(model->forward(torch::from_blob(cur_input.data(),
-                                              {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device))[0],1);
-                    std::memcpy(evaluate_output[cur_prog].data(),out.to(torch::kCPU).contiguous().data_ptr<float>(),evaluate_output[cur_prog].size()*sizeof(float));
+                    auto& cur_input = evaluate_input[cur_prog][i];
+                    auto& cur_output = evaluate_output[cur_prog][i];
+                    cur_output.resize(cur_input.shape().multiply(tipl::shape<3>::z,model->out_count).divide(tipl::shape<3>::z,model->in_count));
+                    auto out = model->forward(torch::from_blob(cur_input.data(),
+                                              {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device))[0];
+                    std::memcpy(cur_output.data(),out.to(torch::kCPU).contiguous().data_ptr<float>(),cur_output.size()*sizeof(float));
                 }
             }
         }
@@ -461,6 +395,7 @@ void evaluate_unet::proc_actions(const char* cmd,float param1,float param2)
 }
 
 
+
 extern std::vector<std::string> seg_template_list;
 extern std::vector<std::vector<std::string> > atlas_file_name_list;;
 void evaluate_unet::output(void)
@@ -477,6 +412,10 @@ void evaluate_unet::output(void)
             ~exist_guard() { running = false;}
         } guard(running);
 
+        tipl::image<3> gaussian_weight(model->dim);
+        tipl::ml3d::create_gaussian(gaussian_weight);
+
+
         try{
             for (cur_output = 0;cur_output < label_prob.size() && !aborted; cur_output++)
             {
@@ -490,31 +429,34 @@ void evaluate_unet::output(void)
                 }
                 if(evaluate_output[cur_output].empty())
                     continue;
-                const auto& cur_shape = raw_image_shape[cur_output];
-                auto& cur_label_prob = label_prob[cur_output];
-                auto& cur_foreground_prob = foreground_prob[cur_output];
                 tipl::ml3d::postproc(evaluate_output[cur_output],
-                                     cur_shape,
-                                     raw_image_trans[cur_output],
-                                     model->out_count,
-                                     true, /* has_bg_channel / deep_supervision */
-                                     param.prob_threshold,
-                                     cur_label_prob,
-                                     cur_foreground_prob);
+                                      raw_image_trans[cur_output],
+                                      raw_image_mask[cur_output],
+                                      gaussian_weight,
+                                      model->dim,
+                                      raw_image_shape[cur_output],
+                                      label_prob[cur_output],
+                                      model->out_count);
+
                 if(aborted)
                     return;
+
+                tipl::ml3d::create_mask(raw_image_shape[cur_output],model->out_count,
+                                      true,param.prob_threshold,label_prob[cur_output],foreground_prob[cur_output]);
+
+                auto& cur_foreground_prob = foreground_prob[cur_output];
+                auto& cur_label_prob = label_prob[cur_output];
 
                 switch(proc_strategy.output_format)
                 {
                     case 0: // 3D label
-                        // Background removal and tissue probability adjustments were deleted!
-                        // The new `postproc_actions` handles it upstream.
 
-                        proc_actions("soft_max",param.prob_threshold);
+                        proc_actions("arg_max");
                         proc_actions("to_3d_label");
 
                         if(!template_I.empty())
                         {
+                            const auto& cur_shape = raw_image_shape[cur_output];
                             const size_t max_tissue_count = 4;/* exclude csf */
                             auto cur_label = tipl::image<3,unsigned char>(label_prob[cur_output]);
                             tipl::reg::mm_reg<tipl::out> reg;
@@ -571,35 +513,38 @@ void evaluate_unet::output(void)
                                     tipl::morphology::fill_and_smooth_labels<tipl::out>(mask,atlas);
                                 }
                             }
-                            label_prob[cur_output] = atlas;
+                            cur_label_prob = atlas;
                         }
                         break;
-                    case 2: // skull strip
+                    case 1: // skull strip
+                    case 2: // mask
                         {
+                            tipl::filter::gaussian(cur_foreground_prob);
+                            tipl::filter::gaussian(cur_foreground_prob);
+
+                            if(proc_strategy.output_format == 2) // mask
+                            {
+                                cur_label_prob = cur_foreground_prob;
+                                break;
+                            }
                             tipl::image<3> I;
                             if(!(tipl::io::gz_nifti(param.image_file_name[cur_output],std::ios::in) >> I))
                             {
                                 tipl::error() << "cannot read image file:" << param.image_file_name[cur_output];
-                                label_prob[cur_output].clear();
+                                cur_label_prob.clear();
                                 break;
                             }
                             for(size_t pos = 0,sz = std::min<size_t>(I.size(),cur_foreground_prob.size());pos < sz;++pos)
                                 I[pos] *= cur_foreground_prob[pos];
                             tipl::normalize(I);
-                            label_prob[cur_output].swap(I);
+                            cur_label_prob.swap(I);
                         }
-                    break;
-                    case 3: // mask
-                        label_prob[cur_output] = cur_foreground_prob;
-                        tipl::upper_threshold(label_prob[cur_output].begin(),label_prob[cur_output].end(),param.prob_threshold);
-                        tipl::filter::gaussian(label_prob[cur_output]);
-                        tipl::normalize(label_prob[cur_output]);
                     break;
 
                 }
 
-                evaluate_input[cur_output] = tipl::image<3>();
-                evaluate_output[cur_output] = tipl::image<3>();
+                evaluate_input[cur_output].clear();
+                evaluate_output[cur_output].clear();
 
             }
         }
@@ -741,13 +686,8 @@ int eval(void)
             return tipl::error() << eval.error_msg,1;
     }
 
-    eval.param.prob_threshold = po.get("prob_threshold",0.5f);
-    eval.proc_strategy.match_resolution = po.get("match_resolution",1);
-    eval.proc_strategy.match_fov = po.get("match_fov",0);
-    eval.proc_strategy.match_orientation = po.get("match_orientation",0);
-    eval.proc_strategy.output_format = po.get("output_format",0);
-
-
+    eval.param.prob_threshold = po.get("prob_threshold",eval.param.prob_threshold);
+    eval.proc_strategy.output_format = po.get("output_format",eval.proc_strategy.output_format);
     eval.param.device = torch::Device(po.get("device",torch::hasCUDA() ? "cuda:0" :
                                                        (torch::hasHIP() ? "hip:0" :
                                                        (torch::hasMPS() ? "mps:0": "cpu"))));
