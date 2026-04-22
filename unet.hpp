@@ -58,8 +58,6 @@ public:
         return parameters().size() && parameters()[0].defined() ? parameters()[0].device() : torch::kCPU;
     }
     bool init_dimension(const std::string& template_file);
-private:
-    torch::nn::Sequential ConvBlock(const std::vector<int>& rhs,size_t ks,torch::nn::Sequential s = torch::nn::Sequential());
 };
 TORCH_MODULE_IMPL(UNet3d, UNet3dImpl);
 
