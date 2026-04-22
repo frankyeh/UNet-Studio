@@ -16,24 +16,56 @@ UNet3dImpl::UNet3dImpl(int32_t in_count_,
     tipl::ml3d::parse_feature_string(feature_string,in_count,features_down,features_up,ks);
     output.resize(features_down.size()-1);
 
+
+    auto ConvBlock = [&](const std::vector<int>& rhs, size_t ks, int first_stride)
+    {
+        torch::nn::Sequential s;
+        int count = 0, idx = 0;
+        for(auto next_count:rhs)
+        {
+            if(count)
+            {
+                std::string id = std::to_string(idx++);
+                int current_stride = (idx == 1) ? first_stride : 1;
+
+                s->push_back("conv"+id, torch::nn::Conv3d(torch::nn::Conv3dOptions(count, next_count, ks).stride(current_stride).padding((ks-1)/2)));
+                s->push_back("norm"+id, torch::nn::InstanceNorm3d(torch::nn::InstanceNorm3dOptions(next_count).affine(true)));
+                s->push_back("relu"+id, torch::nn::LeakyReLU(torch::nn::LeakyReLUOptions().inplace(true)));
+            }
+            count = next_count;
+        }
+        return s;
+    };
+
     for(int level=0; level<features_down.size(); level++)
     {
-        encoding.push_back(
-            ConvBlock(features_down[level],ks[level],
-                      level==0 ? torch::nn::Sequential() : torch::nn::Sequential(torch::nn::Conv3d(torch::nn::Conv3dOptions(features_down[level].front(),features_down[level].front(),2).stride(2)))));
-        register_module(std::string("encode")+std::to_string(level),encoding.back());
+        int first_stride = (level == 0) ? 1 : 2;
+        encoding.push_back(ConvBlock(features_down[level], ks[level], first_stride));
+        register_module(std::string("encode")+std::to_string(level), encoding.back());
     }
 
     for(int level=features_down.size()-2; level>=0; level--)
     {
-        up.push_front(torch::nn::Sequential(torch::nn::ConvTranspose3d(torch::nn::ConvTranspose3dOptions(features_up[level+1].back(),features_down[level].back(),2).stride(2))));
+        up.push_front(torch::nn::Sequential(torch::nn::ConvTranspose3d(
+                    torch::nn::ConvTranspose3dOptions(features_up[level+1].back(),features_down[level].back(),2).stride(2).bias(false)
+                )));
         register_module("up"+std::to_string(level),up.front());
 
-        decoding.push_front(ConvBlock(features_up[level],ks[level]));
-        register_module(std::string("decode")+std::to_string(level),decoding.front());
+        std::vector<int> current_decoder_features = features_up[level];
+
+        // nnU-Net STRICT REQUIREMENT: Every decoder block must have exactly 2 convolutions.
+        // If the parsed feature string only gives us [Concat_Channels, Out_Channels],
+        // we add the Out_Channels again to make it [Concat_Channels, Out_Channels, Out_Channels].
+        if(current_decoder_features.size() == 2)
+            current_decoder_features.push_back(current_decoder_features.back());
+
+        decoding.push_front(ConvBlock(current_decoder_features, ks[level], 1));
+        register_module(std::string("decode")+std::to_string(level), decoding.front());
 
         output[level] = torch::nn::Sequential();
-        output[level]->push_back("out_conv",torch::nn::Conv3d(torch::nn::Conv3dOptions(features_up[level].back(),out_count,1)));
+        output[level]->push_back("out_conv",torch::nn::Conv3d(
+                    torch::nn::Conv3dOptions(features_up[level].back(),out_count,1).bias(false)
+                ));
         register_module("output"+std::to_string(level),output[level]);
     }
 
@@ -91,36 +123,12 @@ std::vector<torch::Tensor> UNet3dImpl::forward(torch::Tensor inputTensor)
     {
         auto x1 = encodingTensors[level];
         auto x2 = up[level]->forward(inputTensor);
-
-        int diffD = x1.size(2)-x2.size(2);
-        int diffH = x1.size(3)-x2.size(3);
-        int diffW = x1.size(4)-x2.size(4);
-
-        if(diffD>0||diffH>0||diffW>0)
-            x2 = torch::nn::functional::pad(x2,torch::nn::functional::PadFuncOptions({0,diffW,0,diffH,0,diffD}));
-
-        inputTensor = decoding[level]->forward(torch::cat({x1,x2},1));
+        inputTensor = decoding[level]->forward(torch::cat({x2,x1},1));
         results[level] = output[level]->forward(inputTensor);
     }
     return results;
 }
 
-torch::nn::Sequential UNet3dImpl::ConvBlock(const std::vector<int>& rhs,size_t ks,torch::nn::Sequential s)
-{
-    int count = 0,idx = 0;
-    for(auto next_count:rhs)
-    {
-        if(count)
-        {
-            std::string id = std::to_string(idx++);
-            s->push_back("conv"+id,torch::nn::Conv3d(torch::nn::Conv3dOptions(count,next_count,ks).padding((ks-1)/2)));
-            s->push_back("norm"+id,torch::nn::InstanceNorm3d(torch::nn::InstanceNorm3dOptions(next_count).affine(true)));
-            s->push_back("relu"+id,torch::nn::LeakyReLU(torch::nn::LeakyReLUOptions().inplace(true)));
-        }
-        count = next_count;
-    }
-    return s;
-}
 
 void UNet3dImpl::copy_from(const UNet3dImpl& r)
 {
