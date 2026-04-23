@@ -47,7 +47,7 @@ UNet3dImpl::UNet3dImpl(int32_t in_count_,
     for(int level=features_down.size()-2; level>=0; level--)
     {
         up.push_front(torch::nn::Sequential(torch::nn::ConvTranspose3d(
-                    torch::nn::ConvTranspose3dOptions(features_up[level+1].back(),features_down[level].back(),2).stride(2).bias(false)
+                    torch::nn::ConvTranspose3dOptions(features_up[level+1].back(),features_down[level].back(),2).stride(2)
                 )));
         register_module("up"+std::to_string(level),up.front());
 
@@ -64,7 +64,7 @@ UNet3dImpl::UNet3dImpl(int32_t in_count_,
 
         output[level] = torch::nn::Sequential();
         output[level]->push_back("out_conv",torch::nn::Conv3d(
-                    torch::nn::Conv3dOptions(features_up[level].back(),out_count,1).bias(false)
+                    torch::nn::Conv3dOptions(features_up[level].back(),out_count,1)
                 ));
         register_module("output"+std::to_string(level),output[level]);
     }
