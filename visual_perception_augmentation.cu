@@ -129,7 +129,7 @@ __global__ void lens_distortion_kernel(T displaced,tipl::vector<3> center,float 
 template<typename image_type>
 inline void lens_distortion_cuda(image_type& displaced,float magnitude)
 {
-    float radius = tipl::max_value(displaced.shape())/2;
+    float radius = tipl::max_value(displaced.shape().begin(),displaced.shape().end())/2;
     float radius2 = radius*radius;
     tipl::vector<3,int> center(displaced.shape());
     center /= 2;
