@@ -156,23 +156,20 @@ void train_unet::read_file(void)
             tipl::shape<3> input_shape;
             if(!read_image_and_label(param.test_image_file_name[read_id],param.test_label_file_name[read_id],model->in_count,input_image,input_label,input_shape))
             {
-                error_msg = "cannot read image or label data for ";
-                error_msg += std::filesystem::path(param.test_image_file_name[read_id]).filename().string();
+                error_msg = "cannot read image or label data for " + std::filesystem::path(param.test_image_file_name[read_id]).filename().string();
                 aborted = true;
                 return;
             }
 
             preprocessing(input_image,input_label,input_shape,model->dim);
 
-            if(model->out_count>1)
-                tipl::expand_label_to_dimension(input_label,model->out_count,false);
-            else
+            if(model->out_count == 1)
                 tipl::normalize(input_label);
 
             try
             {
-                test_in_tensor.push_back(torch::from_blob(input_image.data(),{1,model->in_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device,true));
-                test_out_tensor.push_back(torch::from_blob(input_label.data(),{1,model->out_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(param.device,true));
+                test_in_tensor.push_back(torch::from_blob(input_image.data(),{1,model->in_count,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).clone().to(param.test_device,true));
+                test_out_tensor.push_back(torch::from_blob(input_label.data(),{1,int(model->dim[2]),int(model->dim[1]),int(model->dim[0])}).to(torch::kLong).clone().to(param.test_device,true));
             }
             catch(const c10::Error& error)
             {
@@ -205,8 +202,7 @@ void train_unet::read_file(void)
                 tipl::shape<3> image_shape;
                 if(!read_image_and_label(param.image_file_name[read_id],param.label_file_name[read_id],model->in_count,image,label,image_shape))
                 {
-                    error_msg = "cannot read image or label data for ";
-                    error_msg += std::filesystem::path(param.image_file_name[read_id]).filename().string();
+                    error_msg = "cannot read image or label data for " + std::filesystem::path(param.image_file_name[read_id]).filename().string();
                     aborted = true;
                     return;
                 }
@@ -269,8 +265,9 @@ void train_unet::read_file(void)
                 }
 
                 visual_perception_augmentation(param.options,in_data_thread,out_data_thread,param.is_label,model->dim,seed);
-                if(model->out_count>1)
-                    tipl::expand_label_to_dimension(out_data_thread,model->out_count,false);
+
+                //if(model->out_count>1)
+                //    tipl::expand_label_to_dimension(out_data_thread,model->out_count,false);
 
                 while(data_ready[thread]||pause)
                 {
@@ -301,15 +298,28 @@ std::string train_unet::get_status(void)
     return s1+"|"+s2;
 }
 
-std::tuple<torch::Tensor,torch::Tensor,torch::Tensor> calc_losses(const torch::Tensor& pred_raw,const torch::Tensor& target_tissues,int C)
+std::tuple<torch::Tensor,torch::Tensor,torch::Tensor> calc_losses(const torch::Tensor& pred_raw, const torch::Tensor& target_indices, int C)
 {
-    auto ce = torch::nn::functional::cross_entropy(pred_raw,target_tissues);
-    auto pred_probs = torch::softmax(pred_raw,1);
-    auto inter = torch::sum(pred_probs*target_tissues,{2,3,4});
-    auto card = torch::sum(pred_probs+target_tissues,{2,3,4});
-    auto dice = 1.0f-torch::mean((2.f*inter+1e-5)/(card+1e-5));
-    auto mse = torch::mse_loss(pred_probs,target_tissues)*static_cast<float>(C);
-    return {ce,dice,mse};
+    auto ce = torch::nn::functional::cross_entropy(pred_raw, target_indices);
+    auto pred_probs = torch::softmax(pred_raw, 1);
+    pred_probs = torch::clamp(pred_probs, 1e-6, 1.0 - 1e-6);
+
+    auto target_one_hot = torch::nn::functional::one_hot(target_indices, C)
+                              .permute({0, 4, 1, 2, 3})
+                              .to(pred_probs.dtype());
+
+    auto pred_fg = pred_probs.slice(1, 1, C);
+    auto target_fg = target_one_hot.slice(1, 1, C);
+
+    auto inter = torch::sum(pred_fg * target_fg, {2, 3, 4});
+    auto card = torch::sum(pred_fg + target_fg, {2, 3, 4});
+
+    auto eps = torch::tensor(1e-5, torch::TensorOptions().device(pred_raw.device()).dtype(pred_raw.dtype()));
+    auto dice = 1.0f - torch::mean((2.0f * inter + eps) / (card + eps));
+
+    auto mse = torch::mse_loss(pred_probs, target_one_hot) * static_cast<float>(C);
+
+    return {ce, dice, mse};
 }
 
 void train_unet::train(void)
@@ -347,12 +357,11 @@ void train_unet::train(void)
 
             auto optimizer = std::make_shared<torch::optim::SGD>(groups,torch::optim::SGDOptions(param.learning_rate));
 
-            if(po.has("network") && cur_epoch && std::filesystem::exists(po.get("network")+".opt"))
+            if(po.has("network")&&cur_epoch&&std::filesystem::exists(po.get("network")+".opt"))
             {
                 torch::load(*optimizer,po.get("network")+".opt");
                 tipl::out() << "optimizer state found. training is resumed at epoch " << cur_epoch;
             }
-
 
             size_t cur_data_index = 0;
             for(;cur_epoch<param.epoch&&!aborted;++cur_epoch)
@@ -397,28 +406,41 @@ void train_unet::train(void)
                                 return;
                         }
 
-                        auto target = torch::from_blob(out_data[data_idx].data(),{1,cur_model->out_count,int(cur_model->dim[2]),int(cur_model->dim[1]),int(cur_model->dim[0])}).to(dev,true);
-                        auto in = torch::from_blob(in_data[data_idx].data(),{1,cur_model->in_count,int(cur_model->dim[2]),int(cur_model->dim[1]),int(cur_model->dim[0])}).to(dev,true);
+                        auto target = torch::from_blob(out_data[data_idx].data(),{1,int(cur_model->dim[2]),int(cur_model->dim[1]),int(cur_model->dim[0])}).to(torch::kLong).to(dev,true);
+                        auto in = torch::from_blob(in_data[data_idx].data(),{1,cur_model->in_count,int(cur_model->dim[2]),int(cur_model->dim[1]),int(cur_model->dim[0])}).clone().to(dev,true);
                         data_ready[data_idx] = false;
 
-                        auto outputs = cur_model->forward(in);
-                        torch::Tensor total_loss,active_target = target;
-                        for(size_t k=0;k<outputs.size();++k)
+                        torch::Tensor total_loss;
                         {
-                            if(k>0)
+                            auto outputs = cur_model->forward(in);
+                            torch::Tensor active_target = target;
+
+                            // 1. Deep Supervision Weight Normalization
+                            float weight_sum = 0.0f;
+                            for(size_t k=0;k< outputs.size();++k)
+                                weight_sum += 1.0f/(1<<k);
+
+                            for(size_t k=0;k<outputs.size();++k)
                             {
-                                std::vector<int64_t> target_size = {active_target.size(2)/2,active_target.size(3)/2,active_target.size(4)/2};
-                                auto opt = torch::nn::functional::InterpolateFuncOptions().size(target_size).mode(torch::kTrilinear).align_corners(false);
-                                active_target = torch::nn::functional::interpolate(active_target,opt);
+                                if(k>0)
+                                {
+                                    std::vector<int64_t> target_size = {active_target.size(1)/2, active_target.size(2)/2, active_target.size(3)/2};
+                                    auto temp_float = active_target.unsqueeze(1).to(torch::kFloat32);
+                                    auto opt = torch::nn::functional::InterpolateFuncOptions().size(target_size).mode(torch::kNearest);
+                                    temp_float = torch::nn::functional::interpolate(temp_float, opt);
+                                    active_target = temp_float.squeeze(1).to(torch::kLong);
+                                }
+
+                                auto [ce,dice,mse] = calc_losses(outputs[k],active_target,cur_model->out_count);
+                                outputs[k] = torch::Tensor();
+                                float norm_weight = (1.0f/(1<<k))/weight_sum;
+                                auto level_loss = (ce+dice)*norm_weight;
+
+                                if(total_loss.defined())
+                                    total_loss += level_loss;
+                                else
+                                    total_loss = level_loss;
                             }
-
-                            auto [ce,dice,mse] = calc_losses(outputs[k],active_target,cur_model->out_count);
-                            auto level_loss = (ce+dice)*(1.0f/(1<<k));
-
-                            if(total_loss.defined())
-                                total_loss += level_loss;
-                            else
-                                total_loss = level_loss;
                         }
                         total_loss.backward();
                     }
@@ -433,10 +455,11 @@ void train_unet::train(void)
                 for(auto& each:other_models)
                     model->add_gradient_from(*each);
 
-                if(active_threads>1)
-                    for(auto& p:model->parameters())
-                        if(p.grad().defined())
-                            p.grad().div_(active_threads);
+                for(auto& p:model->parameters())
+                    if(p.grad().defined())
+                        p.grad().div_(active_threads);
+
+                torch::nn::utils::clip_grad_norm_(model->parameters(),12.0);
 
                 optimizer->step();
                 optimizer->zero_grad();
@@ -509,7 +532,7 @@ void train_unet::validate(void)
                     for(size_t i=0;i<test_in_tensor.size();++i)
                     {
                         float ce_v,dice_v,mse_v;
-                        auto [ce,dice,mse] = calc_losses(output_model->forward(test_in_tensor[i])[0],test_out_tensor[i],output_model->out_count);
+                        auto [ce,dice,mse] = calc_losses(output_model->forward(test_in_tensor[i])[0], test_out_tensor[i], output_model->out_count);
                         errors.push_back(ce_v = ce.item().toFloat());
                         errors.push_back(dice_v = dice.item().toFloat());
                         errors.push_back(mse_v = mse.item().toFloat());
@@ -619,7 +642,7 @@ void train_unet::start(void)
     }
 
     output_model = UNet3d(model->in_count,model->out_count,model->feature_string);
-    output_model->to(param.device);
+    output_model->to(param.test_device);
     output_model->copy_from(*model);
     tipl::out() << "gpu count: " << torch::cuda::device_count();
 
@@ -676,7 +699,7 @@ std::string get_network_path(void)
 
 std::string default_feature(int out_count)
 {
-    return "32x32+64x64+128x128+256x256+256x256";
+    return "32x32+64x64+128x128+256x256+256x256+256x256";
 }
 
 int tra(void)
