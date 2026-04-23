@@ -289,15 +289,13 @@ std::string train_unet::get_status(void)
     return s1+"|"+s2;
 }
 
-std::tuple<torch::Tensor,torch::Tensor,torch::Tensor> calc_losses(torch::Tensor pred_raw,const torch::Tensor& target_indices,int C)
+std::tuple<torch::Tensor,torch::Tensor,torch::Tensor> calc_losses(const torch::Tensor& pred_raw,const torch::Tensor& target_indices,int C)
 {
-    // FP32 IN-PLACE OPTIMIZATION: Overwrite pred_raw immediately to halve memory footprint
     auto ce=torch::nn::functional::cross_entropy(pred_raw,target_indices);
-    pred_raw=torch::softmax(pred_raw,1);
-    pred_raw.clamp_(1e-6,1.0-1e-6);
+    auto pred_probs=torch::clamp(torch::softmax(pred_raw,1),1e-6,1.0-1e-6);
 
-    auto target_one_hot=torch::nn::functional::one_hot(target_indices,C).permute({0,4,1,2,3}).to(pred_raw.dtype());
-    auto pred_fg=pred_raw.slice(1,1,C);
+    auto target_one_hot=torch::nn::functional::one_hot(target_indices,C).permute({0,4,1,2,3}).to(pred_probs.dtype());
+    auto pred_fg=pred_probs.slice(1,1,C);
     auto target_fg=target_one_hot.slice(1,1,C);
 
     auto inter=torch::sum(pred_fg*target_fg,{2,3,4});
@@ -305,7 +303,7 @@ std::tuple<torch::Tensor,torch::Tensor,torch::Tensor> calc_losses(torch::Tensor 
 
     auto eps=torch::tensor(1e-5,torch::TensorOptions().device(pred_raw.device()).dtype(pred_raw.dtype()));
     auto dice=1.0f-torch::mean((2.0f*inter+eps)/(card+eps));
-    auto mse=torch::mse_loss(pred_raw,target_one_hot)*static_cast<float>(C);
+    auto mse=torch::mse_loss(pred_probs,target_one_hot)*static_cast<float>(C);
 
     return {ce,dice,mse};
 }
@@ -403,10 +401,10 @@ void train_unet::train(void)
                         torch::Tensor total_loss;
                         {
                             auto outputs=cur_model->forward(in);
-                            in=torch::Tensor(); // FREE EARLY: Input tensor no longer needed
+                            in=torch::Tensor();
 
                             torch::Tensor active_target=target;
-                            target=torch::Tensor(); // FREE EARLY: Master target ref no longer needed
+                            target=torch::Tensor();
 
                             size_t out_sz=outputs.size();
                             float weight_sum=0.0f;
@@ -418,7 +416,6 @@ void train_unet::train(void)
                             {
                                 if(k>0)
                                 {
-                                    // FAST MATH: Shift right is faster than divide for deep supervision sizing
                                     int64_t d=active_target.size(1)>>1,h=active_target.size(2)>>1,w=active_target.size(3)>>1;
                                     std::vector<int64_t> target_size={d,h,w};
                                     auto temp_float=active_target.unsqueeze(1).to(torch::kFloat32);
@@ -428,7 +425,7 @@ void train_unet::train(void)
                                 }
 
                                 auto [ce,dice,mse]=calc_losses(outputs[k],active_target,cur_model->out_count);
-                                outputs[k]=torch::Tensor(); // FREE EARLY: Feature map no longer needed
+                                outputs[k]=torch::Tensor();
 
                                 float norm_weight=(1.0f/(1<<k))*inv_weight_sum;
                                 auto level_loss=(ce+dice+mse)*norm_weight;
