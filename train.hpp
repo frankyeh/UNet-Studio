@@ -13,6 +13,7 @@ struct training_param{
     int epoch = 10000;
     float learning_rate = 0.01f;
     bool is_label = true;
+    bool cost_ce = true,cost_dice = true,cost_mse = true;
 
     std::unordered_map<std::string,float> options;
     torch::Device device = torch::kCPU;
