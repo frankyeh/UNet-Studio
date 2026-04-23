@@ -426,9 +426,27 @@ void train_unet::train(void)
                                     outputs[k] = torch::Tensor();
 
                                     float norm_weight = (1.0f/(1 << k))*inv_weight_sum;
-                                    auto level_loss = (ce+dice+mse)*norm_weight;
 
-                                    if(total_loss.defined())
+                                    bool initialized = false;
+                                    auto level_loss = ce;
+
+                                    auto add_to_level = [&](auto component)
+                                    {
+                                        if (!initialized)
+                                        {
+                                            level_loss = component;
+                                            initialized = true;
+                                        }
+                                        else
+                                            level_loss += component;
+                                    };
+
+                                    if (param.cost_ce)   add_to_level(ce);
+                                    if (param.cost_dice) add_to_level(dice);
+                                    if (param.cost_mse)  add_to_level(mse);
+
+                                    level_loss *= norm_weight;
+                                    if (total_loss.defined())
                                         total_loss += level_loss;
                                     else
                                         total_loss = level_loss;
@@ -450,12 +468,11 @@ void train_unet::train(void)
                 for(auto& each:other_models)
                     model->add_gradient_from(*each);
 
-                // FIX: Averaging gradients over the total batch size, NOT active threads
                 for(auto& p:model->parameters())
                     if(p.grad().defined())
                         p.grad().div_(param.batch_size);
 
-                torch::nn::utils::clip_grad_norm_(model->parameters(),12.0);
+                torch::nn::utils::clip_grad_norm_(model->parameters(), 12.0);
 
                 optimizer->step();
                 optimizer->zero_grad();
@@ -688,7 +705,7 @@ std::string get_network_path(void)
 
 std::string default_feature(int out_count)
 {
-    return "32x32+64x64+128x128+256x256+256x256+256x256";
+    return "16x16+32x32+64x64+128x128+256x256+256x256";
 }
 
 int tra(void)
@@ -705,7 +722,9 @@ int tra(void)
     train.param.epoch = po.get("epoch",train.param.epoch);
     train.param.is_label = po.get("is_label",train.param.is_label?1:0);
     train.param.device = torch::Device(po.get("device",torch::hasCUDA()?"cuda:0":(torch::hasHIP()?"hip:0":(torch::hasMPS()?"mps:0":"cpu"))));
-
+    train.param.cost_ce = po.get("cost_ce",train.param.cost_ce ? 1:0);
+    train.param.cost_dice = po.get("cost_dice",train.param.cost_dice ? 1:0);
+    train.param.cost_mse = po.get("cost_mse",train.param.cost_mse ? 1:0);
     tipl::progress p("start training");
 
     {
