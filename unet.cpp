@@ -125,7 +125,7 @@ std::vector<torch::Tensor> UNet3dImpl::forward(torch::Tensor inputTensor)
     {
         torch::Tensor x2 = up[level]->forward(inputTensor);
         inputTensor = torch::Tensor();
-        torch::Tensor cat_tensor = torch::cat({x2, encodingTensors[level]}, 1);
+        torch::Tensor cat_tensor = torch::cat({encodingTensors[level],x2}, 1);
         x2 = torch::Tensor();
         encodingTensors[level] = torch::Tensor();
         inputTensor = decoding[level]->forward(cat_tensor);
