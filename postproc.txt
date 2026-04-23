@@ -5,7 +5,6 @@ Post-processing/Minus/minus/button/0/minus a value to each volume
 Post-processing/└Value/minus_value/float:0.0:1.0:0.1:2/0.5/value
 Post-processing/Defragment Each/defragment_each/button/0/remove fragments
 Post-processing/└Threshold/defragment_each_threshold/float:0.0:1.0:0.1:2/0.25/threshold for removing fragments
-Post-processing/4D to 3D/to_3d_label/button/0/convert 4D volume to 3D
 Post-processing/Upper Threshold/upper_threshold/button/0/apply a upper threshold
 Post-processing/└Threshold/upper_threshold_threshold/float:0.0:5.0:0.1:2/1.0f/threshold
 Post-processing/Lower Threshold/lower_threshold/button/0/apply a lower threshold
