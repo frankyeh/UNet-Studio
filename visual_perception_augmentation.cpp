@@ -54,13 +54,12 @@ void specular_light(image_type& image,const vector_type& center,float frequency,
 template<typename image_type>
 void lens_distortion(image_type& displaced,float magnitude)
 {
-    float radius = tipl::max_value(displaced.shape())/2;
+    float radius = tipl::max_value(displaced.shape().begin(),displaced.shape().end())/2;
     float radius2 = radius*radius;
     tipl::vector<3,int> center(displaced.shape());
     center /= 2;
     magnitude /= radius2;
-    tipl::par_for(tipl::begin_index(displaced.shape()),
-                  tipl::end_index(displaced.shape()),[&](const tipl::pixel_index<3>& pos)
+    tipl::par_for(displaced.shape(),[&](const tipl::pixel_index<3>& pos)
     {
         tipl::vector<3> dir(pos);
         dir -= center;
@@ -92,8 +91,7 @@ void accumulate_transforms(image_type& displaced,bool has_lens_distortion,bool h
                            const tipl::transformation_matrix<float>& trans)
 {
     auto center = tipl::vector<3>(displaced.shape())/2.0f;
-    tipl::par_for(tipl::begin_index(displaced.shape()),tipl::end_index(displaced.shape()),
-        [&](const tipl::pixel_index<3>& index)
+    tipl::par_for(displaced.shape(),[&](const tipl::pixel_index<3>& index)
     {
         // pos now in the "retina" space
         tipl::vector<3> pos(index);
@@ -397,8 +395,7 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
             {
                 float pow_octave = pow(0.5f, octave);
                 float scale = zoom * pow_octave;
-                tipl::par_for(tipl::begin_index(image_shape),
-                              tipl::end_index(image_shape),[&](const tipl::pixel_index<3>& index)
+                tipl::par_for(image_shape,[&](const tipl::pixel_index<3>& index)
                 {
                     tipl::vector<3> pos(index);
                     pos *= scale;
