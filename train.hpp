@@ -16,6 +16,7 @@ struct training_param{
 
     std::unordered_map<std::string,float> options;
     torch::Device device = torch::kCPU;
+    torch::Device test_device = torch::kCPU;
     inline void set_weight(std::string w)
     {
         std::istringstream in(w);
