@@ -110,25 +110,31 @@ bool UNet3dImpl::init_dimension(const std::string& template_file)
 
 std::vector<torch::Tensor> UNet3dImpl::forward(torch::Tensor inputTensor)
 {
-    std::vector<torch::Tensor> encodingTensors;
+    std::vector<torch::Tensor> encodingTensors(encoding.size() - 1);
     std::vector<torch::Tensor> results(output.size());
 
     for(int level=0; level<encoding.size(); level++)
     {
         inputTensor = encoding[level]->forward(inputTensor);
-        encodingTensors.push_back(inputTensor);
+        if (level < encoding.size() - 1)
+            encodingTensors[level] = inputTensor;
+
     }
 
     for(int level=encoding.size()-2; level>=0; level--)
     {
-        auto x1 = encodingTensors[level];
-        auto x2 = up[level]->forward(inputTensor);
-        inputTensor = decoding[level]->forward(torch::cat({x2,x1},1));
+        torch::Tensor x2 = up[level]->forward(inputTensor);
+        inputTensor = torch::Tensor();
+        torch::Tensor cat_tensor = torch::cat({x2, encodingTensors[level]}, 1);
+        x2 = torch::Tensor();
+        encodingTensors[level] = torch::Tensor();
+        inputTensor = decoding[level]->forward(cat_tensor);
+        cat_tensor = torch::Tensor();
         results[level] = output[level]->forward(inputTensor);
     }
+
     return results;
 }
-
 
 void UNet3dImpl::copy_from(const UNet3dImpl& r)
 {
@@ -163,11 +169,20 @@ void UNet3dImpl::add_gradient_from(const UNet3dImpl& r)
     auto rhs = r.parameters();
     auto lhs = parameters();
     auto cur_device = device();
-    tipl::par_for(rhs.size(),[&](size_t index)
+
+    tipl::par_for(rhs.size(), [&](size_t index)
     {
         torch::NoGradGuard no_grad;
-        if(lhs[index].mutable_grad().defined()&&rhs[index].mutable_grad().defined())
-            lhs[index].mutable_grad().add_(rhs[index].mutable_grad().to(cur_device).detach());
+
+        if (rhs[index].mutable_grad().defined())
+        {
+            auto rhs_grad = rhs[index].mutable_grad().to(cur_device).to(torch::kFloat32).detach();
+
+            if (lhs[index].mutable_grad().defined())
+                lhs[index].mutable_grad().add_(rhs_grad);
+            else
+                lhs[index].mutable_grad() = rhs_grad.clone();
+        }
     });
 }
 
