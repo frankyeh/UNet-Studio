@@ -167,9 +167,6 @@ void evaluate_unet::read_file(void)
             tipl::out() << "channel:" << in.dim(4) << " dim: " << raw_image.shape() << " vs:" << eval[i].image_vs;
             tipl::out() << "adjust intensity by normalizing otsu median value";
 
-            tipl::segmentation::normalize_otsu_median(raw_image);
-
-
             if(model->in_count > 1)
             {
                 raw_image.resize(eval[i].image_dim.multiply(tipl::shape<3>::z,model->in_count));
@@ -183,8 +180,6 @@ void evaluate_unet::read_file(void)
                         aborted = true;
                         return;
                     }
-                    tipl::segmentation::normalize_otsu_median(image);
-
                 }
             }
             tipl::out() << "preprocessing";
