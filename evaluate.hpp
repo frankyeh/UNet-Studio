@@ -56,14 +56,12 @@ private:
     void output(void);
 public:
     size_t cur_output = 0;
-    std::vector<tipl::image<3> > label_prob,foreground_prob;
     void proc_actions(const char* cmd,float param1 = 0.0f,float param2 = 0.0f);
-    std::vector<char> is_label;
     void clear(void)
     {
         stop();
         cur_output = 0;
-        label_prob.clear();
+        eval.clear();
     }
 public:
     UNet3d model;

@@ -135,6 +135,11 @@ void evaluate_unet::read_file(void)
     {
         for(size_t i = 0;i < eval.size() && !aborted;++i)
         {
+            eval[i].model_dim = model->dim;
+            eval[i].model_vs = model->voxel_size;
+            eval[i].in_count = model->in_count;
+            eval[i].out_count = model->out_count;
+
             while(i > cur_prog+6)
             {
                 using namespace std::chrono_literals;
@@ -183,7 +188,7 @@ void evaluate_unet::read_file(void)
                 }
             }
             tipl::out() << "preprocessing";
-            if(!eval[i].preproc_actions(raw_image,model->dim,model->voxel_size))
+            if(!eval[i].preproc_actions(raw_image))
                 return error_msg = "invalid image for processing: " + param.image_file_name[i],aborted = true,void();
             data_ready[i] = true;
         }
@@ -233,10 +238,8 @@ void evaluate_unet::evaluate(void)
 }
 void evaluate_unet::proc_actions(const char* cmd,float param1,float param2)
 {
-    tipl::ml3d::postproc_actions(cmd,param1,param2,label_prob[cur_output],
-                 foreground_prob[cur_output],
-                 eval[cur_output].image_dim,
-                 is_label[cur_output]);
+    char is_label;
+    tipl::ml3d::postproc_actions(cmd,param1,param2,eval[cur_output].label_prob,eval[cur_output].fg_prob,eval[cur_output].image_dim,is_label);
 }
 
 
@@ -245,9 +248,6 @@ extern std::vector<std::string> seg_template_list;
 extern std::vector<std::vector<std::string> > atlas_file_name_list;;
 void evaluate_unet::output(void)
 {
-    label_prob = std::vector<tipl::image<3> >(param.image_file_name.size());
-    foreground_prob = std::vector<tipl::image<3> >(param.image_file_name.size());
-    is_label = std::vector<char>(param.image_file_name.size());
     auto run_evaluation = [this]()
     {
         struct exist_guard
@@ -262,7 +262,7 @@ void evaluate_unet::output(void)
 
 
         try{
-            for (cur_output = 0;cur_output < label_prob.size() && !aborted; cur_output++)
+            for (cur_output = 0;cur_output < eval.size() && !aborted; cur_output++)
             {
                 while(cur_output >= cur_prog)
                 {
@@ -274,35 +274,29 @@ void evaluate_unet::output(void)
                 }
                 if(eval[cur_output].model_output.empty())
                     continue;
-                label_prob[cur_output] = eval[cur_output].get_label_prob(gaussian_weight,model->dim);
 
+                eval[cur_output].get_label_prob(gaussian_weight);
+                eval[cur_output].remove_bg_channel();
+                eval[cur_output].create_mask(param.prob_threshold);
+
+
+                auto& cur_foreground_prob = eval[cur_output].fg_prob;
+                auto& cur_label_prob = eval[cur_output].label_prob;
 
                 if(aborted)
                     return;
-
-
-                tipl::remove_channel(label_prob[cur_output],eval[cur_output].image_dim);
-
-                foreground_prob[cur_output] = tipl::ml3d::create_mask(label_prob[cur_output],
-                                                                      eval[cur_output].image_dim,param.prob_threshold);
-
-
-                auto& cur_foreground_prob = foreground_prob[cur_output];
-                auto& cur_label_prob = label_prob[cur_output];
-
 
                 switch(proc_strategy.output_format)
                 {
                     case 0: // 3D label
 
-                        cur_label_prob = tipl::argmax(cur_label_prob,foreground_prob[cur_output] > param.prob_threshold);
-                        is_label[cur_output] = true;
+                        eval[cur_output].get_label(param.prob_threshold);
 
                         if(!template_I.empty())
                         {
                             const auto& cur_shape = eval[cur_output].image_dim;
                             const size_t max_tissue_count = 4;/* exclude csf */
-                            auto cur_label = tipl::image<3,unsigned char>(label_prob[cur_output]);
+                            auto cur_label = tipl::image<3,unsigned char>(cur_label_prob);
                             tipl::reg::mm_reg<tipl::out> reg;
                             tipl::progress prog("register to template");
                             tipl::expand_label_to_images(template_I,reg.It,max_tissue_count);
@@ -454,34 +448,9 @@ void evaluate_unet::stop(void)
 }
 bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
 {
-    if(currentRow >= label_prob.size())
+    if(currentRow >= eval.size())
         return false;
-    tipl::io::gz_nifti out;
-    if(!out.open(file_name,std::ios::out))
-        return error_msg = out.error_msg,false;
-    out << eval[currentRow].untouched_srow << eval[currentRow].image_vs;
-    tipl::out() << "save " << file_name;
-    out.flip_swap_seq = eval[currentRow].flip_swap;
-    if(is_label[currentRow])
-    {
-        tipl::image<3,unsigned char> label(label_prob[currentRow]);
-        out.apply_flip_swap_seq(label,true);
-
-        if(label_prob[currentRow].depth() == eval[currentRow].image_dim[2])
-            out << label;
-        else
-            out << label.alias(0,tipl::shape<4>(eval[currentRow].image_dim.expand(label_prob[currentRow].depth()/eval[currentRow].image_dim[2])));
-    }
-    else
-    {
-        tipl::image<3> prob(label_prob[currentRow]);
-        out.apply_flip_swap_seq(prob,true);
-        if(label_prob[currentRow].depth() == eval[currentRow].image_dim[2])
-            out << prob;
-        else
-            out << prob.alias(0,tipl::shape<4>(eval[currentRow].image_dim.expand(label_prob[currentRow].depth()/eval[currentRow].image_dim[2])));
-    }
-    return true;
+    return eval[currentRow].save_to_file<tipl::io::gz_nifti>(file_name);
 }
 
 bool load_from_file(UNet3d& model,const char* file_name);

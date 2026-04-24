@@ -1,5 +1,5 @@
 #include "mainwindow.h"
-#include "./ui_mainwindow.h"
+#include "ui_mainwindow.h"
 #include "optiontablewidget.hpp"
 #include <QFileDialog>
 #include <QInputDialog>
@@ -7,9 +7,8 @@
 #include <QMessageBox>
 #include <QClipboard>
 #include <QMovie>
-#include "TIPL/tipl.hpp"
 #include "console.h"
-
+#include "TIPL/tipl.hpp"
 
 extern QSettings settings;
 
@@ -270,26 +269,38 @@ void MainWindow::get_evaluate_views(QImage& view1,QImage& view2,float display_ra
 
     if(currentRow < evaluate.cur_output)
     {
-        const auto& eval_I2 = evaluate.label_prob[currentRow];
-        auto eval_output_count = eval_I2.depth()/evaluate.eval[currentRow].image_dim[2];
+        const auto& eval_label = evaluate.eval[currentRow].label;
+        size_t eval_output_count = 1;
         eval_v2c2.set_range(0,1);
-        if(evaluate.is_label[currentRow] && eval_output_count == 1)
-            eval_v2c2.set_range(0,evaluate.model->out_count-1);
-        if(evaluate.is_label[currentRow] && eval_output_count >= 1)
-            label_on_images(view1,display_ratio,
-                            eval_I2,
-                            evaluate.eval[currentRow].image_dim,
-                            d,
-                            slice_pos,
-                            evaluate.model->out_count-1,
-                            ui->template_list->currentIndex() > 0 ? evaluate.atlas_region_count : evaluate.model->out_count-1);
+        if(eval_label.empty())
+        {
+            eval_output_count = evaluate.eval[currentRow].label_prob.depth()/evaluate.eval[currentRow].image_dim[2];
+            view2 << eval_v2c2[tipl::volume2slice_scaled(
+                           evaluate.eval[currentRow].label_prob.alias(eval_I1_buffer[currentRow].size()*ui->eval_label_slider->value(),
+                                         eval_I1_buffer[currentRow].shape()),
+                           ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
+        }
+        else
+        {
+            if(eval_output_count == 1)
+                eval_v2c2.set_range(0,evaluate.model->out_count-1);
+            if(eval_output_count >= 1)
+                label_on_images(view1,display_ratio,
+                                eval_label,
+                                evaluate.eval[currentRow].image_dim,
+                                d,
+                                slice_pos,
+                                evaluate.model->out_count-1,
+                                ui->template_list->currentIndex() > 0 ? evaluate.atlas_region_count : evaluate.model->out_count-1);
 
+            view2 << eval_v2c2[tipl::volume2slice_scaled(
+                           eval_label.alias(eval_I1_buffer[currentRow].size()*ui->eval_label_slider->value(),
+                                            eval_I1_buffer[currentRow].shape()),
+                           ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
+        }
         ui->eval_label_slider->setMaximum(eval_output_count-1);
         ui->eval_label_slider->setVisible(eval_output_count > 1);
-        view2 << eval_v2c2[tipl::volume2slice_scaled(
-                           eval_I2.alias(
-                            eval_I1_buffer[currentRow].size()*ui->eval_label_slider->value(),eval_I1_buffer[currentRow].shape()),
-                           ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
+
 
     }
     else
@@ -319,7 +330,7 @@ void MainWindow::on_eval_pos_valueChanged(int slice_pos)
 void MainWindow::on_action_evaluate_save_results_triggered()
 {
     auto currentRow = ui->evaluate_list2->currentRow();
-    if(currentRow < 0 || currentRow >= evaluate.label_prob.size())
+    if(currentRow < 0 || currentRow >= evaluate.eval.size())
         return;
     QString file = evaluate_list[ui->evaluate_list->currentRow()];
     file = file.remove(".nii").remove(".gz") + ".result.nii.gz";
