@@ -135,12 +135,6 @@ void evaluate_unet::read_file(void)
     {
         for(size_t i = 0;i < eval.size() && !aborted;++i)
         {
-            eval[i].model_dim = model->dim;
-            eval[i].model_vs = model->voxel_size;
-            eval[i].in_count = model->in_count;
-            eval[i].out_count = model->out_count;
-            eval[i].prob_threshold = param.prob_threshold;
-
             while(i > cur_prog+6)
             {
                 using namespace std::chrono_literals;
@@ -149,43 +143,14 @@ void evaluate_unet::read_file(void)
                     return;
                 status = "evaluating";
             }
-            tipl::out() << "reading " << param.image_file_name[i];
-            tipl::io::gz_nifti in(param.image_file_name[i],std::ios::in);
-            if(!in)
-                return error_msg = in.error_msg,aborted = true,void();
-            if(in.dim(4) != model->in_count)
-                return error_msg = param.image_file_name[i] + " has inconsistent input channel",aborted = true,void();
 
-
-            in.get_image_transformation(eval[i].untouched_srow);
-
-            tipl::image<3> raw_image;
-            in >> raw_image >> eval[i].image_vs >> eval[i].srow;
-
-            eval[i].flip_swap = in.flip_swap_seq;
-            eval[i].image_dim = raw_image.shape();
-
-            tipl::out() << "channel:" << in.dim(4) << " dim: " << raw_image.shape() << " vs:" << eval[i].image_vs;
-            tipl::out() << "adjust intensity by normalizing otsu median value";
-
-            if(model->in_count > 1)
-            {
-                raw_image.resize(eval[i].image_dim.multiply(tipl::shape<3>::z,model->in_count));
-                tipl::out() << "handle multiple channels. model channel count:" << model->in_count;
-                for(size_t c = 1;c < model->in_count;++c)
-                {
-                    auto image = raw_image.alias(c*eval[i].image_dim.size(),eval[i].image_dim);
-                    if(!(in >> image))
-                    {
-                        error_msg = param.image_file_name[i] + " reading failed";
-                        aborted = true;
-                        return;
-                    }
-                }
-            }
-            tipl::out() << "preprocessing";
-            if(!eval[i].preproc(raw_image,tipl::image<3,unsigned char>()))
-                return error_msg = "invalid image for processing: " + param.image_file_name[i],aborted = true,void();
+            eval[i].model_dim = model->dim;
+            eval[i].model_vs = model->voxel_size;
+            eval[i].in_count = model->in_count;
+            eval[i].out_count = model->out_count;
+            eval[i].prob_threshold = param.prob_threshold;
+            if(!eval[i].load_from_file<tipl::io::gz_nifti>(param.image_file_name[i]) || !eval[i].preproc())
+                return error_msg = param.image_file_name[i] + " : " + eval[i].error_msg,aborted = true,void();
             data_ready[i] = true;
         }
     }));
