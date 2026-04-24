@@ -139,6 +139,7 @@ void evaluate_unet::read_file(void)
             eval[i].model_vs = model->voxel_size;
             eval[i].in_count = model->in_count;
             eval[i].out_count = model->out_count;
+            eval[i].prob_threshold = param.prob_threshold;
 
             while(i > cur_prog+6)
             {
@@ -183,7 +184,7 @@ void evaluate_unet::read_file(void)
                 }
             }
             tipl::out() << "preprocessing";
-            if(!eval[i].preproc_actions(raw_image))
+            if(!eval[i].preproc(raw_image,tipl::image<3,unsigned char>()))
                 return error_msg = "invalid image for processing: " + param.image_file_name[i],aborted = true,void();
             data_ready[i] = true;
         }
@@ -252,8 +253,6 @@ void evaluate_unet::output(void)
             ~exist_guard() { running = false;}
         } guard(running);
 
-        tipl::image<3> gaussian_weight(model->dim);
-        tipl::ml3d::create_gaussian(gaussian_weight);
 
 
         try{
@@ -270,10 +269,7 @@ void evaluate_unet::output(void)
                 if(eval[cur_output].model_output.empty())
                     continue;
 
-                eval[cur_output].get_label_prob(gaussian_weight);
-                eval[cur_output].remove_bg_channel();
-                eval[cur_output].create_mask(param.prob_threshold);
-
+                eval[cur_output].command("postproc+softmax+remove_bg_channel+create_mask");
 
                 auto& cur_foreground_prob = eval[cur_output].fg_prob;
                 auto& cur_label_prob = eval[cur_output].label_prob;
@@ -285,7 +281,7 @@ void evaluate_unet::output(void)
                 {
                     case 0: // 3D label
 
-                        eval[cur_output].get_label(param.prob_threshold);
+                        eval[cur_output].argmax();
 
                         if(!template_I.empty())
                         {
