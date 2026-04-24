@@ -271,14 +271,14 @@ void MainWindow::get_evaluate_views(QImage& view1,QImage& view2,float display_ra
     if(currentRow < evaluate.cur_output)
     {
         const auto& eval_I2 = evaluate.label_prob[currentRow];
-        auto eval_output_count = eval_I2.depth()/evaluate.raw_image_shape[currentRow][2];
+        auto eval_output_count = eval_I2.depth()/evaluate.eval[currentRow].image_dim[2];
         eval_v2c2.set_range(0,1);
         if(evaluate.is_label[currentRow] && eval_output_count == 1)
             eval_v2c2.set_range(0,evaluate.model->out_count-1);
         if(evaluate.is_label[currentRow] && eval_output_count >= 1)
             label_on_images(view1,display_ratio,
                             eval_I2,
-                            evaluate.raw_image_shape[currentRow],
+                            evaluate.eval[currentRow].image_dim,
                             d,
                             slice_pos,
                             evaluate.model->out_count-1,

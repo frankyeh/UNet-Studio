@@ -4,6 +4,7 @@
 #include <vector>
 #include "zlib.h"
 #include "unet.hpp"
+#include "TIPL/tipl.hpp"
 
 struct EvaluateParam{
     std::vector<std::string> image_file_name;
@@ -20,13 +21,7 @@ public:
     EvaluateParam param;
 public:
     ProcStrategy proc_strategy;
-    std::vector<std::vector<tipl::image<3>>> evaluate_input,evaluate_output;
-    std::vector<std::vector<tipl::transformation_matrix<float>>> raw_image_trans;
-    std::vector<tipl::image<3,unsigned char> > raw_image_mask;
-    std::vector<tipl::shape<3> > raw_image_shape;
-    std::vector<tipl::vector<3> > raw_image_vs;
-    std::vector<tipl::matrix<4,4,float> > untouched_srow,raw_image_srow;
-    std::vector<std::vector<char> > raw_image_flip_swap;
+    std::vector<tipl::ml3d::evalution_set<tipl::image<3>>> eval;
     std::vector<bool> data_ready;
     std::shared_ptr<std::thread> read_file_thread;
     void read_file(void);
