@@ -717,14 +717,15 @@ int tra(void)
         train.stop();
     }
 
-    train.param.batch_size = po.get("batch_size",train.param.batch_size);
-    train.param.learning_rate = po.get("learning_rate",train.param.learning_rate);
-    train.param.epoch = po.get("epoch",train.param.epoch);
-    train.param.is_label = po.get("is_label",train.param.is_label?1:0);
-    train.param.device = torch::Device(po.get("device",torch::hasCUDA()?"cuda:0":(torch::hasHIP()?"hip:0":(torch::hasMPS()?"mps:0":"cpu"))));
-    train.param.cost_ce = po.get("cost_ce",train.param.cost_ce ? 1:0);
-    train.param.cost_dice = po.get("cost_dice",train.param.cost_dice ? 1:0);
-    train.param.cost_mse = po.get("cost_mse",train.param.cost_mse ? 1:0);
+    auto def_device = torch::hasCUDA()?"cuda:0":(torch::hasHIP()?"hip:0":(torch::hasMPS()?"mps:0":"cpu"));
+    train.param.batch_size =        po.get("batch_size",train.param.batch_size);
+    train.param.learning_rate =     po.get("learning_rate",train.param.learning_rate);
+    train.param.epoch =             po.get("epoch",train.param.epoch);
+    train.param.is_label =          po.get("is_label",train.param.is_label?1:0);
+    train.param.cost_ce =           po.get("cost_ce",train.param.cost_ce ? 1:0);
+    train.param.cost_dice =         po.get("cost_dice",train.param.cost_dice ? 1:0);
+    train.param.cost_mse =          po.get("cost_mse",train.param.cost_mse ? 1:0);
+    train.param.device = torch::Device(po.get("device",def_device));
     tipl::progress p("start training");
 
     {
