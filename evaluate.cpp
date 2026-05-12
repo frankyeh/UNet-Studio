@@ -1,7 +1,7 @@
 #include "evaluate.hpp"
 
 extern tipl::program_option<tipl::out> po;
-
+using namespace std::chrono_literals;
 std::vector<std::string> operations({
         "none",
         "gaussian_filter",
@@ -129,31 +129,27 @@ bool evaluate_unet::load_atlas(const std::string& file_name)
 
 void evaluate_unet::read_file(void)
 {
+    image_file_name = param.image_file_name;
+    device = param.device;
     eval.clear();
-    eval.resize(param.image_file_name.size());
-    data_ready = std::vector<bool> (param.image_file_name.size());
+    eval.resize(image_file_name.size());
+    data_ready = std::vector<unsigned char>(image_file_name.size());
     read_file_thread.reset(new std::thread([=]()
     {
         for(size_t i = 0;i < eval.size() && !aborted;++i)
         {
             while(i > cur_prog+6)
-            {
-                using namespace std::chrono_literals;
-                std::this_thread::sleep_for(200ms);
-                if(aborted)
-                    return;
-                status = "evaluating";
-            }
-
+                if(aborted) return; else std::this_thread::sleep_for(100ms);
+            status = "evaluating";
             eval[i].model_dim = model->dim;
             eval[i].model_vs = model->voxel_size;
             eval[i].in_count = eval[i].cur_count = model->in_count;
             eval[i].out_count = model->out_count;
             eval[i].mask.clear();
-            if(!eval[i].load_from_file<tipl::io::gz_nifti>(param.image_file_name[i]) ||
+            if(!eval[i].load_from_file<tipl::io::gz_nifti>(image_file_name[i]) ||
                !eval[i].handle_fov_pre(model->fov_strategy) ||
                !eval[i].preproc(model->preproc))
-                return error_msg = param.image_file_name[i] + " : " + eval[i].error_msg,aborted = true,void();
+                return tipl::error() << (error_msg = image_file_name[i] + " : " + eval[i].error_msg),aborted = true,void();
             data_ready[i] = true;
         }
     }));
@@ -161,30 +157,27 @@ void evaluate_unet::read_file(void)
 
 void evaluate_unet::evaluate(void)
 {
+    cur_prog = 0;
     evaluate_thread.reset(new std::thread([=](){
         try{
-            for (cur_prog = 0; cur_prog < eval.size() && !aborted; cur_prog++)
+            while(cur_prog < eval.size() && !aborted)
             {
                 while(!data_ready[cur_prog])
-                {
-                    using namespace std::chrono_literals;
-                    std::this_thread::sleep_for(200ms);
-                    if(aborted)
-                        return;
-                    status = "preproc_actions";
-                }
+                    if(aborted) return; else std::this_thread::sleep_for(100ms);
+                status = "preproc_actions";
                 tipl::out() << "inferencing using u-net";
                 eval[cur_prog].model_output.resize(eval[cur_prog].model_input.size());
                 torch::NoGradGuard no_grad;
                 for(size_t i = 0;i < eval[cur_prog].model_input.size();++i)
                 {
-                    auto& cur_input = eval[cur_prog].model_input[i];
-                    auto& cur_output = eval[cur_prog].model_output[i];
-                    cur_output.resize(cur_input.shape().multiply(tipl::shape<3>::z,model->out_count).divide(tipl::shape<3>::z,model->in_count));
-                    auto out = model->forward(torch::from_blob(cur_input.data(),
-                                              {1,model->in_count,int(cur_input.depth()/model->in_count),int(cur_input.height()),int(cur_input.width())}).to(param.device))[0];
-                    std::memcpy(cur_output.data(),out.to(torch::kCPU).contiguous().data_ptr<float>(),cur_output.size()*sizeof(float));
+                    auto& in = eval[cur_prog].model_input[i];
+                    auto& out = eval[cur_prog].model_output[i];
+                    out.resize(in.shape().multiply(tipl::shape<3>::z,model->out_count).divide(tipl::shape<3>::z,model->in_count));
+                    auto result = model->forward(torch::from_blob(in.data(),
+                                              {1,model->in_count,int(in.depth()/model->in_count),int(in.height()),int(in.width())}).to(device))[0];
+                    std::memcpy(out.data(),result.to(torch::kCPU).contiguous().data_ptr<float>(),out.size()*sizeof(float));
                 }
+                cur_prog++;
             }
         }
         catch(const c10::Error& error)
@@ -205,6 +198,7 @@ extern std::vector<std::string> seg_template_list;
 extern std::vector<std::vector<std::string> > atlas_file_name_list;;
 void evaluate_unet::output(void)
 {
+    cur_output = 0;
     auto run_evaluation = [this]()
     {
         struct exist_guard
@@ -216,124 +210,19 @@ void evaluate_unet::output(void)
 
 
         try{
-            for (cur_output = 0;cur_output < eval.size() && !aborted; cur_output++)
+            while(cur_output < eval.size() && !aborted)
             {
                 while(cur_output >= cur_prog)
-                {
-                    if(aborted)
-                        return;
-                    using namespace std::chrono_literals;
-                    std::this_thread::sleep_for(200ms);
-                    status = "evaluating";
-                }
+                    if(aborted) return; else std::this_thread::sleep_for(100ms);
+
+                status = "evaluating";
+
                 if(eval[cur_output].model_output.empty())
-                    continue;
+                    return tipl::error() << "no model output for " << image_file_name[cur_output],aborted = true,void();
 
-                if(!eval[cur_output].handle_fov_post() ||
-                   !eval[cur_output].command(model->postproc))
-                {
-                    error_msg = eval[cur_output].error_msg;
-                    aborted = true;
-                    return;
-                }
-                auto& cur_foreground_prob = eval[cur_output].fg_prob;
-                auto& cur_label_prob = eval[cur_output].label_prob;
-
-                if(aborted)
-                    return;
-
-                switch(proc_strategy.output_format)
-                {
-                    case 0: // 3D label
-                        //cur_label_prob = eval[cur_output].label;
-                        if(!template_I.empty())
-                        {
-                            const auto& cur_shape = eval[cur_output].image_dim;
-                            const size_t max_tissue_count = 4;/* exclude csf */
-                            auto cur_label = tipl::image<3,unsigned char>(cur_label_prob);
-                            tipl::reg::mm_reg<tipl::out> reg;
-                            tipl::progress prog("register to template");
-                            tipl::expand_label_to_images(template_I,reg.It,max_tissue_count);
-                            tipl::expand_label_to_images(cur_label,reg.I,max_tissue_count);
-                            reg.ItR = template_R;
-                            reg.IR = eval[cur_output].srow;
-                            reg.Itvs = template_vs;
-                            reg.Ivs = eval[cur_output].image_vs;
-                            reg.Its = template_I.shape();
-                            reg.Is = cur_shape;
-                            reg.match_resolution(true);
-                            reg.param.speed = 1.0f;
-                            reg.param.smoothing = 0.0f;
-
-                            reg.linear_reg(aborted);
-                            reg.nonlinear_reg(aborted);
-                            reg.to_It_space(template_I.shape(),template_R);
-                            reg.to_I_space(cur_shape,eval[cur_output].srow);
-                            auto template_J = reg.apply_warping<false,tipl::majority>(template_I);
-                            auto atlas = reg.apply_warping<false,tipl::majority>(atlas_I);
-
-                            // apply mask from current segmentation to warpped template and atlas
-                            tipl::preserve(atlas.begin(),atlas.end(),cur_label.begin());
-                            tipl::preserve(template_J.begin(),template_J.end(),cur_label.begin());
-
-                            size_t size = cur_shape.size();
-                            tipl::image<3,unsigned char> mask(cur_shape);
-                            for(size_t cur_tissue = 1;cur_tissue <= max_tissue_count;++cur_tissue)
-                            {
-                                tipl::out() << "checking tissue:" << tissue_names[cur_tissue];
-                                size_t total = 0,has_atlas = 0;
-                                for(size_t i = 0;i < size;++i)
-                                    if(template_J[i] == cur_tissue && atlas[i])
-                                    {
-                                        ++total;
-                                        if(atlas[i])
-                                            ++has_atlas;
-                                    }
-
-                                if(!has_atlas)
-                                {
-                                    tipl::out() << tissue_names[cur_tissue] << " has no label in current atlas, assign zeros";
-                                    for(size_t i = 0;i < size;++i)
-                                        if(template_J[i] == cur_tissue)
-                                            atlas[i] = 0;
-                                }
-                                if(float(has_atlas)/float(total) > 0.75f)
-                                {
-                                    tipl::out() << tissue_names[cur_tissue] << " has labels, fill empty labels and smooth atlas";
-                                    for(size_t i = 0;i < size;++i)
-                                        mask[i] = (template_J[i] == cur_tissue);
-                                    tipl::morphology::fill_and_smooth_labels<tipl::out>(mask,atlas);
-                                }
-                            }
-                            cur_label_prob = atlas;
-                        }
-                        break;
-                    case 1: // skull strip
-                    case 2: // mask
-                        {
-                            tipl::filter::gaussian(cur_foreground_prob);
-                            tipl::filter::gaussian(cur_foreground_prob);
-
-                            if(proc_strategy.output_format == 2) // mask
-                            {
-                                cur_label_prob = cur_foreground_prob;
-                                break;
-                            }
-                            tipl::image<3> I;
-                            if(!(tipl::io::gz_nifti(param.image_file_name[cur_output],std::ios::in) >> I))
-                            {
-                                tipl::error() << "cannot read image file:" << param.image_file_name[cur_output];
-                                cur_label_prob.clear();
-                                break;
-                            }
-                            for(size_t pos = 0,sz = std::min<size_t>(I.size(),cur_foreground_prob.size());pos < sz;++pos)
-                                I[pos] *= cur_foreground_prob[pos];
-                            tipl::normalize(I);
-                            cur_label_prob.swap(I);
-                        }
-                    break;
-
-                }
+                if(!eval[cur_output].handle_fov_post() || !eval[cur_output].command(model->postproc))
+                    return tipl::error() << (error_msg = eval[cur_output].error_msg),aborted = true,void();
+                cur_output++;
             }
         }
         catch(const c10::Error& error)
@@ -533,8 +422,6 @@ int eval(void)
            !eval.load_atlas(po.get("atlas",atlas_file_name_list[seg_id],atlas_file_name_list[seg_id][0])))
             return tipl::error() << eval.error_msg,1;
     }
-
-    eval.proc_strategy.output_format = po.get("output_format",eval.proc_strategy.output_format);
     eval.param.device = torch::Device(po.get("device",torch::hasCUDA() ? "cuda:0" :
                                                        (torch::hasHIP() ? "hip:0" :
                                                        (torch::hasMPS() ? "mps:0": "cpu"))));
