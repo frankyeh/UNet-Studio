@@ -319,7 +319,7 @@ std::string train_unet::get_status(void)
     return s1+"|"+s2;
 }
 
-std::tuple<torch::Tensor,torch::Tensor,torch::Tensor> calc_losses(const torch::Tensor& pred_raw,const torch::Tensor& target_indices,int C)
+inline std::tuple<torch::Tensor,torch::Tensor,torch::Tensor> calc_losses(const torch::Tensor& pred_raw,const torch::Tensor& target_indices,int C)
 {
     auto ce = torch::nn::functional::cross_entropy(pred_raw,target_indices);
     auto pred_probs = torch::clamp(torch::softmax(pred_raw,1),1e-6,1.0-1e-6);
@@ -583,22 +583,29 @@ void train_unet::validate(void)
                     std::scoped_lock<std::mutex> lock(output_model_mutex);
                     torch::NoGradGuard no_grad;
                     output_model->eval();
-                    for(size_t i = 0,sz = test_in_tensor.size();i<sz;++i)
+                    double ce_v(0.0),dice_v(0.0),mse_v(00.0);
+                    for(size_t i = 0;i < test_in_tensor.size();++i)
                     {
-                        float ce_v,dice_v,mse_v;
                         auto [ce,dice,mse] = calc_losses(output_model->forward(test_in_tensor[i])[0],test_out_tensor[i],output_model->out_count);
-                        errors.push_back(ce_v = ce.item().toFloat());
-                        errors.push_back(dice_v = dice.item().toFloat());
-                        errors.push_back(mse_v = mse.item().toFloat());
+                        ce_v += ce.item().toFloat();
+                        dice_v += dice.item().toFloat();
+                        mse_v += mse.item().toFloat();
                     }
+                    for(size_t i = 0;i < test_in_tensor.size();++i)
+                    {
+                        errors.push_back(ce_v/double(test_in_tensor.size()));
+                        errors.push_back(dice_v/double(test_in_tensor.size()));
+                        errors.push_back(mse_v/double(test_in_tensor.size()));
+                    }
+
                 }
                 {
                     if(!cur_validation_epoch)
-                        tipl::out() << "1                        0.1                        0.01                   0.001";
+                        tipl::out() << "1                                                   0.1                                               0.01";
 
                     if(cur_validation_epoch%100==0)
                     {
-                        std::string out = "|-------------------------|--------------------------|-------------------------|";
+                        std::string out = "|-------------------------|--------------------------|-------------------------|-------------------------|";
                         double cur_lr = param.learning_rate*std::pow(1.0-(double)cur_validation_epoch/param.epoch,0.9);
                         auto str = "lr:"+std::to_string(cur_lr);
                         if(cur_validation_epoch>start_validation_epoch)
@@ -615,10 +622,13 @@ void train_unet::validate(void)
                         tipl::out() << out;
                     }
 
-                    std::string out = "|                         |                          |                         |";
+                    std::string out = "|                         |                          |                         |                         |";
                     if(!errors.empty())
                     {
-                        auto to_chart = [](float error)->int{return int(std::max<float>(0.0f,std::min<float>(79.0f,(-std::log10(error))*80.0f/3.0f)));};
+                        auto to_chart = [&](float error)->int
+                        {
+                            return int(std::max<float>(0.0f,std::min<float>(float(out.size()-1),(-std::log10(error))*float(out.size()-1)/2.0f)));
+                        };
                         out[to_chart(errors[0])] = 'C';
                         out[to_chart(errors[1])] = 'D';
                         out[to_chart(errors[2])] = 'M';
