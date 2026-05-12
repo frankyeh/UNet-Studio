@@ -189,6 +189,20 @@ void MainWindow::evaluating()
 
 }
 
+void MainWindow::on_eval_label_slider_valueChanged(int value)
+{
+    on_eval_pos_valueChanged(ui->eval_pos->value());
+}
+void MainWindow::on_evaluate_output_currentIndexChanged(int index)
+{
+    if(index != 0)
+        ui->template_list->setCurrentIndex(0);
+    ui->atlas_label->setVisible(index == 0);
+    ui->template_list->setVisible(index == 0);
+    ui->atlas_list->setVisible(index == 0);
+    on_eval_pos_valueChanged(ui->eval_pos->value());
+
+}
 
 void MainWindow::on_action_evaluate_clear_all_triggered()
 {
@@ -268,32 +282,52 @@ void MainWindow::get_evaluate_views(QImage& view1,QImage& view2,float display_ra
         size_t eval_output_count = 1;
         eval_v2c2.set_range(0,1);
 
-        if(ui->evaluate_output->currentIndex() != 0 && !evaluate.eval[currentRow].label_prob.empty())
+        switch(ui->evaluate_output->currentIndex())
         {
-            eval_output_count = evaluate.eval[currentRow].cur_count;
-            view2 << eval_v2c2[tipl::volume2slice_scaled(
-                           evaluate.eval[currentRow].label_prob.alias(eval_I1_buffer[currentRow].size()*ui->eval_label_slider->value(),
-                                         eval_I1_buffer[currentRow].shape()),
-                           ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
-        }
-        if(!eval_label.empty() && ui->evaluate_output->currentIndex() == 0)
-        {
-            if(eval_output_count == 1)
-                eval_v2c2.set_range(0,evaluate.model->out_count-1);
-            if(eval_output_count >= 1)
-                label_on_images(view1,display_ratio,
-                                eval_label,
-                                evaluate.eval[currentRow].image_dim,
-                                d,
-                                slice_pos,
-                                evaluate.model->out_count-1,
-                                ui->template_list->currentIndex() > 0 ? evaluate.atlas_region_count : evaluate.model->out_count-1);
+        case 0:
+            if(!eval_label.empty())
+            {
+                if(eval_output_count == 1)
+                    eval_v2c2.set_range(0,evaluate.model->out_count-1);
+                if(eval_output_count >= 1)
+                    label_on_images(view1,display_ratio,
+                                    eval_label,
+                                    evaluate.eval[currentRow].image_dim,
+                                    d,
+                                    slice_pos,
+                                    evaluate.model->out_count-1,
+                                    ui->template_list->currentIndex() > 0 ? evaluate.atlas_region_count : evaluate.model->out_count-1);
 
-            view2 << eval_v2c2[tipl::volume2slice_scaled(
-                           eval_label.alias(eval_I1_buffer[currentRow].size()*ui->eval_label_slider->value(),
-                                            eval_I1_buffer[currentRow].shape()),
-                           ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
+                view2 << eval_v2c2[tipl::volume2slice_scaled(
+                    eval_label.alias(eval_I1_buffer[currentRow].size()*ui->eval_label_slider->value(),
+                                     eval_I1_buffer[currentRow].shape()),
+                                     ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
+            }
+            break;
+        case 1:
+            if(!evaluate.eval[currentRow].fg_prob.empty())
+                view2 << eval_v2c2[tipl::volume2slice_scaled(tipl::normalize(evaluate.eval[currentRow].fg_prob*eval_I1_buffer[currentRow]),
+                                                             ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
+            break;
+        case 2:
+            if(!evaluate.eval[currentRow].fg_prob.empty())
+                view2 << eval_v2c2[tipl::volume2slice_scaled(evaluate.eval[currentRow].fg_prob,
+                                                             ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
+            break;
+        case 3: // unet output
+            if(!evaluate.eval[currentRow].label_prob.empty())
+            {
+                eval_output_count = evaluate.eval[currentRow].cur_count;
+                view2 << eval_v2c2[tipl::volume2slice_scaled(
+                    evaluate.eval[currentRow].label_prob.alias(eval_I1_buffer[currentRow].size()*ui->eval_label_slider->value(),
+                                                               eval_I1_buffer[currentRow].shape()),
+                    ui->eval_view_dim->currentIndex(),slice_pos,display_ratio)];
+            }
+            break;
         }
+
+
+
         ui->eval_label_slider->setMaximum(eval_output_count-1);
         ui->eval_label_slider->setVisible(eval_output_count > 1);
     }
