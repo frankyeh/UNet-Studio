@@ -151,20 +151,9 @@ void MainWindow::on_label_slider_valueChanged(int value)
 {
     on_pos_valueChanged(ui->pos->value());
 }
-void MainWindow::on_eval_label_slider_valueChanged(int value)
-{
-    on_eval_pos_valueChanged(ui->eval_pos->value());
-}
+
 void MainWindow::on_error_x_size_valueChanged(int arg1){plot_error();}
 void MainWindow::on_error_y_size_valueChanged(int arg1){plot_error();}
-void MainWindow::on_evaluate_output_currentIndexChanged(int index)
-{
-    if(index != 0)
-        ui->template_list->setCurrentIndex(0);
-    ui->atlas_label->setVisible(index == 0);
-    ui->template_list->setVisible(index == 0);
-    ui->atlas_list->setVisible(index == 0);
-}
 
 
 void MainWindow::on_template_list_currentIndexChanged(int index)
