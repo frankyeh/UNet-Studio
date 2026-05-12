@@ -10,18 +10,15 @@ struct EvaluateParam{
     std::vector<std::string> image_file_name;
     torch::Device device = torch::kCPU;
 };
-struct ProcStrategy{
-    // preproc
-    unsigned char output_format = 0;
-};
 
 class evaluate_unet{
 public:
     EvaluateParam param;
 public:
-    ProcStrategy proc_strategy;
     std::vector<tipl::ml3d::evalution_set<tipl::image<3>>> eval;
-    std::vector<bool> data_ready;
+    std::vector<unsigned char> data_ready;
+    std::vector<std::string> image_file_name;
+    torch::Device device = torch::kCPU;
     std::shared_ptr<std::thread> read_file_thread;
     void read_file(void);
     void get_result(size_t index);
