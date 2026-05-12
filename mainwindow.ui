@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1145</width>
-    <height>878</height>
+    <height>885</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -104,7 +104,7 @@
          <string>Console...</string>
         </property>
         <property name="icon">
-         <iconset resource="../DSI-Studio/icons.qrc">
+         <iconset resource="icons.qrc">
           <normaloff>:/icons/icons/console.xpm</normaloff>:/icons/icons/console.xpm</iconset>
         </property>
        </widget>
@@ -114,7 +114,7 @@
     <item>
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="tab_2">
        <attribute name="title">
@@ -317,7 +317,7 @@
                 <string/>
                </property>
                <property name="pixmap">
-                <pixmap resource="../DSI-Studio/icons.qrc">:/icons/icons/ajax-loader.gif</pixmap>
+                <pixmap>:/icons/icons/ajax-loader.gif</pixmap>
                </property>
               </widget>
              </item>
@@ -1803,7 +1803,6 @@
  </tabstops>
  <resources>
   <include location="icons.qrc"/>
-  <include location="../DSI-Studio/icons.qrc"/>
  </resources>
  <connections>
   <connection>
