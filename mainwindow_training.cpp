@@ -238,8 +238,10 @@ void MainWindow::on_action_train_new_network_triggered()
         QMessageBox::critical(this,"ERROR","Please specify training images");
         return;
     }
-    auto feature = QInputDialog::getText(this,"","Please Specify Network Structure",QLineEdit::Normal,QString::fromStdString(default_feature(out_count)));
-    if(feature.isEmpty())
+    bool okay;
+    QString arch = QString::fromStdString((train.model) ? train.model->architecture : default_feature(out_count));
+    auto feature = QInputDialog::getMultiLineText(this,"","Please Specify Network Structure",arch,&okay);
+    if(feature.isEmpty() || !okay)
         return;
     torch::manual_seed(0);
     at::globalContext().setDeterministicCuDNN(true);
