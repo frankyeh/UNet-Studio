@@ -591,7 +591,7 @@ void train_unet::validate(void)
                         dice_v += dice.item().toFloat();
                         mse_v += mse.item().toFloat();
                     }
-                    for(size_t i = 0;i < test_in_tensor.size();++i)
+
                     {
                         errors.push_back(ce_v/double(test_in_tensor.size()));
                         errors.push_back(dice_v/double(test_in_tensor.size()));
