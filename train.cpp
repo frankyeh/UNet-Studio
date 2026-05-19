@@ -340,13 +340,18 @@ inline std::tuple<torch::Tensor,torch::Tensor,torch::Tensor> calc_losses(const t
 
 void train_unet::train(void)
 {
+    tipl::out() << "starting epoch: " << (cur_validation_epoch = cur_epoch = model->errors.size()/3);
+
     auto run_training = [=]()
     {
         try
         {
-            model->report += " Training was conducted over "+std::to_string(param.epoch)+" epochs ";
-            model->report += "using a batch size of "+std::to_string(param.batch_size)+". ";
-            model->report += "Optimization employed an initial learning rate of "+std::to_string(param.learning_rate)+" using SGD with Nesterov momentum.";
+            if(cur_epoch == 0 && model->prior_errors.empty())
+            {
+                model->report += " Training was conducted over "+std::to_string(param.epoch)+" epochs ";
+                model->report += "using a batch size of "+std::to_string(param.batch_size)+". ";
+                model->report += "Optimization employed an initial learning rate of "+std::to_string(param.learning_rate)+" using SGD with Nesterov momentum.";
+            }
 
             while(cur_epoch<param.epoch && !aborted)
             {
@@ -684,14 +689,11 @@ void train_unet::start(void)
     if(param.image_file_name.empty())
         return error_msg = "please specify the training data",aborted = true,void();
 
-    cur_validation_epoch = cur_epoch = model->errors.size()/3;
 
     model->to(param.device);
     model->train();
-
     if(model->errors.empty() || !model->optimizer.get())
     {
-        tipl::out() << "current epoch: " << model->errors.size()/3;
         model->create_optimizer(param.learning_rate);
         if(std::filesystem::exists(model_path+".opt"))
         {
@@ -803,7 +805,6 @@ int tra(void)
     train.param.batch_size =        po.get("batch_size",train.param.batch_size);
     train.param.learning_rate =     po.get("learning_rate",train.param.learning_rate);
     train.param.epoch =             po.get("epoch",train.param.epoch);
-    train.param.seed =              po.get("seed",po.get("restart",0));
     train.param.is_label =          po.get("is_label",train.param.is_label?1:0);
     train.param.cost_ce =           po.get("cost_ce",train.param.cost_ce ? 1:0);
     train.param.cost_dice =         po.get("cost_dice",train.param.cost_dice ? 1:0);
@@ -834,12 +835,16 @@ int tra(void)
 
         tipl::out() << train.model->get_info();
 
-        if(po.get("restart",0))
+        train.param.seed = ((train.model->prior_errors.size()+train.model->errors.size())/3)/train.param.epoch;
+
+        if(train.model->errors.size()/3 == train.param.epoch)
         {
-            tipl::out() << "restart training model";
+            tipl::out() << "prior training finished. restart training model";
             train.model->prior_errors.insert(train.model->prior_errors.end(),train.model->errors.begin(),train.model->errors.end());
             train.model->errors.clear();
         }
+
+        tipl::out() << "resume training model with seed: " << train.param.seed;
     }
     else
     {
@@ -861,7 +866,7 @@ int tra(void)
         try
         {
             train.model = UNet3d(in_count,out_count,architecture);
-            tipl::out() << "dim: " << (train.model->dim = tipl::ml3d::round_up_size(dim));
+            tipl::out() << "dim: " << (train.model->dim = tipl::ml3d::round_up_size(tipl::v(32,32,32),dim));
             tipl::out() << "vs: " << (train.model->voxel_size = vs);
         }
         catch(...)
@@ -869,6 +874,8 @@ int tra(void)
             return tipl::error() << "invalid network structure ",1;
         }
     }
+
+    train.param.seed = po.get("seed",train.param.seed);
 
     if(po.has("label_weight"))
         train.param.set_weight(po.get("label_weight"));

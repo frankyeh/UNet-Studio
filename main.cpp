@@ -174,6 +174,8 @@ bool load_from_file(UNet3d& model,const char* file_name)
         tipl::out() << "fov_strategy:" << model->fov_strategy;
     if(mat.read("preproc",model->preproc))
         tipl::out() << "preproc:" << model->preproc;
+    if(mat.read("orientation",model->orientation))
+        tipl::out() << "orientation:" << model->orientation;
     if(mat.read("postproc",model->postproc))
         tipl::out() << "postproc:" << model->postproc;
 
@@ -211,6 +213,7 @@ bool save_to_file(UNet3d& model,const char* file_name)
     mat.write("report",model->report);
     mat.write("fov_strategy",model->fov_strategy);
     mat.write("preproc",model->preproc);
+    mat.write("orientation",model->orientation);
     mat.write("postproc",model->postproc);
     mat.write("errors",model->errors,3);
     mat.write("prior_errors",model->prior_errors,3);

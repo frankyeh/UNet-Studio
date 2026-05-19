@@ -148,7 +148,7 @@ void evaluate_unet::read_file(void)
             eval[i].mask.clear();
             if(!eval[i].load_from_file<tipl::io::gz_nifti>(image_file_name[i]) ||
                !eval[i].handle_fov_pre(model->fov_strategy) ||
-               !eval[i].preproc(model->preproc))
+                !eval[i].handle_orientation(model->orientation))
                 return tipl::error() << (error_msg = image_file_name[i] + " : " + eval[i].error_msg),aborted = true,void();
             data_ready[i] = true;
         }
@@ -166,16 +166,14 @@ void evaluate_unet::evaluate(void)
                     if(aborted) return; else std::this_thread::sleep_for(100ms);
                 status = "preproc_actions";
                 tipl::out() << "inferencing using u-net";
-                eval[cur_prog].model_output.resize(eval[cur_prog].model_input.size());
                 torch::NoGradGuard no_grad;
-                for(size_t i = 0;i < eval[cur_prog].model_input.size();++i)
+                for(size_t i = 0;i < eval[cur_prog].model_io.size();++i)
                 {
-                    auto& in = eval[cur_prog].model_input[i];
-                    auto& out = eval[cur_prog].model_output[i];
-                    out.resize(in.shape().multiply(tipl::shape<3>::z,model->out_count).divide(tipl::shape<3>::z,model->in_count));
-                    auto result = model->forward(torch::from_blob(in.data(),
-                                              {1,model->in_count,int(in.depth()/model->in_count),int(in.height()),int(in.width())}).to(device))[0];
-                    std::memcpy(out.data(),result.to(torch::kCPU).contiguous().data_ptr<float>(),out.size()*sizeof(float));
+                    auto& io = eval[cur_prog].model_io[i];
+                    auto result = model->forward(torch::from_blob(io.data(),
+                                              {1,model->in_count,int(io.depth()/model->in_count),int(io.height()),int(io.width())}).to(device))[0];
+                    io.resize(io.shape().multiply(tipl::shape<3>::z,model->out_count).divide(tipl::shape<3>::z,model->in_count));
+                    std::memcpy(io.data(),result.to(torch::kCPU).contiguous().data_ptr<float>(),io.size()*sizeof(float));
                 }
                 cur_prog++;
             }
@@ -217,10 +215,10 @@ void evaluate_unet::output(void)
 
                 status = "evaluating";
 
-                if(eval[cur_output].model_output.empty())
+                if(eval[cur_output].model_io.empty())
                     return tipl::error() << "no model output for " << image_file_name[cur_output],aborted = true,void();
 
-                if(!eval[cur_output].handle_fov_post() || !eval[cur_output].command(model->postproc))
+                if(!eval[cur_output].handle_orientation(model->orientation,true) || !eval[cur_output].handle_fov_post() || !eval[cur_output].command(model->postproc))
                     return tipl::error() << (error_msg = eval[cur_output].error_msg),aborted = true,void();
                 cur_output++;
             }

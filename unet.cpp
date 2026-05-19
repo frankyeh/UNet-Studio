@@ -95,7 +95,7 @@ UNet3dImpl::UNet3dImpl(int32_t in_count_,
     postproc = "softmax+create_mask+argmax";
     std::vector<std::vector<std::string>> enc_tokens, dec_tokens;
     {
-        std::vector<std::string> all_lines(tipl::split_in_lines(architecture_));
+        std::vector<std::string> all_lines(tipl::split_by_line_breaks(architecture_));
         if(all_lines.size() < 3)
             throw std::runtime_error("invalid u-net structure");
         size_t enc_count = all_lines.size() / 2 + 1;

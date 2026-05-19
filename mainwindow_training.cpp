@@ -122,7 +122,7 @@ void MainWindow::on_action_train_open_files_triggered()
         return;
     add_work_dir(QFileInfo(fileNames.front()).absolutePath());
     in_count = 1;
-    model_dim = tipl::ml3d::round_up_size(model_dim);
+    model_dim = tipl::ml3d::round_up_size(tipl::v(32,32,32),model_dim);
     image_last_added_indices.clear();
 
     for(auto& s : fileNames)
