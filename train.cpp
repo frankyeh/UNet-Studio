@@ -822,7 +822,6 @@ int tra(void)
     train.param.cost_mse =          po.get("cost_mse",train.param.cost_mse ? 1:0);
     train.param.seed =              po.get("seed",((train.model->prior_errors.size()+train.model->errors.size())/3)/train.param.epoch);
     train.param.device = torch::Device(po.get("device",def_device));
-    tipl::progress p("start training");
 
     {
         train.param.image_file_name = po.get_files("source");
