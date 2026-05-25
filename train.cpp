@@ -134,29 +134,7 @@ void simulate_modality(tipl::image<3>& t1w,
 
 void train_unet::read_file(void)
 {
-    thread_count = po.get("thread_count",std::min<int>(8,std::thread::hardware_concurrency()));
-
-    train_image = std::vector<tipl::image<3>>(param.image_file_name.size());
-    train_label = std::vector<tipl::image<3>>(param.image_file_name.size());
-
-
-    in_data_read_id = std::vector<size_t>(thread_count);
-    in_file_read_id = std::vector<size_t>(thread_count);
-    in_file_seed = std::vector<size_t>(thread_count);
-    out_data = std::vector<tipl::image<3>>(thread_count);
-    in_data = std::vector<tipl::image<3>>(thread_count);
-    in_file = std::vector<tipl::image<3>>(thread_count);
-    out_file = std::vector<tipl::image<3>>(thread_count);
-    data_ready = std::vector<char>(thread_count,false);
-    file_ready = std::vector<char>(thread_count,false);
-    test_data_ready = false;
-    test_in_tensor.clear();
-    test_out_tensor.clear();
-
-    size_t begin_epoch = param.batch_size*(model->errors.size()/3);
-
-
-    read_images.reset(new std::thread([this,begin_epoch]()
+    read_images.reset(new std::thread([this]()
     {
         std::vector<char> train_image_is_template(std::vector<char>(param.image_file_name.size(),false));
 
@@ -222,7 +200,7 @@ void train_unet::read_file(void)
         std::uniform_int_distribution<int> template_gen(0,std::max<int>(1,template_indices.size())-1);
         std::uniform_int_distribution<int> non_template_gen(0,std::max<int>(1,non_template_indices.size())-1);
         std::mt19937 gen(param.seed);
-
+        size_t begin_epoch = param.batch_size*(model->errors.size()/3);
         for(size_t seed_id = 0;!aborted;++seed_id)
         {
             bool use_template = non_template_indices.empty() || seed_id % param.batch_size < template_indices.size();
@@ -340,8 +318,6 @@ inline std::tuple<torch::Tensor,torch::Tensor,torch::Tensor> calc_losses(const t
 
 void train_unet::train(void)
 {
-    tipl::out() << "starting epoch: " << (cur_validation_epoch = cur_epoch = model->errors.size()/3);
-
     auto run_training = [=]()
     {
         try
@@ -683,49 +659,84 @@ void train_unet::start(void)
         error_msg.clear();
     }
 
-    tipl::progress p("starting training");
-    tipl::out() << model->get_info();
 
     if(param.image_file_name.empty())
         return error_msg = "please specify the training data",aborted = true,void();
 
 
-    model->to(param.device);
-    model->train();
-    if(model->errors.empty() || !model->optimizer.get())
+    while(model->errors.size() >= param.epoch*3)
     {
-        model->create_optimizer(param.learning_rate);
-        if(std::filesystem::exists(model_path+".opt"))
+        tipl::out() << "prior training finished. restart training model...";
+        model->prior_errors.insert(model->prior_errors.end(),model->errors.begin(),model->errors.begin() + param.epoch*3);
+        model->errors.erase(model->errors.begin(),model->errors.begin() + param.epoch*3);
+    }
+    tipl::out() << "starting epoch: " << (cur_validation_epoch = cur_epoch = model->errors.size()/3);
+
+
+    {
+        model->to(param.device);
+        model->train();
+        if(!model->optimizer.get())
         {
-            tipl::out() << "loading existing optimizer " << model_path+".opt";
-            try
+            model->create_optimizer(param.learning_rate);
+            if(std::filesystem::exists(model_path+".opt"))
             {
-                torch::load(*(model->optimizer),
-                            (std::filesystem::path(model_path) += ".opt").make_preferred().string());
-            }
-            catch(const c10::Error& e)
-            {
-                return tipl::error() << (error_msg = std::string("cannot load optimizer: ") + e.what()),aborted = true,void();
+                tipl::out() << "loading existing optimizer " << model_path+".opt";
+                try
+                {
+                    torch::load(*(model->optimizer),
+                                (std::filesystem::path(model_path) += ".opt").make_preferred().string());
+                }
+                catch(const c10::Error& e)
+                {
+                    return tipl::error() << (error_msg = std::string("cannot load optimizer: ") + e.what()),aborted = true,void();
+                }
             }
         }
     }
 
-    tipl::out() << "gpu count: " << torch::cuda::device_count();
-    other_models.clear();
-    for(int i = 1,gpu_count = torch::cuda::device_count();i<gpu_count;++i)
     {
-        tipl::out() << "model added at cuda:" << i << std::endl;
-        auto new_model = UNet3d(model->in_count,model->out_count,model->architecture);
-        new_model->to(torch::Device(torch::kCUDA,i));
-        new_model->train();
-        other_models.push_back(new_model);
+        tipl::out() << "gpu count: " << torch::cuda::device_count();
+        other_models.clear();
+        for(int i = 1,gpu_count = torch::cuda::device_count();i<gpu_count;++i)
+        {
+            tipl::out() << "model added at cuda:" << i << std::endl;
+            auto new_model = UNet3d(model->in_count,model->out_count,model->architecture);
+            new_model->to(torch::Device(torch::kCUDA,i));
+            new_model->train();
+            other_models.push_back(new_model);
+        }
+
+        output_model = UNet3d(model->in_count,model->out_count,model->architecture);
+        output_model->to(param.test_device);
+        output_model->copy_from(*model);
+        output_model->errors = model->errors;
     }
 
-    output_model = UNet3d(model->in_count,model->out_count,model->architecture);
-    output_model->to(param.test_device);
-    output_model->copy_from(*model);
-    output_model->errors = model->errors;
 
+
+    {
+        thread_count = po.get("thread_count",std::min<int>(8,std::thread::hardware_concurrency()));
+
+        train_image = std::vector<tipl::image<3>>(param.image_file_name.size());
+        train_label = std::vector<tipl::image<3>>(param.image_file_name.size());
+
+
+        in_data_read_id = std::vector<size_t>(thread_count);
+        in_file_read_id = std::vector<size_t>(thread_count);
+        in_file_seed = std::vector<size_t>(thread_count);
+        out_data = std::vector<tipl::image<3>>(thread_count);
+        in_data = std::vector<tipl::image<3>>(thread_count);
+        in_file = std::vector<tipl::image<3>>(thread_count);
+        out_file = std::vector<tipl::image<3>>(thread_count);
+        data_ready = std::vector<char>(thread_count,false);
+        file_ready = std::vector<char>(thread_count,false);
+        test_data_ready = false;
+        test_in_tensor.clear();
+        test_out_tensor.clear();
+    }
+
+    tipl::progress p("starting training");
 
     read_file();
     train();
@@ -809,6 +820,7 @@ int tra(void)
     train.param.cost_ce =           po.get("cost_ce",train.param.cost_ce ? 1:0);
     train.param.cost_dice =         po.get("cost_dice",train.param.cost_dice ? 1:0);
     train.param.cost_mse =          po.get("cost_mse",train.param.cost_mse ? 1:0);
+    train.param.seed =              po.get("seed",((train.model->prior_errors.size()+train.model->errors.size())/3)/train.param.epoch);
     train.param.device = torch::Device(po.get("device",def_device));
     tipl::progress p("start training");
 
@@ -826,56 +838,43 @@ int tra(void)
                            "=>" << std::filesystem::path(train.param.label_file_name[i]).filename().string();
     }
 
-    train.model_path = get_model_path();
-    if(std::filesystem::exists(train.model_path))
-    {
-        tipl::out() << "loading existing model " << train.model_path;
-        if(!load_from_file(train.model,train.model_path.c_str()))
-            return tipl::error() << "failed to load model from " << train.model_path,1;
-
-        tipl::out() << train.model->get_info();
-
-        train.param.seed = ((train.model->prior_errors.size()+train.model->errors.size())/3)/train.param.epoch;
-
-        if(train.model->errors.size()/3 == train.param.epoch)
-        {
-            tipl::out() << "prior training finished. restart training model";
-            train.model->prior_errors.insert(train.model->prior_errors.end(),train.model->errors.begin(),train.model->errors.end());
-            train.model->errors.clear();
-        }
-
-        tipl::out() << "resume training model with seed: " << train.param.seed;
-    }
-    else
     {
         tipl::progress prog("setting up model");
-        tipl::image<3,char> I;
-        tipl::shape<3> dim;
-        tipl::vector<3> vs;
-
-        if(!(tipl::io::gz_nifti(train.param.label_file_name[0],std::ios::in) >> I >>
-            [&](const auto& e){tipl::error() << "cannot load label file: " << e;}) ||
-            !(tipl::io::gz_nifti(train.param.image_file_name[0],std::ios::in) >> dim >> vs >>
-            [&](const auto& e){tipl::error() << "cannot load image file: " << e;}))
-            return 1;
-
-        size_t in_count = po.get("in_count",1);
-        size_t out_count = po.get("out_count",tipl::max_value(I)+1);
-        std::string architecture = po.get("architecture",default_feature(out_count));
-
-        try
+        train.model_path = get_model_path();
+        if(std::filesystem::exists(train.model_path))
         {
-            train.model = UNet3d(in_count,out_count,architecture);
-            tipl::out() << "dim: " << (train.model->dim = tipl::ml3d::round_up_size(tipl::v(32,32,32),dim));
-            tipl::out() << "vs: " << (train.model->voxel_size = vs);
+            tipl::out() << "loading existing model " << train.model_path;
+            if(!load_from_file(train.model,train.model_path.c_str()))
+                return tipl::error() << "failed to load model from " << train.model_path,1;
         }
-        catch(...)
+        else
         {
-            return tipl::error() << "invalid network structure ",1;
+            tipl::image<3,char> I;
+            tipl::shape<3> dim;
+            tipl::vector<3> vs;
+
+            if(!(tipl::io::gz_nifti(train.param.label_file_name[0],std::ios::in) >> I >>
+                  [&](const auto& e){tipl::error() << "cannot load label file: " << e;}) ||
+                !(tipl::io::gz_nifti(train.param.image_file_name[0],std::ios::in) >> dim >> vs >>
+                  [&](const auto& e){tipl::error() << "cannot load image file: " << e;}))
+                return 1;
+
+            size_t in_count = po.get("in_count",1);
+            size_t out_count = po.get("out_count",tipl::max_value(I)+1);
+            std::string architecture = po.get("architecture",default_feature(out_count));
+
+            try
+            {
+                train.model = UNet3d(in_count,out_count,architecture);
+                tipl::out() << "dim: " << (train.model->dim = tipl::ml3d::round_up_size(tipl::v(32,32,32),dim));
+                tipl::out() << "vs: " << (train.model->voxel_size = vs);
+            }
+            catch(...)
+            {
+                return tipl::error() << "invalid network structure ",1;
+            }
         }
     }
-
-    train.param.seed = po.get("seed",train.param.seed);
 
     if(po.has("label_weight"))
         train.param.set_weight(po.get("label_weight"));
