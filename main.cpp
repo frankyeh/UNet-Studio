@@ -186,7 +186,7 @@ bool load_from_file(UNet3d& model,const char* file_name)
     model->prior_errors = mat.read_as_vector<float>("prior_errors");
 
     model->train();
-    model->print_layers();
+    // model->print_layers();
     int id = 0;
     for(auto& tensor : model->parameters())
     {
