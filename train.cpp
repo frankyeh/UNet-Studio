@@ -812,17 +812,6 @@ int tra(void)
         train.stop();
     }
 
-    auto def_device = torch::hasCUDA()?"cuda:0":(torch::hasHIP()?"hip:0":(torch::hasMPS()?"mps:0":"cpu"));
-    train.param.batch_size =        po.get("batch_size",train.param.batch_size);
-    train.param.learning_rate =     po.get("learning_rate",train.param.learning_rate);
-    train.param.epoch =             po.get("epoch",train.param.epoch);
-    train.param.is_label =          po.get("is_label",train.param.is_label?1:0);
-    train.param.cost_ce =           po.get("cost_ce",train.param.cost_ce ? 1:0);
-    train.param.cost_dice =         po.get("cost_dice",train.param.cost_dice ? 1:0);
-    train.param.cost_mse =          po.get("cost_mse",train.param.cost_mse ? 1:0);
-    train.param.seed =              po.get("seed",((train.model->prior_errors.size()+train.model->errors.size())/3)/train.param.epoch);
-    train.param.device = torch::Device(po.get("device",def_device));
-
     {
         train.param.image_file_name = po.get_files("source");
         train.param.label_file_name = po.get_files("label");
@@ -874,6 +863,16 @@ int tra(void)
             }
         }
     }
+
+    train.param.batch_size =        po.get("batch_size",train.param.batch_size);
+    train.param.learning_rate =     po.get("learning_rate",train.param.learning_rate);
+    train.param.epoch =             po.get("epoch",train.param.epoch);
+    train.param.is_label =          po.get("is_label",train.param.is_label?1:0);
+    train.param.cost_ce =           po.get("cost_ce",train.param.cost_ce ? 1:0);
+    train.param.cost_dice =         po.get("cost_dice",train.param.cost_dice ? 1:0);
+    train.param.cost_mse =          po.get("cost_mse",train.param.cost_mse ? 1:0);
+    train.param.seed =              po.get("seed",((train.model->prior_errors.size()+train.model->errors.size())/3)/train.param.epoch);
+    train.param.device = torch::Device(po.get("device",torch::hasCUDA()?"cuda:0":(torch::hasHIP()?"hip:0":(torch::hasMPS()?"mps:0":"cpu"))));
 
     if(po.has("label_weight"))
         train.param.set_weight(po.get("label_weight"));
