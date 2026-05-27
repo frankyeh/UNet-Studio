@@ -135,6 +135,17 @@ void MainWindow::on_evaluate_clicked()
 }
 
 
+void MainWindow::on_actionDeploy_Model_triggered()
+{
+    if(evaluate.model.get())
+    {
+        QString fileName = tipl::qt::save_image_file(this,ui->workDir->currentText(),"Model files (*nz);;All files (*)");
+        if(fileName.isEmpty())
+            return;
+        ui->evaluate_network_info->setText(QString("name: %1\n").arg(eval_name) + evaluate.model->get_info().c_str());
+        save_to_file(evaluate.model,fileName.toUtf8().constData());
+    }
+}
 
 void MainWindow::evaluating()
 {
