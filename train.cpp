@@ -10,9 +10,6 @@
 extern tipl::program_option<tipl::out> po;
 using namespace std::chrono_literals;
 
-bool load_from_file(UNet3d& model,const char* file_name);
-bool save_to_file(UNet3d& model,const char* file_name);
-
 bool read_image_and_label(const std::string& image_name,
                           const std::string& label_name,tipl::image<3>& input,tipl::image<3>& label)
 {
