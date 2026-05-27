@@ -130,5 +130,6 @@ private slots:
     void on_template_list_currentIndexChanged(int index);
     void on_browseDir_clicked();
     void on_console_clicked();
+    void on_actionDeploy_Model_triggered();
 };
 #endif // MAINWINDOW_H
