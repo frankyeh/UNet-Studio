@@ -263,7 +263,8 @@ void train_unet::read_file(void)
         size_t begin_epoch = param.batch_size*(model->errors.size()/3);
         for(size_t seed_id = 0;!aborted;++seed_id)
         {
-            bool use_template = non_template_indices.empty() || seed_id % param.batch_size < template_indices.size();
+            bool use_template = non_template_indices.empty() ||
+                                (param.batch_size > 1 && (seed_id % param.batch_size == 0));
             size_t read_id = (use_template ? template_indices[template_gen(gen)] : non_template_indices[non_template_gen(gen)]);
             if(seed_id < begin_epoch)
                 continue;
@@ -283,25 +284,28 @@ void train_unet::read_file(void)
                 reading_status = "preprocessing";
                 if(!param.is_label)
                     tipl::normalize(label);
+
+                auto cur_max_label = tipl::max_value(label);
+
+                if(!train_image_is_template[read_id] && cur_max_label <= max_template_label)
+                {
+                    tipl::out() << "shift label value for " << label_name;
+                    for(auto& v : label)
+                        if(v)
+                            v += max_template_label;
+                    cur_max_label += max_template_label;
+                }
+
+                if(cur_max_label >= model->out_count)
+                    return error_msg = "label value exceeds model output at " + label_name,aborted = true,void();
+
                 if(train_image_is_template[read_id])
                 {
                     train_image[read_id] = image;
                     train_label[read_id] = label;
                 }
-                else
-                {
-                    auto cur_max_label = tipl::max_value(label);
-                    if(cur_max_label <= max_template_label)
-                    {
-                        tipl::out() << "shift label value for " << label_name;
-                        for(auto& v : label)
-                            if(v)
-                                v += max_template_label;
-                        cur_max_label += max_template_label;
-                    }
-                    if(cur_max_label >= model->out_count)
-                        return error_msg = "label value exceeds model output at " + label_name,aborted = true,void();
-                }
+
+
             }
             else
             {
@@ -953,7 +957,7 @@ int tra(void)
         }
         else
         {
-            tipl::image<3,char> I;
+            tipl::image<3,int> I;
             tipl::shape<3> dim;
             tipl::vector<3> vs;
 
