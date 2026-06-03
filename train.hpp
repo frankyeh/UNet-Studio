@@ -31,7 +31,11 @@ struct training_param{
 
 bool save_to_file(UNet3d& model,const char* file_name);
 bool load_from_file(UNet3d& model,const char* file_name);
-bool read_image_and_label(const std::string& image_name,const std::string& label_name,tipl::image<3>& input,tipl::image<3>& label);
+bool read_image_and_label(const std::string& image_name,
+                          const std::string& label_name,
+                          const tipl::shape<3>& model_dim,
+                          const tipl::vector<3>& model_vs,
+                          tipl::image<3>& input,tipl::image<3>& label);
 void simulate_modality(tipl::image<3>& t1w, // store t1w or [t1w t2w]
                        const tipl::image<3>& label,
                        unsigned int max_label,
@@ -55,6 +59,8 @@ public:
 private:
     std::vector<tipl::image<3> > train_image,train_label;
     std::vector<torch::Tensor> test_in_tensor,test_out_tensor;
+    std::vector<char> train_image_is_template;
+    size_t max_template_label = 1;
     bool test_data_ready = false;
     std::shared_ptr<std::thread> read_images;
 private:

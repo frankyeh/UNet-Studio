@@ -116,13 +116,20 @@ void MainWindow::on_action_train_open_files_triggered()
     );
     if (fileNames.isEmpty())
         return;
-
-    if(!(tipl::io::gz_nifti(fileNames[0].toUtf8().constData(),std::ios::in) >> model_vs >> model_dim >>
+    tipl::shape<3> dim;
+    tipl::vector<3> vs;
+    if(!(tipl::io::gz_nifti(fileNames[0].toUtf8().constData(),std::ios::in) >> vs >> dim >>
         [&](auto& e){QMessageBox::critical(this,"ERROR",e.c_str());}))
         return;
     add_work_dir(QFileInfo(fileNames.front()).absolutePath());
     in_count = 1;
-    model_dim = tipl::ml3d::round_up_size(tipl::v(32,32,32),model_dim);
+
+    if(image_list.isEmpty())
+    {
+        model_dim = tipl::ml3d::round_up_size(tipl::v(32,32,32),dim);
+        model_vs = vs;
+    }
+
     image_last_added_indices.clear();
 
     for(auto& s : fileNames)
@@ -574,7 +581,9 @@ void MainWindow::on_list1_currentRowChanged(int currentRow)
     if(currentRow >= 0 && currentRow < image_list.size())
     {
         if(!std::filesystem::exists(image_list[currentRow].toUtf8().constData()) ||
-            !read_image_and_label(image_list[currentRow].toUtf8().constData(),label_list[currentRow].toUtf8().constData(),I1,I2))
+            !read_image_and_label(image_list[currentRow].toUtf8().constData(),label_list[currentRow].toUtf8().constData(),
+                                  model_dim,model_vs,
+                                  I1,I2))
             I2.clear();
         else
         {
