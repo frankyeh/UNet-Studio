@@ -27,6 +27,7 @@ bool read_image_and_label(const std::string& image_name,
     arg.translocation[2] = 0.5f*(float(image_dim[2]-1)*image_vs[2] - float(model_dim[2]-1)*model_vs[2]);
     tipl::transformation_matrix<float,3> t(arg,model_dim,model_vs,image_dim,image_vs);
     input = t.template operator()<tipl::linear>(input,model_dim);
+    tipl::normalize(input);
 
 
     label.clear();
@@ -252,6 +253,7 @@ void train_unet::read_file(void)
                 aborted = true;
                 return;
             }
+
         }
         test_data_ready = true;
 
@@ -578,6 +580,13 @@ void train_unet::train(void)
                         {
                             std::scoped_lock<std::mutex> lock(out_mutex);
                             tipl::error() << (error_msg = std::string("GPU thread ") + std::to_string(thread_id) + ": " + e.what());
+                            aborted = true;
+                        }
+                        catch(const std::exception& e)
+                        {
+                            std::scoped_lock<std::mutex> lock(out_mutex);
+                            tipl::error() << (error_msg = std::string("GPU thread ") +
+                                                          std::to_string(thread_id) + ": " + e.what());
                             aborted = true;
                         }
                     });
