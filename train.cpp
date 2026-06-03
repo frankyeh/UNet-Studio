@@ -215,7 +215,7 @@ void train_unet::read_file(void)
             return error_msg = "no template image found to determine max template label",aborted = true,void();
 
         {
-            tipl::image<3,unsigned char> template_label;
+            tipl::image<3,int> template_label;
             if(!(tipl::io::gz_nifti(param.label_file_name[template_indices.front()],std::ios::in) >> template_label >>
                   [&](const std::string& e){error_msg = e,aborted = true;}))
                 return;
