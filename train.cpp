@@ -933,13 +933,55 @@ int tra(void)
     }
 
     {
-        train.param.image_file_name = po.get_files("source");
-        train.param.label_file_name = po.get_files("label");
-        if(train.param.image_file_name.empty()||train.param.label_file_name.empty())
+        if(!po.has("source") || !po.has("label"))
             return tipl::error() << "please specify training data using --source and --label",1;
+        auto source_list = tipl::split(po.get("source"),',');
+        auto label_list = tipl::split(po.get("source"),',');
 
-        if(train.param.image_file_name.size()!=train.param.label_file_name.size())
-            return tipl::error() << "different number of files found for image and label",1;
+        if(source_list.size() != label_list.size())
+            return tipl::error() << "mismatched number of --source and --label",1;
+
+        auto get_files = [](const std::string& pattern,
+                            std::vector<std::string>& files,
+                            const char* type)->bool
+        {
+            if(!tipl::search_filesystem<tipl::out>(pattern,files))
+                return tipl::error() << "cannot find " << type << " file for " << pattern,false;
+
+            std::sort(files.begin(),files.end());
+            tipl::out() << files.size() << " " << type << " file(s) specified by " << pattern;
+            return true;
+        };
+
+        for(size_t i = 0;i < source_list.size();++i)
+        {
+            tipl::out() << "checking " << source_list[i] << " and " << label_list[i];
+
+            std::vector<std::string> source_files,label_files;
+
+            if(!get_files(source_list[i],source_files,"source"))
+                return 1;
+            if(!get_files(label_list[i],label_files,"label"))
+                return 1;
+
+            if(label_files.size() == 1 && source_files.size() > 1)
+            {
+                tipl::out() << "one common label file " << label_files.front()
+                            << " is used for all file(s) specified by " << source_list[i];
+
+                label_files.resize(source_files.size(),label_files.front());
+            }
+
+            if(source_files.size() != label_files.size())
+                return tipl::error() << "different number of source and label files for "
+                                     << source_list[i] << " and " << label_list[i],1;
+
+            train.param.image_file_name.insert(train.param.image_file_name.end(),
+                                               source_files.begin(),source_files.end());
+
+            train.param.label_file_name.insert(train.param.label_file_name.end(),
+                                               label_files.begin(),label_files.end());
+        }
 
         for(size_t i = 0,sz = train.param.image_file_name.size();i<sz;++i)
             tipl::out() << std::filesystem::path(train.param.image_file_name[i]).filename().string() <<
