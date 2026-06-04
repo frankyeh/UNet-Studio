@@ -936,7 +936,7 @@ int tra(void)
         if(!po.has("source") || !po.has("label"))
             return tipl::error() << "please specify training data using --source and --label",1;
         auto source_list = tipl::split(po.get("source"),',');
-        auto label_list = tipl::split(po.get("source"),',');
+        auto label_list = tipl::split(po.get("label"),',');
 
         if(source_list.size() != label_list.size())
             return tipl::error() << "mismatched number of --source and --label",1;
