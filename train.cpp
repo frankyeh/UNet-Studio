@@ -249,6 +249,8 @@ void train_unet::read_file(void)
 
 
         tipl::out() << "a total of " << param.image_file_name.size() << " training dataset\n";
+        tipl::out() << template_indices.size() << " template training dataset\n";
+        tipl::out() << non_template_indices.size() << " subject training dataset\n";
         tipl::out() << "a total of " << param.test_image_file_name.size() << " testing dataset\n";
 
 
