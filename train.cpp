@@ -208,12 +208,11 @@ void train_unet::read_file(void)
                 non_template_indices.push_back(i);
         }
 
-        tipl::out() << "a total of " << param.image_file_name.size() << " training dataset\n";
-        tipl::out() << "a total of " << param.test_image_file_name.size() << " testing dataset\n";
 
         if(template_indices.empty())
             return error_msg = "no template image found to determine max template label",aborted = true,void();
 
+        // confirm template label
         {
             tipl::image<3,int> template_label;
             if(!(tipl::io::gz_nifti(param.label_file_name[template_indices.front()],std::ios::in) >> template_label >>
@@ -223,6 +222,29 @@ void train_unet::read_file(void)
             max_template_label = tipl::max_value(template_label);
             tipl::out() << "max template label: " << max_template_label;
         }
+
+        std::vector<char> need_shift_label(param.label_file_name.size());
+        tipl::par_for(non_template_indices.size(),[&](size_t index)
+        {
+            size_t i = non_template_indices[index];
+            tipl::image<3,unsigned char> label;
+            if(!(tipl::io::gz_nifti(param.label_file_name[i].c_str(),std::ios::in) >> label >>
+                  [&](const std::string& e){error_msg = e,aborted = true;}))
+                return;
+            auto cur_max_label = tipl::max_value(label);
+            if(cur_max_label < max_template_label && cur_max_label + max_template_label < model->out_count)
+                need_shift_label[i] = 1;
+        });
+
+        for(size_t i = 0;i < need_shift_label.size();++i)
+            if(need_shift_label[i])
+                tipl::out() << "needs shift labels for " << param.label_file_name[i];
+
+
+
+        tipl::out() << "a total of " << param.image_file_name.size() << " training dataset\n";
+        tipl::out() << "a total of " << param.test_image_file_name.size() << " testing dataset\n";
+
 
 
         for(int read_id = 0;read_id < param.test_image_file_name.size() && !aborted;++read_id)
@@ -284,27 +306,14 @@ void train_unet::read_file(void)
                 if(!param.is_label)
                     tipl::normalize(label);
 
-                auto cur_max_label = tipl::max_value(label);
-
-                if(!train_image_is_template[read_id] && cur_max_label <= max_template_label)
-                {
-                    tipl::out() << "shift label value for " << label_name;
-                    for(auto& v : label)
-                        if(v)
-                            v += max_template_label;
-                    cur_max_label += max_template_label;
-                }
-
-                if(cur_max_label >= model->out_count)
-                    return error_msg = "label value exceeds model output at " + label_name,aborted = true,void();
+                if(need_shift_label[read_id])
+                    label += max_template_label;
 
                 if(train_image_is_template[read_id])
                 {
                     train_image[read_id] = image;
                     train_label[read_id] = label;
                 }
-
-
             }
             else
             {
