@@ -260,11 +260,10 @@ void train_unet::read_file(void)
         std::uniform_int_distribution<int> template_gen(0,std::max<int>(1,template_indices.size())-1);
         std::uniform_int_distribution<int> non_template_gen(0,std::max<int>(1,non_template_indices.size())-1);
         std::mt19937 gen(param.seed);
-        size_t begin_epoch = param.batch_size*(model->errors.size()/3);
+        size_t begin_epoch = param.batch_size*(model->testing_errors.size()/3);
         for(size_t seed_id = 0;!aborted;++seed_id)
         {
-            bool use_template = non_template_indices.empty() ||
-                                (param.batch_size > 1 && (seed_id % param.batch_size == 0));
+            bool use_template = non_template_indices.empty() || seed_id % param.batch_size < template_indices.size();
             size_t read_id = (use_template ? template_indices[template_gen(gen)] : non_template_indices[non_template_gen(gen)]);
             if(seed_id < begin_epoch)
                 continue;
@@ -434,7 +433,7 @@ void train_unet::train(void)
     {
         try
         {
-            if(cur_epoch == 0 && model->prior_errors.empty())
+            if(cur_epoch == 0 && model->prior_testing_errors.empty())
             {
                 model->report += " Training was conducted over "+std::to_string(param.epoch)+" epochs ";
                 model->report += "using a batch size of "+std::to_string(param.batch_size)+". ";
@@ -466,6 +465,10 @@ void train_unet::train(void)
 
                 std::vector<std::thread> gpu_threads;
                 std::mutex out_mutex;
+
+
+                std::vector<torch::Tensor> train_error_sum(active_threads);
+                std::vector<size_t> train_error_count(active_threads,0);
 
                 for(int thread_id = 0;thread_id < active_threads;++thread_id)
                 {
@@ -555,6 +558,14 @@ void train_unet::train(void)
                                     auto [ce,dice,mse] = calc_losses(outputs[k],active_target,cur_model->out_count,
                                                                         train_image_is_template[in_data_read_id[data_idx]] ? 0 : int(max_template_label+1));
 
+                                    if(k == 0)
+                                    {
+                                        auto e = torch::stack({ce.detach(),dice.detach(),mse.detach()});
+                                        train_error_sum[thread_id] = train_error_sum[thread_id].defined() ?
+                                                                         train_error_sum[thread_id] + e : e;
+                                        ++train_error_count[thread_id];
+                                    }
+
                                     outputs[k] = torch::Tensor();
 
                                     float norm_weight = (1.0f/(1 << k))*inv_weight_sum;
@@ -601,6 +612,33 @@ void train_unet::train(void)
 
                 if(aborted)
                     return;
+
+                {
+                    std::array<double,3> train_error_total = {0.0,0.0,0.0};
+                    size_t train_error_n = 0;
+
+                    for(int i = 0;i < active_threads;++i)
+                    {
+                        if(!train_error_count[i] || !train_error_sum[i].defined())
+                            continue;
+
+                        auto e = train_error_sum[i].to(torch::kCPU);
+                        train_error_total[0] += e[0].item<double>();
+                        train_error_total[1] += e[1].item<double>();
+                        train_error_total[2] += e[2].item<double>();
+                        train_error_n += train_error_count[i];
+                    }
+
+                    if(train_error_n)
+                    {
+                        model->training_errors.push_back(float(train_error_total[0]/double(train_error_n)));
+                        model->training_errors.push_back(float(train_error_total[1]/double(train_error_n)));
+                        model->training_errors.push_back(float(train_error_total[2]/double(train_error_n)));
+                        output_model->training_errors.push_back(float(train_error_total[0]/double(train_error_n)));
+                        output_model->training_errors.push_back(float(train_error_total[1]/double(train_error_n)));
+                        output_model->training_errors.push_back(float(train_error_total[2]/double(train_error_n)));
+                    }
+                }
 
                 training_status = "update model";
                 for(auto& each:other_models)
@@ -739,8 +777,8 @@ void train_unet::validate(void)
                     std::scoped_lock<std::mutex> lock(error_mutex);
                     for(auto each : errors)
                     {
-                        model->errors.push_back(each);
-                        output_model->errors.push_back(each);
+                        model->testing_errors.push_back(each);
+                        output_model->testing_errors.push_back(each);
                     }
                 }
             }
@@ -784,13 +822,13 @@ void train_unet::start(void)
         return error_msg = "please specify the training data",aborted = true,void();
 
 
-    while(model->errors.size() >= param.epoch*3)
+    while(model->testing_errors.size() >= param.epoch*3)
     {
         tipl::out() << "prior training finished. restart training model...";
-        model->prior_errors.insert(model->prior_errors.end(),model->errors.begin(),model->errors.begin() + param.epoch*3);
-        model->errors.erase(model->errors.begin(),model->errors.begin() + param.epoch*3);
+        model->prior_testing_errors.insert(model->prior_testing_errors.end(),model->testing_errors.begin(),model->testing_errors.begin() + param.epoch*3);
+        model->testing_errors.erase(model->testing_errors.begin(),model->testing_errors.begin() + param.epoch*3);
     }
-    tipl::out() << "starting epoch: " << (cur_validation_epoch = cur_epoch = model->errors.size()/3);
+    tipl::out() << "starting epoch: " << (cur_validation_epoch = cur_epoch = model->testing_errors.size()/3);
 
 
     {
@@ -830,7 +868,10 @@ void train_unet::start(void)
         output_model = UNet3d(model->in_count,model->out_count,model->architecture);
         output_model->to(param.test_device);
         output_model->copy_from(*model);
-        output_model->errors = model->errors;
+        output_model->testing_errors = model->testing_errors;
+        output_model->prior_testing_errors = model->prior_testing_errors;
+        output_model->training_errors = model->training_errors;
+        output_model->prior_training_errors = model->prior_training_errors;
     }
 
 
@@ -932,6 +973,42 @@ int tra(void)
         train.stop();
     }
 
+    if(po.has("bids"))
+    {
+        auto bids_list = tipl::split(po.get("bids"),',');
+        const std::string suffix = "_dseg.nii.gz";
+
+        for(const auto& each : bids_list)
+        {
+            if(!std::filesystem::exists(each))
+                return tipl::error() << "not exist: " << each,1;
+            if(!std::filesystem::is_directory(each))
+                return tipl::error() << "not a directory: " << each,1;
+
+            std::vector<std::string> files;
+            if(!tipl::search_filesystem<tipl::out>((std::filesystem::path(each)/"*.nii.gz").string(),files))
+                return tipl::error() << "cannot find any nii.gz file in " << each,1;
+            size_t matched = 0;
+
+            for(const auto& label : files)
+            {
+                if(!tipl::ends_with(label,suffix))
+                    continue;
+
+                std::string prefix(label.begin(),label.end()-suffix.size());
+
+                for(const auto& image : files)
+                    if(image != label && tipl::begins_with(image,prefix))
+                    {
+                        train.param.image_file_name.push_back(image);
+                        train.param.label_file_name.push_back(label);
+                        ++matched;
+                    }
+            }
+            tipl::out() << each << ": " << matched << " matched pairs";
+        }
+    }
+    else
     {
         if(!po.has("source") || !po.has("label"))
             return tipl::error() << "please specify training data using --source and --label",1;
@@ -983,10 +1060,13 @@ int tra(void)
                                                label_files.begin(),label_files.end());
         }
 
-        for(size_t i = 0,sz = train.param.image_file_name.size();i<sz;++i)
-            tipl::out() << std::filesystem::path(train.param.image_file_name[i]).filename().string() <<
-                           "=>" << std::filesystem::path(train.param.label_file_name[i]).filename().string();
+
     }
+
+    for(size_t i = 0,sz = train.param.image_file_name.size();i<sz;++i)
+        tipl::out() << std::filesystem::path(train.param.image_file_name[i]).filename().string() <<
+            "=>" << std::filesystem::path(train.param.label_file_name[i]).filename().string();
+
 
     {
         tipl::progress prog("setting up model");
@@ -1033,7 +1113,7 @@ int tra(void)
     train.param.cost_ce =           po.get("cost_ce",train.param.cost_ce ? 1:0);
     train.param.cost_dice =         po.get("cost_dice",train.param.cost_dice ? 1:0);
     train.param.cost_mse =          po.get("cost_mse",train.param.cost_mse ? 1:0);
-    train.param.seed =              po.get("seed",((train.model->prior_errors.size()+train.model->errors.size())/3)/train.param.epoch);
+    train.param.seed =              po.get("seed",((train.model->prior_testing_errors.size()+train.model->testing_errors.size())/3)/train.param.epoch);
     train.param.device = torch::Device(po.get("device",torch::hasCUDA()?"cuda:0":(torch::hasHIP()?"hip:0":(torch::hasMPS()?"mps:0":"cpu"))));
 
     if(po.has("label_weight"))

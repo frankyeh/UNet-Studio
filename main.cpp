@@ -182,8 +182,12 @@ bool load_from_file(UNet3d& model,const char* file_name)
     tipl::out() << "voxel_size:" << model->voxel_size;
     tipl::out() << "dimension:" << model->dim;
 
-    model->errors = mat.read_as_vector<float>("errors");
-    model->prior_errors = mat.read_as_vector<float>("prior_errors");
+    model->testing_errors = mat.read_as_vector<float>("errors");
+    model->prior_testing_errors = mat.read_as_vector<float>("prior_errors");
+    model->training_errors = mat.read_as_vector<float>("training_errors");
+    model->prior_training_errors = mat.read_as_vector<float>("prior_training_errors");
+    model->training_errors.resize(model->testing_errors.size());
+    model->prior_training_errors.resize(model->prior_testing_errors.size());
 
     model->train();
     // model->print_layers();
@@ -215,8 +219,10 @@ bool save_to_file(UNet3d& model,const char* file_name)
     mat.write("preproc",model->preproc);
     mat.write("orientation",model->orientation);
     mat.write("postproc",model->postproc);
-    mat.write("errors",model->errors,3);
-    mat.write("prior_errors",model->prior_errors,3);
+    mat.write("errors",model->testing_errors,3);
+    mat.write("prior_errors",model->prior_testing_errors,3);
+    mat.write("training_errors",model->training_errors,3);
+    mat.write("prior_training_errors",model->prior_training_errors,3);
     int id = 0;
     mat.apply_slope = true;
     mat.min_size_for_mask_slope = 1024;

@@ -407,9 +407,9 @@ void MainWindow::on_train_stop_clicked()
 
 void MainWindow::plot_error()
 {
-    if(train.model.get() && !train.model->errors.empty())
+    if(train.model.get() && !train.model->testing_errors.empty())
     {
-        size_t total_epoch = train.model->errors.size()/3;
+        size_t total_epoch = train.model->testing_errors.size()/3;
         size_t x_size = ui->error_x_size->value();
         size_t y_size = ui->error_y_size->value();
         auto x_scale = std::min<float>(5.0f, float(x_size) / float(total_epoch + 1));
@@ -463,7 +463,7 @@ void MainWindow::plot_error()
         painter.setPen(QPen(Qt::black, 2));
         painter.drawRect(left_border, upper_border, x_size, y_size);
 
-        std::vector<float> errors(train.model->get_errors());
+        std::vector<float> errors(train.model->get_testing_errors());
         std::vector<std::string> error_name = {"ce","dice","mse"};
         std::vector<QColor> colors = {QColor(244,177,131), QColor(197,90,17), QColor(142,170,219), QColor(47,84,150)};
 
@@ -487,13 +487,13 @@ void MainWindow::plot_error()
         }
 
         // QTextBrowser update logic remains the same
-        if(error_view_epoch != train.model->errors.size())
+        if(error_view_epoch != train.model->testing_errors.size())
         {
             int scrollPos = ui->errorBrowser->verticalScrollBar()->value();
             QTextCursor cursor = ui->errorBrowser->textCursor();
             QStringList rows;
             rows << QString::fromStdString("epoch\t" + tipl::merge(error_name, '\t'));
-            for(size_t i = 0,pos = 0; i < total_epoch; ++i)
+            for(size_t i = 0,pos = 0; i < errors.size()/3; ++i)
             {
                 QStringList cols;
                 cols << QString::number(i);
@@ -506,7 +506,7 @@ void MainWindow::plot_error()
             ui->errorBrowser->verticalScrollBar()->setValue(scrollPos);
         }
 
-        error_view_epoch = train.model->errors.size();
+        error_view_epoch = train.model->testing_errors.size();
         error_scene << image;
     }
 
