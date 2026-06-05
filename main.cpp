@@ -168,8 +168,6 @@ bool load_from_file(UNet3d& model,const char* file_name)
     if(!mat.read_pointer("dimension",model->dim) ||
        !mat.read_pointer("voxel_size",model->voxel_size) )
         return tipl::error() << "invalid format",false;
-    if(mat.read("report",model->report))
-        tipl::out() << "report:" << model->report;
     if(mat.read("fov_strategy",model->fov_strategy))
         tipl::out() << "fov_strategy:" << model->fov_strategy;
     if(mat.read("preproc",model->preproc))
