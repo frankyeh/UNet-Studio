@@ -316,9 +316,11 @@ void train_unet::read_file(void)
 
                 if(need_shift_label[read_id])
                 {
-                    for(auto& v : label)
-                        if(v)
-                            v += max_template_label;
+                    for(size_t pos = 0,sz = label.size();pos < sz;++pos)
+                        if(label[pos])
+                            label[pos] += max_template_label;
+                        else
+                            label[pos] = image[pos] > 0.0f ? 1.0f:0.0f; // basic brain mask is needed for image augmentation
                 }
 
 
