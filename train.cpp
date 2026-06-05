@@ -315,7 +315,12 @@ void train_unet::read_file(void)
                     tipl::normalize(label);
 
                 if(need_shift_label[read_id])
-                    label += max_template_label;
+                {
+                    for(auto& v : label)
+                        if(v)
+                            v += max_template_label;
+                }
+
 
                 if(train_image_is_template[read_id])
                 {
