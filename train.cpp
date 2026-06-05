@@ -213,7 +213,7 @@ void train_unet::read_file(void)
 
             if(is_template)
             {
-                tipl::out() << "template found: " << param.label_file_name[i];
+                tipl::out() << "template found: " << param.image_file_name[i];
                 max_template_label = std::max<int>(max_template_label,max_label);
                 template_indices.push_back(i);
 
