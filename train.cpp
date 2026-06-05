@@ -188,72 +188,65 @@ void train_unet::read_file(void)
 
     read_images.reset(new std::thread([this]()
     {
-        std::vector<size_t> template_indices,non_template_indices;
-        has_subject_data = false;
-        for(size_t i = 0;i < param.image_file_name.size();++i)
+        std::unordered_map<std::string,std::pair<char,int> > label_info; // is_template,max_label
+        auto get_label_info = [&](const std::string& name)->std::pair<char,int>
         {
-            reading_status = "checking "+ param.image_file_name[i];
+            if(auto it = label_info.find(name);it != label_info.end())
+                return it->second;
             bool is_mni = false;
-            if(!(tipl::io::gz_nifti(param.image_file_name[i],std::ios::in) >> is_mni >>
-                [&](const std::string& e){error_msg = e + ":" + param.image_file_name[i],aborted = true;}))
-                return;
-            if((train_image_is_template[i] = is_mni))
+            tipl::image<3,int> label;
+            if(!(tipl::io::gz_nifti(name,std::ios::in) >> is_mni >> label >>
+                  [&](const std::string& e){error_msg = e + ":" + name,aborted = true;}))
+                return {0,0};
+            return label_info[name] = {char(is_mni),int(tipl::max_value(label))};
+        };
+
+        std::vector<size_t> template_indices,non_template_indices;
+        std::vector<char> need_shift_label(param.label_file_name.size(),false);
+        has_subject_data = false;
+        max_template_label = 0;
+
+        for(size_t i = 0;i < param.label_file_name.size() && !aborted;++i)
+        {
+            auto [is_template,max_label] = get_label_info(param.label_file_name[i]);
+            train_image_is_template[i] = is_template;
+
+            if(is_template)
             {
-                tipl::out() << "template found: " << param.image_file_name[i];
+                tipl::out() << "template found: " << param.label_file_name[i];
+                max_template_label = std::max<int>(max_template_label,max_label);
+                template_indices.push_back(i);
+
                 if(param.test_image_file_name.size() <= 1)
                 {
                     param.test_image_file_name.push_back(param.image_file_name[i]);
                     param.test_label_file_name.push_back(param.label_file_name[i]);
                 }
-                template_indices.push_back(i);
             }
             else
             {
                 non_template_indices.push_back(i);
                 has_subject_data = true;
             }
-        }       
-        if(template_indices.empty())
-            return error_msg = "no template image found to determine max template label",aborted = true,void();
-
-        // confirm template label
-        {
-            tipl::image<3,int> template_label;
-            if(!(tipl::io::gz_nifti(param.label_file_name[template_indices.front()],std::ios::in) >> template_label >>
-                  [&](const std::string& e){error_msg = e + ":" + param.label_file_name[template_indices.front()],aborted = true;}))
-                return;
-
-            max_template_label = tipl::max_value(template_label);
-            tipl::out() << "max template label: " << max_template_label;
-        }       
-
-        std::vector<char> need_shift_label(param.label_file_name.size());
-        tipl::par_for(non_template_indices.size(),[&](size_t index)
-        {
-            if(aborted)
-                return;
-            size_t i = non_template_indices[index];
-            tipl::image<3,unsigned char> label;
-            if(!(tipl::io::gz_nifti(param.label_file_name[i],std::ios::in) >> label >>
-                  [&](const std::string& e){error_msg += e + ":" + param.label_file_name[i],aborted = true;}))
-                return;
-            auto cur_max_label = tipl::max_value(label);
-            if(cur_max_label < max_template_label && cur_max_label + max_template_label < model->out_count)
-                need_shift_label[i] = 1;
-        });
+        }
 
         if(aborted)
             return;
 
-        for(size_t i = 0;i < need_shift_label.size();++i)
-            if(need_shift_label[i])
+        if(template_indices.empty() || max_template_label == 0)
+            return error_msg = "no template label found to determine max template label",aborted = true,void();
+
+        tipl::out() << "max template label: " << max_template_label;
+
+        for(size_t i : non_template_indices)
+        {
+            auto max_label = get_label_info(param.label_file_name[i]).second;
+            if(max_label < max_template_label && max_label + max_template_label < model->out_count)
+            {
+                need_shift_label[i] = true;
                 tipl::out() << "needs shift labels for " << param.label_file_name[i];
-
-
-
-        tipl::out() << param.image_file_name.size() << " training dataset, " << template_indices.size() << " templates, " << non_template_indices.size() << " subjects";
-        tipl::out() << param.test_image_file_name.size() << " testing dataset\n";
-
+            }
+        }
 
 
         for(int read_id = 0;read_id < param.test_image_file_name.size() && !aborted;++read_id)
