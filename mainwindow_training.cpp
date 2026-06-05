@@ -246,7 +246,7 @@ void MainWindow::on_action_train_new_network_triggered()
         return;
     }
     bool okay;
-    QString arch = QString::fromStdString((train.model) ? train.model->architecture : default_feature(out_count));
+    QString arch = QString::fromStdString((train.model && !train.model->architecture.empty()) ? train.model->architecture : default_feature(out_count));
     auto feature = QInputDialog::getMultiLineText(this,"","Please Specify Network Structure",arch,&okay);
     if(feature.isEmpty() || !okay)
         return;
