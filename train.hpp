@@ -61,7 +61,7 @@ private:
     std::vector<torch::Tensor> test_in_tensor,test_out_tensor;
     std::vector<char> train_image_is_template;
     size_t max_template_label = 1;
-    bool test_data_ready = false;
+    bool test_data_ready = false,has_subject_data = false;
     std::shared_ptr<std::thread> read_images;
 private:
     std::vector<tipl::image<3> > in_file,out_file;
