@@ -260,7 +260,7 @@ void train_unet::read_file(void)
         std::uniform_int_distribution<int> template_gen(0,std::max<int>(1,template_indices.size())-1);
         std::uniform_int_distribution<int> non_template_gen(0,std::max<int>(1,non_template_indices.size())-1);
         std::mt19937 gen(param.seed);
-        size_t begin_epoch = param.batch_size*(model->testing_errors.size()/3);
+        size_t begin_epoch = param.batch_size*cur_epoch;
         for(size_t seed_id = 0;!aborted;++seed_id)
         {
             bool use_template = non_template_indices.empty() || seed_id % param.batch_size < template_indices.size();
@@ -433,12 +433,7 @@ void train_unet::train(void)
     {
         try
         {
-            if(cur_epoch == 0 && model->prior_testing_errors.empty())
-            {
-                model->report += " Training was conducted over "+std::to_string(param.epoch)+" epochs ";
-                model->report += "using a batch size of "+std::to_string(param.batch_size)+". ";
-                model->report += "Optimization employed an initial learning rate of "+std::to_string(param.learning_rate)+" using SGD with Nesterov momentum.";
-            }
+
 
             while(cur_epoch<param.epoch && !aborted)
             {
@@ -820,15 +815,6 @@ void train_unet::start(void)
         return error_msg = "please specify the training data",aborted = true,void();
 
 
-    if(model->training_errors.size() >= param.epoch*3)
-    {
-        model->prior_training_errors.insert(model->prior_training_errors.end(),
-                                            model->training_errors.begin(),model->training_errors.begin()+param.epoch*3);
-        model->training_errors.erase(model->training_errors.begin(),
-                                     model->training_errors.begin()+param.epoch*3);
-    }
-    tipl::out() << "starting epoch: " << (cur_validation_epoch = cur_epoch = model->testing_errors.size()/3);
-
 
     {
         model->to(param.device);
@@ -868,9 +854,7 @@ void train_unet::start(void)
         output_model->to(param.test_device);
         output_model->copy_from(*model);
         output_model->testing_errors = model->testing_errors;
-        output_model->prior_testing_errors = model->prior_testing_errors;
         output_model->training_errors = model->training_errors;
-        output_model->prior_training_errors = model->prior_training_errors;
     }
 
 
@@ -897,6 +881,16 @@ void train_unet::start(void)
     }
 
     tipl::progress p("starting training");
+
+    tipl::out() << "starting epoch: " << (cur_validation_epoch = cur_epoch = ((model->testing_errors.size()/3) % param.epoch));
+    if(model->testing_errors.empty())
+    {
+        if(!model->report.empty())
+            model->report += " ";
+        model->report += "Training was conducted over "+std::to_string(param.epoch)+" epochs ";
+        model->report += "using a batch size of "+std::to_string(param.batch_size)+". ";
+        model->report += "Optimization employed an initial learning rate of "+std::to_string(param.learning_rate)+" using SGD with Nesterov momentum.";
+    }
 
     read_file();
     train();
@@ -1116,7 +1110,7 @@ int tra(void)
     train.param.cost_ce =           po.get("cost_ce",train.param.cost_ce ? 1:0);
     train.param.cost_dice =         po.get("cost_dice",train.param.cost_dice ? 1:0);
     train.param.cost_mse =          po.get("cost_mse",train.param.cost_mse ? 1:0);
-    train.param.seed =              po.get("seed",((train.model->prior_testing_errors.size()+train.model->testing_errors.size())/3)/train.param.epoch);
+    train.param.seed =              po.get("seed",train.model->testing_errors.size()/3/train.param.epoch);
     train.param.device = torch::Device(po.get("device",torch::hasCUDA()?"cuda:0":(torch::hasHIP()?"hip:0":(torch::hasMPS()?"mps:0":"cpu"))));
 
     if(po.has("label_weight"))

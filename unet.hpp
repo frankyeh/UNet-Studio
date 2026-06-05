@@ -18,22 +18,17 @@ public:
 public:
     std::shared_ptr<torch::optim::SGD> optimizer;
 
-    std::vector<float> testing_errors,prior_testing_errors;
-    std::vector<float> training_errors,prior_training_errors;
+    std::vector<float> testing_errors,training_errors;
     mutable std::mutex error_mutex;
     auto get_training_errors(void) const
     {
         std::scoped_lock<std::mutex> lock(error_mutex);
-        std::vector<float> result(prior_training_errors);
-        result.insert(result.end(),training_errors.begin(),training_errors.end());
-        return result;
+        return std::vector<float>(training_errors);
     }
     auto get_testing_errors(void) const
     {
         std::scoped_lock<std::mutex> lock(error_mutex);
-        std::vector<float> result(prior_testing_errors);
-        result.insert(result.end(),testing_errors.begin(),testing_errors.end());
-        return result;
+        return std::vector<float>(testing_errors);
     }
 
 public:
