@@ -14,7 +14,7 @@ struct UNet3dImpl : torch::nn::Module
 public:
     int in_count = 1;
     int out_count = 1;
-    std::string architecture,preproc,postproc,report,orientation,fov_strategy,error_msg;
+    std::string architecture,preproc,postproc,orientation,fov_strategy,error_msg;
 public:
     std::shared_ptr<torch::optim::SGD> optimizer;
 

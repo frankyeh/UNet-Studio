@@ -903,14 +903,6 @@ void train_unet::start(void)
     tipl::progress p("starting training");
 
     tipl::out() << "starting epoch: " << (cur_validation_epoch = cur_epoch = ((model->testing_errors.size()/3) % param.epoch));
-    if(model->testing_errors.empty())
-    {
-        if(!model->report.empty())
-            model->report += " ";
-        model->report += "Training was conducted over "+std::to_string(param.epoch)+" epochs ";
-        model->report += "using a batch size of "+std::to_string(param.batch_size)+". ";
-        model->report += "Optimization employed an initial learning rate of "+std::to_string(param.learning_rate)+" using SGD with Nesterov momentum.";
-    }
 
     read_file();
     train();

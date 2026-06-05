@@ -209,7 +209,6 @@ bool save_to_file(UNet3d& model,const char* file_name)
     mat.write("architecture",model->architecture);
     mat.write("dimension",model->dim);
     mat.write("voxel_size",model->voxel_size);
-    mat.write("report",model->report);
     mat.write("fov_strategy",model->fov_strategy);
     mat.write("preproc",model->preproc);
     mat.write("orientation",model->orientation);

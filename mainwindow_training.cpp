@@ -257,7 +257,6 @@ void MainWindow::on_action_train_new_network_triggered()
     train.model->voxel_size = model_vs;
     train.model->dim = model_dim;
     ui->model_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
-    ui->model_report->setPlainText(train.model->report.c_str());
     has_network();
 
 }
@@ -271,7 +270,6 @@ void MainWindow::load_network(QString fileName)
     train.model_path = fileName.toUtf8().constData();
     train.save_model_during_training = false;
     ui->model_info->setText(QString("name: %1\n").arg(train_name) + train.model->get_info().c_str());
-    ui->model_report->setPlainText(train.model->report.c_str());
     has_network();
     error_view_epoch = 0;
     plot_error();
@@ -388,7 +386,6 @@ void MainWindow::on_train_start_clicked()
     error_view_epoch = 0;
     error_scene << QImage();
 
-    ui->model_report->setPlainText(train.model->report.c_str());
     ui->model_info->setText(train.model->get_info().c_str());
 
     has_network();

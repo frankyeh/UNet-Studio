@@ -146,39 +146,6 @@ UNet3dImpl::UNet3dImpl(int32_t in_count_,
         if(!decoding_tail[level]->is_empty())
             register_module("decode_tail"+std::to_string(level),decoding_tail[level]);
     }
-
-    std::stringstream ss;
-
-    ss << "This model is a 3D U-Net that maps "
-       << in_count << " input channel" << (in_count > 1 ? "s" : "")
-       << " to " << out_count << " output class" << (out_count > 1 ? "es" : "")
-       << ". ";
-
-    ss << "The network uses " << enc_tokens.size()
-       << " resolution levels. The encoder progressively extracts features from "
-       << in_count << " channels to " << skip_channels.back()
-       << " channels, while the decoder restores spatial resolution using skip connections. ";
-
-    size_t output_head_count = 0;
-    for(const auto& each : output)
-        if(!each->is_empty())
-            ++output_head_count;
-
-    if(output_head_count > 1)
-        ss << "The model uses deep supervision with " << output_head_count
-           << " output heads placed along the decoder path. ";
-    else
-        if(output_head_count == 1)
-            ss << "The model uses one final output head at the full image resolution. ";
-        else
-            ss << "No output head was detected. ";
-
-    ss << "The default field-of-view strategy is " << fov_strategy
-       << ". The default preprocessing is "
-       << (preproc.empty() ? "none" : preproc)
-       << ", and the default postprocessing is " << postproc << ". ";
-
-    report = ss.str();
 }
 
 std::vector<torch::Tensor> UNet3dImpl::forward(torch::Tensor inputTensor)
@@ -232,7 +199,6 @@ void UNet3dImpl::copy_from(const UNet3dImpl& r)
 
     voxel_size = r.voxel_size;
     dim = r.dim;
-    report = r.report;
     fov_strategy = r.fov_strategy;
     postproc = r.postproc;
     preproc = r.preproc;
