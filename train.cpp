@@ -614,29 +614,26 @@ void train_unet::train(void)
                     return;
 
                 {
-                    std::array<double,3> train_error_total = {0.0,0.0,0.0};
-                    size_t train_error_n = 0;
+                    torch::Tensor sum;
+                    size_t n = 0;
 
                     for(int i = 0;i < active_threads;++i)
-                    {
-                        if(!train_error_count[i] || !train_error_sum[i].defined())
-                            continue;
+                        if(train_error_count[i] && train_error_sum[i].defined())
+                        {
+                            sum = sum.defined() ? sum + train_error_sum[i].to(torch::kCPU)
+                                                : train_error_sum[i].to(torch::kCPU);
+                            n += train_error_count[i];
+                        }
 
-                        auto e = train_error_sum[i].to(torch::kCPU);
-                        train_error_total[0] += e[0].item<double>();
-                        train_error_total[1] += e[1].item<double>();
-                        train_error_total[2] += e[2].item<double>();
-                        train_error_n += train_error_count[i];
-                    }
-
-                    if(train_error_n)
+                    if(n)
                     {
-                        model->training_errors.push_back(float(train_error_total[0]/double(train_error_n)));
-                        model->training_errors.push_back(float(train_error_total[1]/double(train_error_n)));
-                        model->training_errors.push_back(float(train_error_total[2]/double(train_error_n)));
-                        output_model->training_errors.push_back(float(train_error_total[0]/double(train_error_n)));
-                        output_model->training_errors.push_back(float(train_error_total[1]/double(train_error_n)));
-                        output_model->training_errors.push_back(float(train_error_total[2]/double(train_error_n)));
+                        auto e = (sum/double(n)).contiguous();
+                        tipl::vector<3> v(e[0].item<float>(),
+                                          e[1].item<float>(),
+                                          e[2].item<float>());
+
+                        model->training_errors.insert(model->training_errors.end(),v.begin(),v.end());
+                        output_model->training_errors.insert(output_model->training_errors.end(),v.begin(),v.end());
                     }
                 }
 
@@ -764,13 +761,14 @@ void train_unet::validate(void)
                     std::string out = "|                         |                          |                         |                         |";
                     if(!errors.empty())
                     {
-                        auto to_chart = [&](float error)->int
-                        {
-                            return int(std::max<float>(0.0f,std::min<float>(float(out.size()-1),(-std::log10(error))*float(out.size()-1)/2.0f)));
-                        };
-                        out[to_chart(errors[0])] = 'C';
-                        out[to_chart(errors[1])] = 'D';
-                        out[to_chart(errors[2])] = 'M';
+                        auto put = [&](float e,char c){out[std::clamp<int>(int((-std::log10(e))*float(out.size()-1)/2.0f),0,int(out.size()-1))] = c;};
+                        size_t p = cur_validation_epoch*3;
+                        if(p+2 < output_model->training_errors.size())
+                            for(int i = 0;i < 3;++i)
+                                put(output_model->training_errors[p+i],"cdm"[i]);
+
+                        for(int i = 0;i < 3;++i)
+                            put(errors[i],"CDM"[i]);
                     }
                     tipl::out() << out << cur_validation_epoch;
 
@@ -822,11 +820,12 @@ void train_unet::start(void)
         return error_msg = "please specify the training data",aborted = true,void();
 
 
-    while(model->testing_errors.size() >= param.epoch*3)
+    if(model->training_errors.size() >= param.epoch*3)
     {
-        tipl::out() << "prior training finished. restart training model...";
-        model->prior_testing_errors.insert(model->prior_testing_errors.end(),model->testing_errors.begin(),model->testing_errors.begin() + param.epoch*3);
-        model->testing_errors.erase(model->testing_errors.begin(),model->testing_errors.begin() + param.epoch*3);
+        model->prior_training_errors.insert(model->prior_training_errors.end(),
+                                            model->training_errors.begin(),model->training_errors.begin()+param.epoch*3);
+        model->training_errors.erase(model->training_errors.begin(),
+                                     model->training_errors.begin()+param.epoch*3);
     }
     tipl::out() << "starting epoch: " << (cur_validation_epoch = cur_epoch = model->testing_errors.size()/3);
 
