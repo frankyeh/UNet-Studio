@@ -972,6 +972,19 @@ int tra(void)
         train.stop();
     }
 
+    auto get_files = [](const std::string& pattern,
+                        std::vector<std::string>& files,
+                        const char* type)->bool
+    {
+        if(!tipl::search_filesystem<tipl::out>(pattern,files))
+            return tipl::error() << "cannot find " << type << " file for " << pattern,false;
+
+        std::sort(files.begin(),files.end());
+        tipl::out() << files.size() << " " << type << " file(s) specified by " << pattern;
+        return true;
+    };
+
+
     if(po.has("bids"))
     {
         auto bids_list = tipl::split(po.get("bids"),',');
@@ -985,8 +998,9 @@ int tra(void)
                 return tipl::error() << "not a directory: " << each,1;
 
             std::vector<std::string> files;
-            if(!tipl::search_filesystem<tipl::out>((std::filesystem::path(each)/"*.nii.gz").string(),files))
-                return tipl::error() << "cannot find any nii.gz file in " << each,1;
+            if(!get_files((std::filesystem::path(each)/"*.nii.gz").string(),files,"bids"))
+                return 1;
+
             size_t matched = 0;
 
             for(const auto& label : files)
@@ -1017,17 +1031,7 @@ int tra(void)
         if(source_list.size() != label_list.size())
             return tipl::error() << "mismatched number of --source and --label",1;
 
-        auto get_files = [](const std::string& pattern,
-                            std::vector<std::string>& files,
-                            const char* type)->bool
-        {
-            if(!tipl::search_filesystem<tipl::out>(pattern,files))
-                return tipl::error() << "cannot find " << type << " file for " << pattern,false;
 
-            std::sort(files.begin(),files.end());
-            tipl::out() << files.size() << " " << type << " file(s) specified by " << pattern;
-            return true;
-        };
 
         for(size_t i = 0;i < source_list.size();++i)
         {
