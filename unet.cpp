@@ -178,8 +178,6 @@ UNet3dImpl::UNet3dImpl(int32_t in_count_,
        << (preproc.empty() ? "none" : preproc)
        << ", and the default postprocessing is " << postproc << ". ";
 
-    ss << "The architecture string is: " << architecture;
-
     report = ss.str();
 }
 
