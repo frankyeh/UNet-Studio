@@ -184,9 +184,12 @@ void train_unet::read_file(void)
     train_image_is_template = std::vector<char>(param.image_file_name.size(),false);
     param.test_image_file_name.clear();
     param.test_label_file_name.clear();
+
+
     read_images.reset(new std::thread([this]()
     {
         std::vector<size_t> template_indices,non_template_indices;
+        has_subject_data = false;
         for(size_t i = 0;i < param.image_file_name.size();++i)
         {
             reading_status = "checking "+ param.image_file_name[i];
@@ -205,7 +208,10 @@ void train_unet::read_file(void)
                 template_indices.push_back(i);
             }
             else
+            {
                 non_template_indices.push_back(i);
+                has_subject_data = true;
+            }
         }
 
 
@@ -494,6 +500,8 @@ void train_unet::train(void)
                                 while(!data_ready[data_idx] || pause)
                                     if(aborted) return; else std::this_thread::sleep_for(100ms);
 
+                                bool is_template_image = train_image_is_template[in_data_read_id[data_idx]];
+
                                 auto target_cpu = torch::from_blob(
                                     out_data[data_idx].data(),
                                     {1,int(cur_model->dim[2]),int(cur_model->dim[1]),int(cur_model->dim[0])}).clone().to(torch::kLong);
@@ -560,9 +568,9 @@ void train_unet::train(void)
                                             ", out_count=" + std::to_string(cur_model->out_count));
 
                                     auto [ce,dice,mse] = calc_losses(outputs[k],active_target,cur_model->out_count,
-                                                                        train_image_is_template[in_data_read_id[data_idx]] ? 0 : int(max_template_label+1));
+                                                                        is_template_image ? 0 : int(max_template_label+1));
 
-                                    if(k == 0)
+                                    if(k == 0 && (!has_subject_data || (has_subject_data && !is_template_image)))
                                     {
                                         auto e = torch::stack({ce.detach(),dice.detach(),mse.detach()});
                                         train_error_sum[thread_id] = train_error_sum[thread_id].defined() ?
