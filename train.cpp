@@ -194,8 +194,8 @@ void train_unet::read_file(void)
         {
             reading_status = "checking "+ param.image_file_name[i];
             bool is_mni = false;
-            if(!(tipl::io::gz_nifti(param.image_file_name[i].c_str(),std::ios::in) >> is_mni >>
-                [&](const std::string& e){error_msg = e,aborted = true;}))
+            if(!(tipl::io::gz_nifti(param.image_file_name[i],std::ios::in) >> is_mni >>
+                [&](const std::string& e){error_msg = e + ":" + param.image_file_name[i],aborted = true;}))
                 return;
             if((train_image_is_template[i] = is_mni))
             {
@@ -212,9 +212,7 @@ void train_unet::read_file(void)
                 non_template_indices.push_back(i);
                 has_subject_data = true;
             }
-        }
-
-
+        }       
         if(template_indices.empty())
             return error_msg = "no template image found to determine max template label",aborted = true,void();
 
@@ -222,25 +220,30 @@ void train_unet::read_file(void)
         {
             tipl::image<3,int> template_label;
             if(!(tipl::io::gz_nifti(param.label_file_name[template_indices.front()],std::ios::in) >> template_label >>
-                  [&](const std::string& e){error_msg = e,aborted = true;}))
+                  [&](const std::string& e){error_msg = e + ":" + param.label_file_name[template_indices.front()],aborted = true;}))
                 return;
 
             max_template_label = tipl::max_value(template_label);
             tipl::out() << "max template label: " << max_template_label;
-        }
+        }       
 
         std::vector<char> need_shift_label(param.label_file_name.size());
         tipl::par_for(non_template_indices.size(),[&](size_t index)
         {
+            if(aborted)
+                return;
             size_t i = non_template_indices[index];
             tipl::image<3,unsigned char> label;
-            if(!(tipl::io::gz_nifti(param.label_file_name[i].c_str(),std::ios::in) >> label >>
-                  [&](const std::string& e){error_msg = e,aborted = true;}))
+            if(!(tipl::io::gz_nifti(param.label_file_name[i],std::ios::in) >> label >>
+                  [&](const std::string& e){error_msg += e + ":" + param.label_file_name[i],aborted = true;}))
                 return;
             auto cur_max_label = tipl::max_value(label);
             if(cur_max_label < max_template_label && cur_max_label + max_template_label < model->out_count)
                 need_shift_label[i] = 1;
         });
+
+        if(aborted)
+            return;
 
         for(size_t i = 0;i < need_shift_label.size();++i)
             if(need_shift_label[i])
@@ -248,10 +251,8 @@ void train_unet::read_file(void)
 
 
 
-        tipl::out() << "a total of " << param.image_file_name.size() << " training dataset\n";
-        tipl::out() << template_indices.size() << " template training dataset\n";
-        tipl::out() << non_template_indices.size() << " subject training dataset\n";
-        tipl::out() << "a total of " << param.test_image_file_name.size() << " testing dataset\n";
+        tipl::out() << param.image_file_name.size() << " training dataset, " << template_indices.size() << " templates, " << non_template_indices.size() << " subjects";
+        tipl::out() << param.test_image_file_name.size() << " testing dataset\n";
 
 
 
@@ -267,7 +268,7 @@ void train_unet::read_file(void)
                                      param.test_label_file_name[read_id],
                                      model->dim,model->voxel_size,
                                      input_image,input_label))
-                return error_msg = "cannot read image or label data for "+std::filesystem::path(param.test_image_file_name[read_id]).filename().string(),aborted = true,void();
+                return error_msg = "cannot read "+std::filesystem::path(param.test_image_file_name[read_id]).filename().string(),aborted = true,void();
 
             if(model->out_count==1)
                 tipl::normalize(input_label);
