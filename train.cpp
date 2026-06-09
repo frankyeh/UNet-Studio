@@ -991,7 +991,10 @@ int tra(void)
     };
 
 
-    if(po.has("bids"))
+    if(!po.has("bids"))
+        return tipl::error() << "please specify --bids",false;
+
+
     {
         auto bids_list = tipl::split(po.get("bids"),',');
         const std::string suffix = "_dseg.nii.gz";
@@ -1026,50 +1029,6 @@ int tra(void)
             }
             tipl::out() << each << ": " << matched << " matched pairs";
         }
-    }
-    else
-    {
-        if(!po.has("source") || !po.has("label"))
-            return tipl::error() << "please specify training data using --source and --label",1;
-        auto source_list = tipl::split(po.get("source"),',');
-        auto label_list = tipl::split(po.get("label"),',');
-
-        if(source_list.size() != label_list.size())
-            return tipl::error() << "mismatched number of --source and --label",1;
-
-
-
-        for(size_t i = 0;i < source_list.size();++i)
-        {
-            tipl::out() << "checking " << source_list[i] << " and " << label_list[i];
-
-            std::vector<std::string> source_files,label_files;
-
-            if(!get_files(source_list[i],source_files,"source"))
-                return 1;
-            if(!get_files(label_list[i],label_files,"label"))
-                return 1;
-
-            if(label_files.size() == 1 && source_files.size() > 1)
-            {
-                tipl::out() << "one common label file " << label_files.front()
-                            << " is used for all file(s) specified by " << source_list[i];
-
-                label_files.resize(source_files.size(),label_files.front());
-            }
-
-            if(source_files.size() != label_files.size())
-                return tipl::error() << "different number of source and label files for "
-                                     << source_list[i] << " and " << label_list[i],1;
-
-            train.param.image_file_name.insert(train.param.image_file_name.end(),
-                                               source_files.begin(),source_files.end());
-
-            train.param.label_file_name.insert(train.param.label_file_name.end(),
-                                               label_files.begin(),label_files.end());
-        }
-
-
     }
 
     for(size_t i = 0,sz = train.param.image_file_name.size();i<sz;++i)
