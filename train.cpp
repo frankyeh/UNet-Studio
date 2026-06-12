@@ -225,6 +225,7 @@ void train_unet::read_file(void)
             }
             else
             {
+                tipl::out() << "subject found: " << param.image_file_name[i];
                 non_template_indices.push_back(i);
                 has_subject_data = true;
             }
