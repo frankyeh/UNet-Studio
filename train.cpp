@@ -234,8 +234,8 @@ void train_unet::read_file(void)
             return error_msg = "no template label found to determine max template label",aborted = true,void();
 
         tipl::out() << "max template label: " << max_template_label;
-        tipl::out() << "total template files found: " << template_indices.max_size();
-        tipl::out() << "total subject files found: " << non_template_indices.max_size();
+        tipl::out() << "total template files found: " << template_indices.size();
+        tipl::out() << "total subject files found: " << non_template_indices.size();
 
         {
             size_t first = size_t(-1),last = size_t(-2);
