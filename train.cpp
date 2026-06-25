@@ -206,6 +206,8 @@ void train_unet::read_file(void)
         has_subject_data = false;
         max_template_label = 0;
 
+
+
         for(size_t i = 0;i < param.label_file_name.size() && !aborted;++i)
         {
             auto [is_template,max_label] = get_label_info(param.label_file_name[i]);
@@ -217,15 +219,9 @@ void train_unet::read_file(void)
                 max_template_label = std::max<int>(max_template_label,max_label);
                 template_indices.push_back(i);
 
-                if(param.test_image_file_name.size() <= 1)
-                {
-                    param.test_image_file_name.push_back(param.image_file_name[i]);
-                    param.test_label_file_name.push_back(param.label_file_name[i]);
-                }
             }
             else
             {
-                tipl::out() << "subject found: " << param.image_file_name[i];
                 non_template_indices.push_back(i);
                 has_subject_data = true;
             }
@@ -238,17 +234,46 @@ void train_unet::read_file(void)
             return error_msg = "no template label found to determine max template label",aborted = true,void();
 
         tipl::out() << "max template label: " << max_template_label;
+        tipl::out() << "total template files found: " << template_indices.max_size();
+        tipl::out() << "total subject files found: " << non_template_indices.max_size();
 
-        for(size_t i : non_template_indices)
         {
-            auto max_label = get_label_info(param.label_file_name[i]).second;
-            if(max_label < max_template_label && max_label + max_template_label < model->out_count)
+            size_t first = size_t(-1),last = size_t(-2);
+            auto report = [&]
             {
+                if(first != size_t(-1))
+                    tipl::out() << "needs shift labels starting from " << param.label_file_name[first]
+                                << " to " << param.label_file_name[last];
+            };
+
+            for(size_t i : non_template_indices)
+            {
+                auto max_label = get_label_info(param.label_file_name[i]).second;
+                if(max_label >= max_template_label || max_label + max_template_label >= model->out_count)
+                    continue;
+
                 need_shift_label[i] = true;
-                tipl::out() << "needs shift labels for " << param.label_file_name[i];
+                if(i != last+1)
+                    report(),first = i;
+                last = i;
             }
+            report();
         }
 
+
+        {
+            std::vector<std::pair<uintmax_t,size_t> > test_candidates;
+            for(auto i : template_indices)
+                test_candidates.push_back({std::filesystem::file_size(param.image_file_name[i]),i});
+            std::sort(test_candidates.rbegin(),test_candidates.rend());
+            for(size_t i = 0;i < test_candidates.size() && param.test_image_file_name.size() < 2;++i)
+            {
+                size_t index = test_candidates[i].second;
+                param.test_image_file_name.push_back(param.image_file_name[index]);
+                param.test_label_file_name.push_back(param.label_file_name[index]);
+                tipl::out() << "test template slected: " << param.image_file_name[index];
+            }
+        }
 
         for(int read_id = 0;read_id < param.test_image_file_name.size() && !aborted;++read_id)
         {
@@ -979,15 +1004,14 @@ int tra(void)
         train.stop();
     }
 
-    auto get_files = [](const std::string& pattern,
-                        std::vector<std::string>& files,
-                        const char* type)->bool
+    auto get_files = [](const std::filesystem::path& pattern,
+                        std::vector<std::filesystem::path>& files)->bool
     {
-        if(!tipl::search_filesystem<tipl::out>(pattern,files))
-            return tipl::error() << "cannot find " << type << " file for " << pattern,false;
+        if(!tipl::search_filesystem(pattern,files))
+            return tipl::error() << "cannot find " << pattern,false;
 
         std::sort(files.begin(),files.end());
-        tipl::out() << files.size() << " " << type << " file(s) specified by " << pattern;
+        tipl::out() << files.size() << " file(s) specified by " << pattern;
         return true;
     };
 
@@ -1007,34 +1031,42 @@ int tra(void)
             if(!std::filesystem::is_directory(each))
                 return tipl::error() << "not a directory: " << each,1;
 
-            std::vector<std::string> files;
-            if(!get_files((std::filesystem::path(each)/"*.nii.gz").string(),files,"bids"))
+            std::vector<std::filesystem::path> files;
+            if(!get_files(std::filesystem::path(each)/"*.nii.gz",files))
                 return 1;
 
             size_t matched = 0;
 
-            for(const auto& label : files)
+            for(const auto& each : files)
             {
+                auto label = each.u8string();
                 if(!tipl::ends_with(label,suffix))
                     continue;
 
                 std::string prefix(label.begin(),label.end()-suffix.size());
 
-                for(const auto& image : files)
+                for(const auto& each2 : files)
+                {
+                    auto image = each2.u8string();
                     if(image != label && tipl::begins_with(image,prefix))
                     {
                         train.param.image_file_name.push_back(image);
                         train.param.label_file_name.push_back(label);
                         ++matched;
                     }
+                }
             }
             tipl::out() << each << ": " << matched << " matched pairs";
         }
     }
 
-    for(size_t i = 0,sz = train.param.image_file_name.size();i<sz;++i)
-        tipl::out() << std::filesystem::path(train.param.image_file_name[i]).filename().string() <<
-            "=>" << std::filesystem::path(train.param.label_file_name[i]).filename().string();
+    if(po.has("file_list"))
+    {
+        std::ofstream out;
+        for(size_t i = 0,sz = train.param.image_file_name.size();i<sz;++i)
+            out << std::filesystem::path(train.param.image_file_name[i]).filename().string() <<
+                "=>" << std::filesystem::path(train.param.label_file_name[i]).filename().string() << std::endl;
+    }
 
 
     {
@@ -1111,8 +1143,8 @@ int tra(void)
     if(!train.error_msg.empty())
         return tipl::error() << train.error_msg,1;
 
-    tipl::out() << "save model to " << train.model_path;
-    if(!save_to_file(train.model,train.model_path.c_str()))
-        return tipl::error() << "failed to save network to " << train.model_path,1;
+    tipl::out() << "save model to " << train.model_path << ".final.nz";
+    if(!save_to_file(train.model,(train.model_path+".final.nz").c_str()))
+        return tipl::error() << "failed to save network to " << train.model_path << ".final.nz",1;
     return 0;
 }

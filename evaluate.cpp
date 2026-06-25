@@ -57,6 +57,57 @@ void upsample8(T& I, const U& subI,size_t sub_index)
             I[index.index()] = subI[sub_pos++];
 }
 
+template<typename out_type,typename template_type,typename image_type>
+void reclassify_labels_by_template(const template_type& template_I,image_type& atlas_I)
+{
+    size_t template_region_count = tipl::max_value(template_I) + 1;
+    size_t atlas_region_count = tipl::max_value(atlas_I);
+    std::vector<size_t> tissue_votes((atlas_region_count+1)*template_region_count,0);
+
+    size_t sz = atlas_I.size();
+    for(size_t pos = 0; pos < sz; ++pos)
+    {
+        auto a = atlas_I[pos];
+        auto t = template_I[pos];
+        if(a > 0 && t < template_region_count)
+            tissue_votes[a*template_region_count + t]++;
+    }
+
+    std::vector<size_t> region_majority_tissue(atlas_region_count+1,0);
+    tipl::par_for(atlas_region_count,[&](size_t i)
+                  {
+                      ++i;
+                      auto begin_it = tissue_votes.begin() + i*template_region_count;
+                      auto best_tissue = std::max_element(begin_it,begin_it + template_region_count);
+                      region_majority_tissue[i] = std::distance(begin_it,best_tissue);
+                  });
+
+    std::vector<size_t> region_erased(atlas_region_count+1,0);
+    for(size_t pos = 0; pos < sz; ++pos)
+    {
+        auto a = atlas_I[pos];
+        if(a > 0 && template_I[pos] != region_majority_tissue[a])
+        {
+            atlas_I[pos] = 0;
+            region_erased[a]++;
+        }
+    }
+
+    if constexpr(!std::is_same_v<out_type,void>)
+    {
+        std::string erased_report;
+        for(size_t i = 1; i <= atlas_region_count; ++i)
+            if(region_majority_tissue[i] > 0)
+            {
+                if(!erased_report.empty())
+                    erased_report += ", ";
+                erased_report += std::to_string(region_erased[i]);
+            }
+
+        if(!erased_report.empty())
+            out_type() << " voxel erased based on tissue classification: " << erased_report;
+    }
+}
 
 bool evaluate_unet::load_atlas(const std::string& file_name)
 {
@@ -105,7 +156,7 @@ bool evaluate_unet::load_atlas(const std::string& file_name)
 
     {
         tipl::progress prog("checking tissue classification of each atlas region");
-        tipl::morphology::reclassify_labels_by_template<tipl::out>(template_I,atlas_I);
+        reclassify_labels_by_template<tipl::out>(template_I,atlas_I);
     }
 
     {
@@ -149,7 +200,7 @@ void evaluate_unet::read_file(void)
             if(!eval[i].load_from_file<tipl::io::gz_nifti>(image_file_name[i]) ||
                !eval[i].handle_fov_pre(model->fov_strategy) ||
                 !eval[i].handle_orientation(model->orientation))
-                return tipl::error() << (error_msg = image_file_name[i] + " : " + eval[i].error_msg),aborted = true,void();
+                return tipl::error() << (error_msg = image_file_name[i].u8string() + " : " + eval[i].error_msg),aborted = true,void();
             data_ready[i] = true;
         }
     }));
@@ -376,7 +427,7 @@ void evaluate_unet::stop(void)
     aborted = true;
     join();
 }
-bool evaluate_unet::save_to_file(size_t currentRow,const char* file_name)
+bool evaluate_unet::save_to_file(size_t currentRow,const std::filesystem::path& file_name)
 {
     if(currentRow >= eval.size())
         return false;
@@ -434,9 +485,9 @@ int eval(void)
     tipl::progress p("saving results");
     for(size_t i = 0;p(i,eval.param.image_file_name.size());++i)
     {
-        auto file_name = eval.param.image_file_name[i] + ".result.nii.gz";
+        auto file_name = std::filesystem::path(eval.param.image_file_name[i])+=".result.nii.gz";
         tipl::out() << "save to " << file_name;
-        if(!eval.save_to_file(i,file_name.c_str()))
+        if(!eval.save_to_file(i,file_name))
             tipl::error() << eval.error_msg;
     }
     return 0;

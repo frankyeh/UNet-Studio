@@ -7,7 +7,7 @@
 #include "TIPL/tipl.hpp"
 
 struct EvaluateParam{
-    std::vector<std::string> image_file_name;
+    std::vector<std::filesystem::path> image_file_name;
     torch::Device device = torch::kCPU;
 };
 
@@ -17,7 +17,7 @@ public:
 public:
     std::vector<tipl::ml3d::evalution_set<tipl::image<3>>> eval;
     std::vector<unsigned char> data_ready;
-    std::vector<std::string> image_file_name;
+    std::vector<std::filesystem::path> image_file_name;
     torch::Device device = torch::kCPU;
     std::shared_ptr<std::thread> read_file_thread;
     void read_file(void);
@@ -69,7 +69,7 @@ public:
     void start(void);
     void join(void);
     void stop(void);
-    bool save_to_file(size_t index,const char* file_name);
+    bool save_to_file(size_t index,const std::filesystem::path& file_name);
 
 };
 
