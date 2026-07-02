@@ -59,7 +59,7 @@ public:
 private:
     std::vector<tipl::image<3> > train_image,train_label;
     std::vector<torch::Tensor> test_in_tensor,test_out_tensor;
-    std::vector<char> train_image_is_template;
+    std::vector<char> train_image_is_template,need_shift_label;
     size_t max_template_label = 1;
     bool test_data_ready = false,has_subject_data = false;
     std::shared_ptr<std::thread> read_images;
