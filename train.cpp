@@ -182,6 +182,7 @@ void simulate_modality(tipl::image<3>& t1w,unsigned int seed)
 void train_unet::read_file(void)
 {
     train_image_is_template = std::vector<char>(param.image_file_name.size(),false);
+    need_shift_label = std::vector<char>(param.label_file_name.size(),false);
     param.test_image_file_name.clear();
     param.test_label_file_name.clear();
 
@@ -202,7 +203,7 @@ void train_unet::read_file(void)
         };
 
         std::vector<size_t> template_indices,non_template_indices;
-        std::vector<char> need_shift_label(param.label_file_name.size(),false);
+
         has_subject_data = false;
         max_template_label = 0;
 
@@ -530,6 +531,7 @@ void train_unet::train(void)
                                     if(aborted) return; else std::this_thread::sleep_for(100ms);
 
                                 bool is_template_image = train_image_is_template[in_data_read_id[data_idx]];
+                                bool is_shifted = need_shift_label[in_data_read_id[data_idx]];
 
                                 auto target_cpu = torch::from_blob(
                                     out_data[data_idx].data(),
@@ -597,7 +599,7 @@ void train_unet::train(void)
                                             ", out_count=" + std::to_string(cur_model->out_count));
 
                                     auto [ce,dice,mse] = calc_losses(outputs[k],active_target,cur_model->out_count,
-                                                                        is_template_image ? 0 : int(max_template_label+1));
+                                                                        is_shifted ? int(max_template_label+1) : 0);
 
                                     if(k == 0 && (!has_subject_data || (has_subject_data && !is_template_image)))
                                     {
