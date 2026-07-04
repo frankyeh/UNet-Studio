@@ -429,29 +429,37 @@ inline std::tuple<torch::Tensor,torch::Tensor,torch::Tensor> calc_losses(
     const torch::Tensor& pred_raw,
     const torch::Tensor& target_indices,
     int C,
-    int lesion_begin = 0)
+    int collapse_before = 0)
 {
-    if(lesion_begin < 0 || lesion_begin >= C)
-        throw std::runtime_error("invalid lesion_begin");
+    if(collapse_before < 0 || collapse_before >= C)
+        throw std::runtime_error("invalid collapse_before");
 
     auto logits = pred_raw;
     auto target = target_indices;
     int out_C = C;
 
-    if(lesion_begin)
+    if(collapse_before)
     {
         logits = torch::cat({
-                             torch::logsumexp(pred_raw.slice(1,0,lesion_begin),1,true),
-                             pred_raw.slice(1,lesion_begin,C)},1);
-        target = torch::clamp_min(target_indices-lesion_begin+1,0);
-        out_C = C-lesion_begin+1;
+                             torch::logsumexp(pred_raw.slice(1,0,collapse_before),1,true),
+                             pred_raw.slice(1,collapse_before,C)},1);
+        target = torch::clamp_min(target_indices-collapse_before+1,0);
+        out_C = C-collapse_before+1;
     }
 
-    auto ce = torch::nn::functional::cross_entropy(logits,target);
-    auto prob = torch::clamp(torch::softmax(logits,1),1e-6,1.0-1e-6);
+    auto valid = target_indices < C;
+    auto v = valid.to(logits.dtype());
+    auto n = torch::clamp_min(v.sum(),1.0);
+    target = torch::where(valid,target,torch::zeros_like(target));
 
+    auto ce = torch::nn::functional::cross_entropy(
+        logits,target,
+        torch::nn::functional::CrossEntropyFuncOptions().reduction(torch::kNone));
+    ce = (ce*v).sum()/n;
+
+    auto prob = torch::clamp(torch::softmax(logits,1),1e-6,1.0-1e-6);
     auto target_prob = prob.gather(1,target.unsqueeze(1)).squeeze(1);
-    auto mse = torch::mean(torch::sum(prob*prob,1)-2.0f*target_prob+1.0f);
+    auto mse = ((torch::sum(prob*prob,1)-2.0f*target_prob+1.0f)*v).sum()/n;
 
     auto opt = torch::TensorOptions().device(pred_raw.device()).dtype(pred_raw.dtype());
     auto eps = torch::tensor(1e-5,opt);
@@ -459,12 +467,10 @@ inline std::tuple<torch::Tensor,torch::Tensor,torch::Tensor> calc_losses(
 
     for(int c = 1;c < out_C;++c)
     {
-        auto p = prob.select(1,c);
-        auto m = (target == c).to(p.dtype());
-
+        auto p = prob.select(1,c)*v;
+        auto m = (target == c).to(p.dtype())*v;
         auto inter = torch::sum(p*m,{1,2,3});
         auto card = torch::sum(p+m,{1,2,3});
-
         dice_sum += torch::sum((2.0f*inter+eps)/(card+eps));
     }
 
@@ -590,13 +596,6 @@ void train_unet::train(void)
                                             "output channel mismatch at level " + std::to_string(k) +
                                             ": tensor has " + std::to_string(outputs[k].size(1)) +
                                             ", out_count is " + std::to_string(cur_model->out_count));
-
-                                    auto max_label = active_target.max().item<int64_t>();
-                                    if(max_label >= cur_model->out_count)
-                                        throw std::runtime_error(
-                                            "target label out of range at level " + std::to_string(k) +
-                                            ": max label=" + std::to_string(max_label) +
-                                            ", out_count=" + std::to_string(cur_model->out_count));
 
                                     auto [ce,dice,mse] = calc_losses(outputs[k],active_target,cur_model->out_count,
                                                                         is_shifted ? int(max_template_label+1) : 0);
@@ -1064,7 +1063,7 @@ int tra(void)
 
     if(po.has("file_list"))
     {
-        std::ofstream out;
+        std::ofstream out(po.get("file_list"));
         for(size_t i = 0,sz = train.param.image_file_name.size();i<sz;++i)
             out << std::filesystem::path(train.param.image_file_name[i]).filename().string() <<
                 "=>" << std::filesystem::path(train.param.label_file_name[i]).filename().string() << std::endl;
