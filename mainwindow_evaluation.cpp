@@ -377,7 +377,7 @@ void MainWindow::on_action_evaluate_save_results_triggered()
     if(file.isEmpty())
         return;
 
-    if(!evaluate.save_to_file(currentRow,file.toUtf8().constData()))
+    if(!evaluate.save_to_file(currentRow,file.toUtf8().constData(),ui->evaluate_output->currentIndex()))
     {
         QMessageBox::critical(this,"Error","Cannot save file");
         return;
@@ -395,7 +395,7 @@ void MainWindow::on_action_evaluate_save_results_triggered()
                                  std::string(file.toUtf8().constData()),
                                  std::string(evaluate_list[index].toUtf8().constData()),result))
             {
-                if(!evaluate.save_to_file(index,result.c_str()))
+                if(!evaluate.save_to_file(index,result.c_str(),ui->evaluate_output->currentIndex()))
                 {
                     QMessageBox::critical(this,"Error",QString("Cannot save ") + result.c_str());
                     return;
