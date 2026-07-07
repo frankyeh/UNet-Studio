@@ -69,7 +69,7 @@ public:
     void start(void);
     void join(void);
     void stop(void);
-    bool save_to_file(size_t index,const std::filesystem::path& file_name);
+    bool save_to_file(size_t index,const std::filesystem::path& file_name,unsigned char output);
 
 };
 
