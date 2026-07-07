@@ -269,7 +269,7 @@ void evaluate_unet::output(void)
                 if(eval[cur_output].model_io.empty())
                     return tipl::error() << "no model output for " << image_file_name[cur_output],aborted = true,void();
 
-                if(!eval[cur_output].handle_orientation(model->orientation,true) || !eval[cur_output].handle_fov_post() || !eval[cur_output].command(model->postproc))
+                if(!eval[cur_output].handle_orientation(model->orientation,true) || !eval[cur_output].handle_fov_post() || !eval[cur_output].run_postproc(model->postproc))
                     return tipl::error() << (error_msg = eval[cur_output].error_msg),aborted = true,void();
                 cur_output++;
             }
@@ -427,11 +427,40 @@ void evaluate_unet::stop(void)
     aborted = true;
     join();
 }
-bool evaluate_unet::save_to_file(size_t currentRow,const std::filesystem::path& file_name)
+bool evaluate_unet::save_to_file(size_t currentRow,const std::filesystem::path& file_name,unsigned char output)
 {
     if(currentRow >= eval.size())
         return false;
-    return eval[currentRow].save_to_file<tipl::io::gz_nifti>(file_name);
+    tipl::io::gz_nifti out;
+    if(!out.open(file_name,std::ios::out))
+        return error_msg = out.error_msg,false;
+    out << eval[currentRow].untouched_srow << eval[currentRow].image_vs;
+    auto save = [&](auto data)->bool
+    {
+        tipl::io::apply_flip_swap_seq(data,eval[currentRow].flip_swap,true);
+        if(data.depth() == eval[currentRow].image_dim[2])
+            return out << data;
+        else
+            return out << data.alias(0,tipl::shape<4>(eval[currentRow].image_dim.expand(data.depth()/eval[currentRow].image_dim[2])));
+    };
+    switch(output)
+    {
+    case 0: // 3d label
+        return save(eval[currentRow].label);
+    case 1: // skull strip
+        {
+            tipl::image<3> I;
+            if(!(tipl::io::gz_nifti(image_file_name[currentRow],std::ios::in)
+                  >> I >> [&](const std::string& e){error_msg = e;}))
+                return false;
+            return save(I *= eval[currentRow].fg_prob);
+        }
+    case 2: // mask
+        return save(eval[currentRow].fg_prob);
+    case 3: // 4d prob
+        return save(eval[currentRow].label_prob);
+    }
+    return false;
 }
 
 bool load_from_file(UNet3d& model,const char* file_name);
@@ -487,8 +516,8 @@ int eval(void)
     {
         auto file_name = std::filesystem::path(eval.param.image_file_name[i])+=".result.nii.gz";
         tipl::out() << "save to " << file_name;
-        if(!eval.save_to_file(i,file_name))
-            tipl::error() << eval.error_msg;
+        if(!eval.save_to_file(i,file_name,po.get("output_type",0)))
+            return tipl::error() << eval.error_msg,1;
     }
     return 0;
 }
