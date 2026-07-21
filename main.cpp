@@ -180,8 +180,9 @@ bool load_from_file(UNet3d& model,const char* file_name)
     tipl::out() << "voxel_size:" << model->voxel_size;
     tipl::out() << "dimension:" << model->dim;
 
-    model->testing_errors = mat.read_as_vector<float>("testing_errors");
-    model->training_errors = mat.read_as_vector<float>("training_errors");
+    mat.read_as_vector("single_component_label",model->single_component_label);
+    mat.read_as_vector("testing_errors",model->testing_errors);
+    mat.read_as_vector("training_errors",model->training_errors);
     model->training_errors.resize(model->testing_errors.size());
 
     model->train();
