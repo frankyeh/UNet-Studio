@@ -196,8 +196,10 @@ void evaluate_unet::read_file(void)
             eval[i].model_vs = model->voxel_size;
             eval[i].in_count = eval[i].cur_count = model->in_count;
             eval[i].out_count = model->out_count;
+            eval[i].single_component_label = model->single_component_label;
             eval[i].mask.clear();
             if(!eval[i].load_from_file<tipl::io::gz_nifti>(image_file_name[i]) ||
+               !eval[i].run_preproc(model->preproc) ||
                !eval[i].handle_fov_pre(model->fov_strategy) ||
                 !eval[i].handle_orientation(model->orientation))
                 return tipl::error() << (error_msg = image_file_name[i].u8string() + " : " + eval[i].error_msg),aborted = true,void();
