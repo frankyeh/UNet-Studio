@@ -19,6 +19,7 @@ public:
     std::shared_ptr<torch::optim::SGD> optimizer;
 
     std::vector<float> testing_errors,training_errors;
+    std::vector<unsigned int> single_component_label;
     mutable std::mutex error_mutex;
     auto get_training_errors(void) const
     {
