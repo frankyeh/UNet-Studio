@@ -4,6 +4,23 @@
 #include "zlib.h"
 #include "unet.hpp"
 
+void UNet3dImpl::prepare_for_inference(const torch::Device& device)
+{
+    to(device);
+    eval();
+
+    for(auto& module : modules())
+        if(auto bn =
+            std::dynamic_pointer_cast<torch::nn::BatchNorm3dImpl>(module))
+        {
+            bn->eval();
+            bn->running_mean.zero_();
+            bn->running_var.fill_(1.0f);
+            if(bn->num_batches_tracked.defined())
+                bn->num_batches_tracked.zero_();
+        }
+}
+
 int UNet3dImpl::create_layer(torch::nn::Sequential& layers,const std::string& def,int in_c)
 {
     std::unordered_map<std::string,std::string> params;
