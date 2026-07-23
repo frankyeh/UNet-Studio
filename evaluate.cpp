@@ -387,17 +387,9 @@ void evaluate_unet::start(void)
 {
     status = "initiating";
     stop();
-    model->to(param.device);
-    model->eval();    
-    for(auto& m : model->modules())
-        if(auto bn = std::dynamic_pointer_cast<torch::nn::BatchNorm3dImpl>(m))
-        {
-            bn->eval();
-            bn->running_mean.zero_();
-            bn->running_var.fill_(1.0f);
-            if(bn->num_batches_tracked.defined())
-                bn->num_batches_tracked.zero_();
-        }
+
+    model->prepare_for_inference(param.device);
+
     aborted = false;
     running = true;
     error_msg.clear();
