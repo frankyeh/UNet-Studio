@@ -27,6 +27,7 @@ set(UNET_STUDIO_SOURCES
         main.cpp
         train.hpp
         train.cpp
+        qc.cpp
         console.h
         console.cpp
         console.ui
