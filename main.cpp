@@ -85,6 +85,7 @@ extern console_stream console;
 void check_cuda(std::string& error_msg);
 int tra(void);
 int eval(void);
+int qc(void);
 bool init_application(void)
 {
     QCoreApplication::setOrganizationName("LabSolver");
@@ -114,6 +115,8 @@ int run_cmd(void)
         tipl::error() << "please specify --model";
         return 1;
     }
+    if(po.get("action") == std::string("qc"))
+        return qc();
     if(po.get("action") == std::string("train"))
         return tra();
     if(po.get("action") == std::string("evaluate"))
