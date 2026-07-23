@@ -46,6 +46,20 @@ void visual_perception_augmentation(std::unordered_map<std::string,float>& optio
                           bool is_label,
                           const tipl::shape<3>& image_shape,
                           size_t random_seed);
+bool get_bids_pairs(const std::string& bids,
+                    std::vector<std::string>& images,
+                    std::vector<std::string>& labels);
+
+bool read_label_info(const std::string& file_name,
+                     bool& is_template,
+                     int& max_label,
+                     std::string& error_msg);
+
+void shift_subject_label(const tipl::image<3>& image,
+                         tipl::image<3>& label,
+                         size_t max_template_label);
+
+std::string get_model_path(void);
 
 class train_unet{
 public:
