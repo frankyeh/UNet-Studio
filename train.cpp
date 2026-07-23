@@ -179,6 +179,83 @@ void simulate_modality(tipl::image<3>& t1w,unsigned int seed)
     }
 }
 
+bool get_bids_pairs(const std::string& bids,
+                    std::vector<std::string>& images,
+                    std::vector<std::string>& labels)
+{
+    namespace fs = std::filesystem;
+    images.clear();
+    labels.clear();
+
+
+    for(const auto& root : tipl::split(bids,','))
+    {
+        if(!fs::exists(root) || !fs::is_directory(root))
+            return tipl::error() << "invalid BIDS directory: " << root,false;
+
+        std::vector<fs::path> files;
+        if(!tipl::search_filesystem(fs::path(root)/"*.nii.gz",files))
+            return tipl::error() << "cannot find " << root,false;
+
+        std::sort(files.begin(),files.end());
+        size_t matched = 0;
+        std::string suffix = "_dseg.nii.gz";
+
+        for(const auto& label_path : files)
+        {
+            auto label = label_path.u8string();
+            if(!tipl::ends_with(label,suffix))
+                continue;
+
+            auto prefix = label.substr(0,label.size()-suffix.size());
+            for(const auto& image_path : files)
+            {
+                auto image = image_path.u8string();
+                if(image != label && tipl::begins_with(image,prefix))
+                {
+                    images.push_back(image);
+                    labels.push_back(label);
+                    ++matched;
+                }
+            }
+        }
+        tipl::out() << root << ": " << matched << " matched pairs";
+    }
+
+    return !images.empty() ||
+           (tipl::error() << "no image/label pairs found",false);
+}
+
+bool read_label_info(const std::string& file_name,
+                     bool& is_template,
+                     int& max_label,
+                     std::string& error_msg)
+{
+    std::scoped_lock lock(tipl::io::nifti_do_not_show_process);
+    tipl::image<3,int> label;
+    bool is_mni = false;
+
+    if(!(tipl::io::gz_nifti(file_name,std::ios::in) >>
+          is_mni >> label >>
+          [&](const std::string& e){error_msg = e + ": " + file_name;}))
+        return false;
+
+    is_template = is_mni;
+    max_label = int(tipl::max_value(label));
+    return true;
+}
+
+void shift_subject_label(const tipl::image<3>& image,
+                         tipl::image<3>& label,
+                         size_t max_template_label)
+{
+    for(size_t i = 0;i < label.size();++i)
+        if(label[i])
+            label[i] += max_template_label;
+        else
+            label[i] = image[i] > 0.0f ? 1.0f : 0.0f;
+}
+
 void train_unet::read_file(void)
 {
     train_image_is_template = std::vector<char>(param.image_file_name.size(),false);
@@ -232,9 +309,12 @@ void train_unet::read_file(void)
             return;
 
         if(template_indices.empty() || max_template_label == 0)
-            return error_msg = "no template label found to determine max template label",aborted = true,void();
-
-        tipl::out() << "max template label: " << max_template_label;
+        {
+            tipl::warning() << "no template label found to determine max template label, use default 5 regions setting";
+            max_template_label = 5;
+        }
+        else
+            tipl::out() << "max template label: " << max_template_label;
         tipl::out() << "total template files found: " << template_indices.size();
         tipl::out() << "total subject files found: " << non_template_indices.size();
 
@@ -336,14 +416,7 @@ void train_unet::read_file(void)
                     tipl::normalize(label);
 
                 if(need_shift_label[read_id])
-                {
-                    for(size_t pos = 0,sz = label.size();pos < sz;++pos)
-                        if(label[pos])
-                            label[pos] += max_template_label;
-                        else
-                            label[pos] = image[pos] > 0.0f ? 1.0f:0.0f; // basic brain mask is needed for image augmentation
-                }
-
+                    shift_subject_label(image,label,max_template_label);
 
                 if(train_image_is_template[read_id])
                 {
@@ -1003,63 +1076,20 @@ int tra(void)
     {
         tipl::out() << "terminating training...";
         train.stop();
-    }
+    }    
 
-    auto get_files = [](const std::filesystem::path& pattern,
-                        std::vector<std::filesystem::path>& files)->bool
-    {
-        if(!tipl::search_filesystem(pattern,files))
-            return tipl::error() << "cannot find " << pattern,false;
-
-        std::sort(files.begin(),files.end());
-        tipl::out() << files.size() << " file(s) specified by " << pattern;
-        return true;
-    };
-
+    train.param.image_file_name.clear();
+    train.param.label_file_name.clear();
 
     if(!po.has("bids"))
-        return tipl::error() << "please specify --bids",false;
+        return tipl::error() << "please specify --bids",1;
+    if(!get_bids_pairs(po.get("bids"),
+                        train.param.image_file_name,
+                        train.param.label_file_name))
+        return 1;
 
 
-    {
-        auto bids_list = tipl::split(po.get("bids"),',');
-        const std::string suffix = "_dseg.nii.gz";
 
-        for(const auto& each : bids_list)
-        {
-            if(!std::filesystem::exists(each))
-                return tipl::error() << "not exist: " << each,1;
-            if(!std::filesystem::is_directory(each))
-                return tipl::error() << "not a directory: " << each,1;
-
-            std::vector<std::filesystem::path> files;
-            if(!get_files(std::filesystem::path(each)/"*.nii.gz",files))
-                return 1;
-
-            size_t matched = 0;
-
-            for(const auto& each : files)
-            {
-                auto label = each.u8string();
-                if(!tipl::ends_with(label,suffix))
-                    continue;
-
-                std::string prefix(label.begin(),label.end()-suffix.size());
-
-                for(const auto& each2 : files)
-                {
-                    auto image = each2.u8string();
-                    if(image != label && tipl::begins_with(image,prefix))
-                    {
-                        train.param.image_file_name.push_back(image);
-                        train.param.label_file_name.push_back(label);
-                        ++matched;
-                    }
-                }
-            }
-            tipl::out() << each << ": " << matched << " matched pairs";
-        }
-    }
 
     if(po.has("file_list"))
     {
