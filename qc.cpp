@@ -14,14 +14,16 @@ namespace
 struct qc_stat
 {
     uint64_t voxels = 0,wrong = 0;
-    double error_sum = 0.0;
 
     qc_stat& operator+=(const qc_stat& rhs)
     {
         voxels += rhs.voxels;
         wrong += rhs.wrong;
-        error_sum += rhs.error_sum;
         return *this;
+    }
+    double ratio(void) const
+    {
+        return voxels ? double(wrong)/voxels : 0.0;
     }
 };
 
@@ -34,28 +36,18 @@ void write_case(std::ostream& out,
                 const std::string& image,
                 const std::string& label,
                 const std::vector<qc_stat>& stats,
+                const qc_stat& overall,
                 size_t unavailable_before = 0)
 {
     out << std::filesystem::path(image).filename().string() << '\t'
-        << std::filesystem::path(label).filename().string();
+        << std::filesystem::path(label).filename().string() << '\t'
+        << overall.ratio();
 
-    auto write = [&](size_t c,auto value)
-    {
-        out << '\t';
+    for(size_t c = 0;c < stats.size();++c)
         if(c < unavailable_before)
-            out << "N/A";
+            out << "\tN/A";
         else
-            out << value;
-    };
-
-    for(size_t c = 0;c < stats.size();++c)
-        write(c,stats[c].voxels ? stats[c].error_sum/stats[c].voxels : 0.0);
-
-    for(size_t c = 0;c < stats.size();++c)
-        write(c,stats[c].wrong);
-
-    for(size_t c = 0;c < stats.size();++c)
-        write(c,stats[c].voxels ? double(stats[c].wrong)/stats[c].voxels : 0.0);
+            out << '\t' << stats[c].ratio();
 
     out << '\n';
 }
@@ -65,9 +57,13 @@ bool calculate_qc(UNet3d& model,
                   qc_case& data,
                   size_t collapse_before,
                   std::vector<qc_stat>& stats,
+                  qc_stat& overall,
                   std::string& error_msg)
 {
     const int64_t raw_C = model->out_count;
+    const int64_t D = model->dim[2];
+    const int64_t H = model->dim[1];
+    const int64_t W = model->dim[0];
     int64_t C = raw_C;
 
     if(data.image.size() != model->dim.size()*size_t(model->in_count) ||
@@ -81,14 +77,12 @@ bool calculate_qc(UNet3d& model,
 
     auto input = torch::from_blob(
                      data.image.data(),
-                     {1,model->in_count,int64_t(model->dim[2]),
-                      int64_t(model->dim[1]),int64_t(model->dim[0])},
+                     {1,model->in_count,D,H,W},
                      options).to(device);
 
     auto target = torch::from_blob(
                       data.label.data(),
-                      {1,int64_t(model->dim[2]),
-                       int64_t(model->dim[1]),int64_t(model->dim[0])},
+                      {1,D,H,W},
                       options).to(device).to(torch::kLong);
 
     auto outputs = model->forward(input);
@@ -101,9 +95,9 @@ bool calculate_qc(UNet3d& model,
 
     if(logits.dim() != 5 ||
         logits.size(1) != raw_C ||
-        logits.size(2) != model->dim[2] ||
-        logits.size(3) != model->dim[1] ||
-        logits.size(4) != model->dim[0])
+        logits.size(2) != D ||
+        logits.size(3) != H ||
+        logits.size(4) != W)
         return error_msg = "model output dimension mismatch",false;
 
     auto valid = target.ge(0).logical_and(target.lt(raw_C));
@@ -124,41 +118,37 @@ bool calculate_qc(UNet3d& model,
 
     auto safe_target = target.clamp(0,C-1);
     auto label_bin = torch::where(
-                         valid,safe_target,torch::full_like(safe_target,C)).reshape({-1});
-    auto valid_float = valid.to(logits.scalar_type());
+                         valid,
+                         safe_target,
+                         torch::full_like(safe_target,C)).reshape({-1});
 
-    auto mae = (
-                   (1.0f-torch::exp(
-                        logits.gather(1,safe_target.unsqueeze(1)).squeeze(1)-
-                        torch::logsumexp(logits,{1})))*
-                   (2.0f/float(C))*valid_float
-                   ).reshape({-1});
-
-    auto wrong = (
-                     logits.argmax(1).ne(target).to(logits.scalar_type())*
-                     valid_float
-                     ).reshape({-1});
+    auto wrong = logits.argmax(1)
+                     .ne(target)
+                     .logical_and(valid)
+                     .reshape({-1})
+                     .to(torch::kFloat32);
 
     logits = torch::Tensor();
 
     auto packed = torch::stack({
-                                   label_bin.bincount({},C+1).to(torch::kFloat64),       // voxel counts
-                                   label_bin.bincount(mae,C+1).to(torch::kFloat64),      // MAE sums
-                                   label_bin.bincount(wrong,C+1).to(torch::kFloat64)     // wrong counts
+                                   label_bin.bincount({},C+1).to(torch::kFloat64),      // voxel counts
+                                   label_bin.bincount(wrong,C+1).to(torch::kFloat64)    // wrong counts
                                }).to(torch::kCPU).contiguous();
 
     const auto* value = packed.data_ptr<double>();
     const size_t stride = size_t(C+1);
 
     stats.assign(size_t(raw_C),{});
+    overall = {};
 
     for(size_t c = 0;c < size_t(C);++c)
     {
         qc_stat stat{
             uint64_t(value[c]),
-            uint64_t(value[2*stride+c]),
-            value[stride+c]
+            uint64_t(value[stride+c])
         };
+
+        overall += stat;
 
         if(!collapse_before)
             stats[c] = stat;
@@ -249,25 +239,6 @@ int qc(void)
             max_label+int(max_template_label) < model->out_count;
     }
 
-    fs::path model_file(model_path);
-    fs::path report =
-        model_file.parent_path()/
-        (model_file.stem().string()+".error_report.tsv");
-    fs::path temporary(report.string()+".tmp");
-
-    std::ofstream out(temporary);
-    if(!out)
-        return tipl::error() << "cannot write " << temporary,1;
-
-    out << std::setprecision(9)
-        << "image\tground_truth";
-
-    for(const char* name : {"mae","wrong_count","wrong_ratio"})
-        for(int c = 0;c < model->out_count;++c)
-            out << '\t' << name << c;
-
-    out << '\n';
-
     auto load_case = [&](size_t i,qc_case& data)
     {
         if(!read_image_and_label(
@@ -284,65 +255,70 @@ int qc(void)
     };
 
     std::vector<std::vector<qc_stat>> case_stats(images.size());
+    std::vector<qc_stat> case_overall(images.size());
     std::vector<std::string> case_error(images.size());
 
     const size_t worker_count = std::min({
-        size_t(std::max(1,po.get("thread_count",8))),
+        size_t(4),
+        size_t(std::max(1,po.get("thread_count",4))),
         images.size()
     });
 
     std::atomic_size_t next_case{0},progress{0};
     std::atomic_bool failed{false};
 
-    tipl::progress prog("evaluating training data");
+    {
+        tipl::progress prog("evaluating training data");
 
-    tipl::par_for(worker_count,[&](size_t)
-        {
-            torch::NoGradGuard no_grad;
-            torch::DeviceGuard device_guard(device);
-
-            while(!failed.load(std::memory_order_relaxed) &&
-                   !tipl::progress::aborted())
+        tipl::par_for(worker_count,[&](size_t)
             {
-                size_t i =
-                    next_case.fetch_add(1,std::memory_order_relaxed);
+                torch::NoGradGuard no_grad;
+                torch::DeviceGuard device_guard(device);
 
-                if(i >= images.size())
-                    break;
-
-                try
+                while(!failed && !tipl::progress::aborted())
                 {
-                    qc_case data;
+                    const size_t i = next_case++;
+                    if(i >= images.size())
+                        break;
 
-                    if(load_case(i,data) &&
-                        calculate_qc(
-                            model,device,data,
-                            shift_label[i] ? max_template_label+1 : 0,
-                            case_stats[i],
-                            case_error[i]))
+                    try
                     {
-                        prog(++progress,images.size());
-                        continue;
+                        qc_case data;
+
+                        if(load_case(i,data) &&
+                            calculate_qc(
+                                model,
+                                device,
+                                data,
+                                shift_label[i] ? max_template_label+1 : 0,
+                                case_stats[i],
+                                case_overall[i],
+                                case_error[i]))
+                        {
+                            prog(++progress,images.size());
+                            continue;
+                        }
+
+                        if(case_error[i].empty())
+                            case_error[i] = "cannot read image or label";
                     }
-                    if(case_error[i].empty())
-                        case_error[i] = "cannot read image or label";
-                }
-                catch(const std::exception& e)
-                {
-                    case_error[i] = e.what();
-                }
-                catch(...)
-                {
-                    case_error[i] = "unknown QC error";
-                }
+                    catch(const std::exception& e)
+                    {
+                        case_error[i] = e.what();
+                    }
+                    catch(...)
+                    {
+                        case_error[i] = "unknown QC error";
+                    }
 
-                failed.store(true,std::memory_order_relaxed);
-                break;
-            }
-        },worker_count);
+                    failed = true;
+                    break;
+                }
+            },worker_count);
 
-    if(tipl::progress::aborted())
-        return 1;
+        if(tipl::progress::aborted())
+            return 1;
+    }
 
     if(failed)
     {
@@ -354,6 +330,23 @@ int qc(void)
         return tipl::error() << "QC failed",1;
     }
 
+    fs::path model_file(model_path);
+    fs::path report =
+        model_file.parent_path()/
+        (model_file.stem().string()+".error_report.tsv");
+    fs::path temporary(report.string()+".tmp");
+
+    std::ofstream out(temporary);
+    if(!out)
+        return tipl::error() << "cannot write " << temporary,1;
+
+    out << std::setprecision(9)
+        << "image\tground_truth\twrong_ratio";
+
+    for(int c = 0;c < model->out_count;++c)
+        out << "\twrong_ratio" << c;
+
+    out << '\n';
 
     for(size_t i = 0;i < images.size();++i)
         write_case(
@@ -361,8 +354,8 @@ int qc(void)
             images[i],
             labels[i],
             case_stats[i],
+            case_overall[i],
             shift_label[i] ? max_template_label+1 : 0);
-
 
     out.close();
     if(!out)
