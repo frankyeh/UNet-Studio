@@ -9,6 +9,7 @@
 #endif
 #include "TIPL/tipl.hpp"
 
+
 struct UNet3dImpl : torch::nn::Module
 {
 public:
@@ -64,6 +65,7 @@ public:
     {
         return parameters().size() && parameters()[0].defined() ? parameters()[0].device() : torch::kCPU;
     }
+    void prepare_for_inference(const torch::Device& device);
 };
 TORCH_MODULE_IMPL(UNet3d, UNet3dImpl);
 
